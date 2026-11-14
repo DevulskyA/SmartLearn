@@ -3,6 +3,12 @@
 // chronological). No DOM, no storage, no clock: `today` is passed in.
 export const UPCOMING_CAP = 20;
 
+function compareReviewDates(a, b) {
+  if (a.dueDate < b.dueDate) return -1;
+  if (a.dueDate > b.dueDate) return 1;
+  return 0;
+}
+
 /**
  * @param {Array<{dueDate: string, unitTitle?: string}>} items snapshot items
  * @param {string} today local date "YYYY-MM-DD"
@@ -12,7 +18,7 @@ export const UPCOMING_CAP = 20;
 export function groupUpcomingReviews(items, today, cap = UPCOMING_CAP) {
   const future = (items ?? [])
     .filter((item) => item.dueDate > today)
-    .sort((a, b) => (a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0));
+    .sort(compareReviewDates);
   const shownItems = future.slice(0, cap);
   const groups = [];
   for (const item of shownItems) {

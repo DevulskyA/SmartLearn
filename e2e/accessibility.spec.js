@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
 import AxeBuilder from '@axe-core/playwright';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -12,6 +13,7 @@ import { signInRegistered } from './support/session.js';
 import { startEditingSummary } from './support/summary-editing.js';
 import { THEME_OPTIONS } from '../src/theme.js';
 
+import { generateByPages } from './support/materials-flow.js';
 // A11Y-1: an automated accessibility audit (axe-core, WCAG 2.0/2.1 A + AA) of every main screen, on the REAL
 // server and UI, at phone and desktop width. It fails on any critical or serious violation; the few findings
 // that are not defects of this product are listed in ACCEPTED with the reason. Automated checks catch roughly
@@ -68,7 +70,7 @@ async function signIn(page) {
     window.__SMARTLEARN_REMOTE_MODE__ = true;
     window.__SMARTLEARN_LOCAL_AUTHORITY__ = true;
   }, API_BASE);
-  const email = `a11y-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+  const email = `a11y-${Date.now()}-${randomUUID()}@example.com`;
   const password = 'a genuinely long test password 1';
   await signInRegistered(page, { email: email, password: password });
 }
@@ -167,7 +169,7 @@ for (const { theme, width, height } of EDITOR_CASES) {
     await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
     await page.setInputFiles('#sources-file-input', { name: 'editor.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf(['Fisiologia renal: filtração glomerular', 'Barreira de filtração e podócitos']) });
     await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
-    await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
+    await generateByPages(page);
     const editor = page.locator('.lesson-editor');
     await expect(editor).toBeVisible({ timeout: 10000 });
     await startEditingSummary(page);

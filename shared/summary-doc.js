@@ -34,17 +34,19 @@ function lineTable(source) {
 /** The top-level blocks of a token stream: [{ tokens, map }] (a block is an opening token with everything up to its closing token). */
 function topLevelBlocks(tokens) {
   const blocks = [];
-  for (let i = 0; i < tokens.length; i++) {
+  let i = 0;
+  while (i < tokens.length) {
     const open = tokens[i];
-    if (open.level !== 0) continue;
+    if (open.level !== 0) { i++; continue; }
     if (open.nesting === 1) {
       let j = i + 1;
       while (j < tokens.length && !(tokens[j].level === 0 && tokens[j].nesting === -1)) j++;
       blocks.push({ tokens: tokens.slice(i, j + 1), map: open.map });
-      i = j;
+      i = j + 1;
     } else if (open.nesting === 0) {
       blocks.push({ tokens: [open], map: open.map });
-    }
+      i++;
+    } else i++;
   }
   return blocks;
 }
@@ -64,59 +66,93 @@ const sameMarks = (a, b) => markNames(a).join() === markNames(b).join();
 const toMarks = (names) => MARK_ORDER.filter((n) => names.includes(n)).map((type) => ({ type }));
 
 /** markdown-it inline children -> editor inline nodes, or null when something appears that the editor does not model. */
+function appendInlineChild(child, open, nodes) {
+  switch (child.type) {
+    case 'text':
+      if (child.content !== '') nodes.push({ type: 'text', text: child.content, marks: toMarks(open) });
+      return true;
+    case 'softbreak': nodes.push({ type: 'softBreak' }); return true;
+    case 'hardbreak': nodes.push({ type: 'hardBreak' }); return true;
+    case 'code_inline': nodes.push({ type: 'text', text: child.content, marks: toMarks([...open, 'code']) }); return true;
+    case 'math_inline':
+      if (open.length > 0) return false; // a formula inside bold/italic: the editor's formula atom carries no formatting, so keep the block as text
+      nodes.push({ type: 'mathInline', attrs: { tex: child.content } });
+      return true;
+    default:
+      if (child.nesting === 1 && MARK_OF_TAG[child.tag]) { open.push(MARK_OF_TAG[child.tag]); return true; }
+      if (child.nesting === -1 && MARK_OF_TAG[child.tag]) {
+        const at = open.lastIndexOf(MARK_OF_TAG[child.tag]);
+        if (at !== -1) open.splice(at, 1);
+        return true;
+      }
+      return false;
+  }
+}
+
 function inlineNodes(children) {
   const nodes = [];
   const open = [];
-  for (const child of children ?? []) {
-    if (child.type === 'text') { if (child.content !== '') nodes.push({ type: 'text', text: child.content, marks: toMarks(open) }); }
-    else if (child.type === 'softbreak') nodes.push({ type: 'softBreak' });
-    else if (child.type === 'hardbreak') nodes.push({ type: 'hardBreak' });
-    else if (child.type === 'code_inline') nodes.push({ type: 'text', text: child.content, marks: toMarks([...open, 'code']) });
-    else if (child.type === 'math_inline') {
-      if (open.length > 0) return null; // a formula inside bold/italic: the editor's formula atom carries no formatting, so keep the block as text
-      nodes.push({ type: 'mathInline', attrs: { tex: child.content } });
-    }
-    else if (child.nesting === 1 && MARK_OF_TAG[child.tag]) open.push(MARK_OF_TAG[child.tag]);
-    else if (child.nesting === -1 && MARK_OF_TAG[child.tag]) { const at = open.lastIndexOf(MARK_OF_TAG[child.tag]); if (at !== -1) open.splice(at, 1); }
-    else return null;
-  }
+  for (const child of children ?? []) if (!appendInlineChild(child, open, nodes)) return null;
   return mergeText(nodes);
 }
 
 /** A list (tokens from its opening to its closing token) -> bulletList/orderedList node, or null when an item holds anything but paragraphs and lists. */
+function listItemEnd(tokens, start, level) {
+  let end = start + 1;
+  while (!(tokens[end].type === 'list_item_close' && tokens[end].level === level)) end++;
+  return end;
+}
+
+function nestedListEnd(tokens, start, level) {
+  let end = start + 1;
+  while (!(tokens[end].level === level && tokens[end].nesting === -1)) end++;
+  return end;
+}
+
+function appendListItemToken(tokens, index, token, item, parent) {
+  if (token.type === 'paragraph_open') {
+    if (!token.hidden) parent.attrs.loose = true;
+    const inline = inlineNodes(tokens[index + 1].children);
+    if (!inline) return null;
+    item.content.push({ type: 'paragraph', content: inline });
+    return index + 3;
+  }
+  if (token.type !== 'bullet_list_open' && token.type !== 'ordered_list_open') return null;
+  const end = nestedListEnd(tokens, index, token.level);
+  const nested = listNode(tokens.slice(index, end + 1));
+  if (!nested) return null;
+  if (nested.attrs.loose) parent.attrs.loose = true;
+  item.content.push(nested);
+  return end + 1;
+}
+
+function listItemNode(tokens, itemToken, end, parent) {
+  const item = { type: 'listItem', content: [] };
+  let index = itemToken.index + 1;
+  while (index < end) {
+    const token = tokens[index];
+    if (token.level !== itemToken.token.level + 1) { index++; continue; }
+    const next = appendListItemToken(tokens, index, token, item, parent);
+    if (next === null) return null;
+    index = next;
+  }
+  if (item.content.length === 0 || item.content[0].type !== 'paragraph') return null;
+  return item;
+}
+
 function listNode(tokens) {
   const first = tokens[0];
   const ordered = first.type === 'ordered_list_open';
   const node = { type: ordered ? 'orderedList' : 'bulletList', attrs: ordered ? { start: Number(first.attrGet('start') ?? 1), loose: false } : { loose: false }, content: [] };
-  let i = 1;
-  while (i < tokens.length - 1) {
-    const token = tokens[i];
+  let index = 1;
+  while (index < tokens.length - 1) {
+    const token = tokens[index];
     if (token.type !== 'list_item_open') return null;
-    let j = i + 1;
-    while (!(tokens[j].type === 'list_item_close' && tokens[j].level === token.level)) j++;
-    const item = { type: 'listItem', content: [] };
-    for (let k = i + 1; k < j; k++) {
-      const t = tokens[k];
-      if (t.level !== token.level + 1) continue;
-      if (t.type === 'paragraph_open') {
-        if (!t.hidden) node.attrs.loose = true;
-        const inline = inlineNodes(tokens[k + 1].children);
-        if (!inline) return null;
-        item.content.push({ type: 'paragraph', content: inline });
-        k += 2;
-      } else if (t.type === 'bullet_list_open' || t.type === 'ordered_list_open') {
-        let end = k + 1;
-        while (!(tokens[end].level === t.level && tokens[end].nesting === -1)) end++;
-        const nested = listNode(tokens.slice(k, end + 1));
-        if (!nested) return null;
-        if (nested.attrs.loose) node.attrs.loose = true;
-        item.content.push(nested);
-        k = end;
-      } else return null;
-    }
-    if (item.content.length === 0 || item.content[0].type !== 'paragraph') return null;
+    const end = listItemEnd(tokens, index, token.level);
+    const item = listItemNode(tokens, { index, token }, end, node);
+    if (!item) return null;
     node.content.push(item);
-    i = j + 1;
+    index = end + 1;
   }
   return node.content.length > 0 ? node : null;
 }
@@ -217,20 +253,40 @@ export function markdownToDoc(source) {
 // Document -> Markdown
 // ---------------------------------------------------------------------------------------------------------------------------------
 
+function escapeLineStart(text) {
+  if (text.length === 0) return null;
+  if ('#>+-='.includes(text[0])) return { value: `\\${text[0]}`, length: 1 };
+  const ordered = /^(\d+)([.)])(\s|$)/.exec(text);
+  if (!ordered) return null;
+  return { value: `${ordered[1]}\\${ordered[2]}`, length: ordered[1].length + 1 };
+}
+
+function escapeMarkdownChar(text, index) {
+  const ch = text[index];
+  const prev = index > 0 ? text[index - 1] : '';
+  const next = text[index + 1] ?? '';
+  const alnum = (value) => /[\p{L}\p{N}]/u.test(value);
+  if (ch === '\\' || ch === '*' || ch === '`') return `\\${ch}`;
+  if (ch === '_') return alnum(prev) && alnum(next) ? ch : `\\${ch}`;
+  if (ch === '~') return prev === '~' || next === '~' ? `\\${ch}` : ch;
+  if (ch === '&') return /^&[#\w]/.test(text.slice(index)) ? `\\${ch}` : ch;
+  return ch;
+}
+
 function escapeRun(text, lineEmpty, heading) {
   let out = '';
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    const prev = i > 0 ? text[i - 1] : '';
-    const next = text[i + 1] ?? '';
-    const alnum = (c) => /[\p{L}\p{N}]/u.test(c);
-    if (ch === '\\' || ch === '*' || ch === '`') out += `\\${ch}`;
-    else if (ch === '_') out += alnum(prev) && alnum(next) ? ch : `\\${ch}`;
-    else if (ch === '~') out += prev === '~' || next === '~' ? `\\${ch}` : ch;
-    else if (ch === '&') out += /^&[#\w]/.test(text.slice(i)) ? `\\${ch}` : ch;
-    else if (i === 0 && lineEmpty && '#>+-='.includes(ch)) out += `\\${ch}`;
-    else if (i === 0 && lineEmpty && /^\d+[.)](\s|$)/.test(text)) { const d = /^\d+/.exec(text)[0]; out += d + `\\${text[d.length]}`; i = d.length; }
-    else out += ch;
+  let index = 0;
+  while (index < text.length) {
+    if (index === 0 && lineEmpty) {
+      const start = escapeLineStart(text);
+      if (start) {
+        out += start.value;
+        index = start.length;
+        continue;
+      }
+    }
+    out += escapeMarkdownChar(text, index);
+    index++;
   }
   if (heading) out = out.replace(/(^|\s)(#+)$/, (m, sp, hashes) => `${sp}\\${hashes}`);
   return out;
@@ -248,59 +304,112 @@ function codeSpan(text) {
  * Inline nodes in canonical form: adjacent text with the same marks merged, whitespace at the edges of a formatted run and at the
  * edges of a line moved out of the formatting (Markdown cannot express it), empty text dropped, trailing line breaks dropped.
  */
-export function normalizeInline(nodes) {
-  let list = mergeText((nodes ?? []).filter((n) => n.type !== 'text' || n.text !== '').map((n) => (n.type === 'text' ? { ...n, marks: toMarks(markNames(n.marks)) } : n)));
-  // whitespace at the edges of a bold/italic/strike run is not formatted
-  for (const name of ['bold', 'italic', 'strike']) {
-    const next = [];
-    let i = 0;
-    while (i < list.length) {
-      if (!markNames(list[i].marks).includes(name)) { next.push(list[i]); i++; continue; }
-      let j = i;
-      while (j < list.length && markNames(list[j].marks).includes(name)) j++;
-      const run = list.slice(i, j).map((n) => ({ ...n }));
-      const strip = (node, side) => {
-        if (node.type !== 'text') return [node];
-        const re = side === 'start' ? /^(\s+)([\s\S]*)$/ : /^([\s\S]*?)(\s+)$/;
-        const m = re.exec(node.text);
-        if (!m) return [node];
-        const ws = side === 'start' ? m[1] : m[2];
-        const core = side === 'start' ? m[2] : m[1];
-        const bare = { type: 'text', text: ws, marks: toMarks(markNames(node.marks).filter((x) => x !== name)) };
-        const kept = core === '' ? [] : [{ ...node, text: core }];
-        return side === 'start' ? [bare, ...kept] : [...kept, bare];
-      };
-      const startNodes = strip(run[0], 'start');
-      run.splice(0, 1, ...startNodes);
-      const last = run.length - 1;
-      const endNodes = strip(run[last], 'end');
-      run.splice(last, 1, ...endNodes);
-      next.push(...run);
-      i = j;
-    }
-    list = mergeText(next);
+function splitEdgeWhitespace(text, side) {
+  if (side === 'start') {
+    let edge = 0;
+    while (edge < text.length && /\s/.test(text[edge])) edge++;
+    return edge === 0 ? null : { whitespace: text.slice(0, edge), core: text.slice(edge) };
   }
-  // a line starts after the paragraph start and after a break; it ends before a break and at the paragraph end
+  let edge = text.length;
+  while (edge > 0 && /\s/.test(text[edge - 1])) edge--;
+  return edge === text.length ? null : { whitespace: text.slice(edge), core: text.slice(0, edge) };
+}
+
+function stripMarkEdge(node, name, side) {
+  if (node.type !== 'text') return [node];
+  const edge = splitEdgeWhitespace(node.text, side);
+  if (!edge) return [node];
+  const bare = { type: 'text', text: edge.whitespace, marks: toMarks(markNames(node.marks).filter((mark) => mark !== name)) };
+  const kept = edge.core === '' ? [] : [{ ...node, text: edge.core }];
+  return side === 'start' ? [bare, ...kept] : [...kept, bare];
+}
+
+function markRunEnd(list, start, name) {
+  let end = start;
+  while (end < list.length && markNames(list[end].marks).includes(name)) end++;
+  return end;
+}
+
+function normalizeMarkWhitespace(list, name) {
+  const next = [];
+  let index = 0;
+  while (index < list.length) {
+    if (!markNames(list[index].marks).includes(name)) { next.push(list[index]); index++; continue; }
+    const end = markRunEnd(list, index, name);
+    const run = list.slice(index, end).map((node) => ({ ...node }));
+    run.splice(0, 1, ...stripMarkEdge(run[0], name, 'start'));
+    const last = run.length - 1;
+    run.splice(last, 1, ...stripMarkEdge(run[last], name, 'end'));
+    next.push(...run);
+    index = end;
+  }
+  return mergeText(next);
+}
+
+function trimHorizontalStart(text) {
+  let start = 0;
+  while (text[start] === ' ' || text[start] === '\t') start++;
+  return text.slice(start);
+}
+
+function trimHorizontalEnd(text) {
+  let end = text.length;
+  while (text[end - 1] === ' ' || text[end - 1] === '\t') end--;
+  return text.slice(0, end);
+}
+
+function trimLineStarts(list) {
   const out = [];
   let lineStart = true;
   for (const node of list) {
     if (node.type === 'softBreak' || node.type === 'hardBreak') { out.push(node); lineStart = true; continue; }
     if (node.type === 'text' && lineStart) {
-      const text = markNames(node.marks).includes('code') ? node.text : node.text.replace(/^[ \t]+/, ''); // inside a code span the spaces are content
+      const text = markNames(node.marks).includes('code') ? node.text : trimHorizontalStart(node.text); // inside a code span the spaces are content
       if (text === '') continue;
       out.push({ ...node, text });
     } else out.push(node);
     lineStart = false;
   }
-  for (let i = 0; i < out.length; i++) {
-    const node = out[i];
-    const atLineEnd = i === out.length - 1 || out[i + 1].type === 'softBreak' || out[i + 1].type === 'hardBreak';
-    if (node.type === 'text' && atLineEnd && !markNames(node.marks).includes('code')) out[i] ={ ...node, text: node.text.replace(/[ \t]+$/, '') };
+  return out;
+}
+
+function trimLineEnds(out) {
+  let index = 0;
+  while (index < out.length) {
+    const node = out[index];
+    const atLineEnd = index === out.length - 1 || out[index + 1].type === 'softBreak' || out[index + 1].type === 'hardBreak';
+    if (node.type === 'text' && atLineEnd && !markNames(node.marks).includes('code')) out[index] = { ...node, text: trimHorizontalEnd(node.text) };
+    index++;
   }
+  return out;
+}
+
+function normalizeLineWhitespace(list) {
+  return trimLineEnds(trimLineStarts(list));
+}
+
+export function normalizeInline(nodes) {
+  let list = mergeText((nodes ?? []).filter((n) => n.type !== 'text' || n.text !== '').map((n) => (n.type === 'text' ? { ...n, marks: toMarks(markNames(n.marks)) } : n)));
+  // whitespace at the edges of a bold/italic/strike run is not formatted
+  for (const name of ['bold', 'italic', 'strike']) list = normalizeMarkWhitespace(list, name);
+  // a line starts after the paragraph start and after a break; it ends before a break and at the paragraph end
+  const out = normalizeLineWhitespace(list);
   const cleaned = out.filter((n) => n.type !== 'text' || n.text !== '');
   while (cleaned.length > 0 && (cleaned[cleaned.length - 1].type === 'softBreak' || cleaned[cleaned.length - 1].type === 'hardBreak')) cleaned.pop();
   while (cleaned.length > 0 && (cleaned[0].type === 'softBreak' || cleaned[0].type === 'hardBreak')) cleaned.shift();
   return mergeText(cleaned);
+}
+
+function closeMarks(open, keep) {
+  let closing = '';
+  while (open.length > keep) closing += WRAP[open.pop()];
+  return closing;
+}
+
+function serializeInlineContent(node, lineEmpty) {
+  if (node.type === 'mathInline') return `\\(${node.attrs.tex}\\)`;
+  if (markNames(node.marks).includes('code')) return codeSpan(node.text);
+  return escapeRun(node.text, lineEmpty, false);
 }
 
 function serializeInline(nodes, { heading = false } = {}) {
@@ -308,7 +417,6 @@ function serializeInline(nodes, { heading = false } = {}) {
   let out = '';
   let lineEmpty = true;
   let open = [];
-  const closeTo = (keep) => { while (open.length > keep) { out += WRAP[open.pop()]; } };
   for (const node of list) {
     if (node.type === 'softBreak' || node.type === 'hardBreak') {
       out += node.type === 'softBreak' ? '\n' : '\\\n';
@@ -318,14 +426,12 @@ function serializeInline(nodes, { heading = false } = {}) {
     const wanted = markNames(node.marks).filter((m) => m !== 'code');
     let k = 0;
     while (k < open.length && k < wanted.length && open[k] === wanted[k]) k++;
-    closeTo(k);
+    out += closeMarks(open, k);
     for (const name of wanted.slice(k)) { out += WRAP[name]; open.push(name); lineEmpty = false; }
-    if (node.type === 'mathInline') out += `\\(${node.attrs.tex}\\)`;
-    else if (markNames(node.marks).includes('code')) out += codeSpan(node.text);
-    else out += escapeRun(node.text, lineEmpty, false);
+    out += serializeInlineContent(node, lineEmpty);
     lineEmpty = false;
   }
-  closeTo(0);
+  out += closeMarks(open, 0);
   if (heading) out = out.replace(/(^|\s)(#+)$/, (m, sp, hashes) => `${sp}\\${hashes}`);
   // a line that is exactly a figure reference would turn into a figure
   return out.split('\n').map((line) => (parseFigureLine(line.trim()) !== null ? line.replace('[', '\\[') : line)).join('\n');
@@ -391,7 +497,7 @@ export function serializeBlock(block) {
     case 'orderedList': return serializeList(block);
     case 'mathBlock': return `\\[\n${String(block.attrs?.tex ?? '').trim()}\n\\]`;
     case 'figure': return figureRef(block.attrs.id, block.attrs.width ?? null);
-    case 'rawBlock': { const s = String(block.attrs?.text ?? '').replace(/^(?:[ \t]*\r?\n)+/, '').replace(/\s+$/, ''); return s === '' ? null : s; }
+    case 'rawBlock': { const s = String(block.attrs?.text ?? '').replace(/^(?:[ \t]*\r?\n)+/, '').trimEnd(); return s === '' ? null : s; }
     case 'table': return serializeTable(block);
     case 'blockquote': return serializeQuote(block);
     case 'codeBlock': return serializeCode(block);

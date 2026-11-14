@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { test, expect } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
@@ -10,6 +11,7 @@ import { VITE_ORIGIN, serverPort } from './support/ports.js';
 import { waitForServerReady } from './support/wait-for-server.js';
 import { signInRegistered } from './support/session.js';
 
+import { generateByPages } from './support/materials-flow.js';
 // CQ-7: a REALISTICALLY LARGE draft (50 questions, 2 of them flagged) can be reviewed, corrected and accepted without
 // losing context or edits. The content is deliberately synthetic (Zeta/Omega terms): this measures the review
 // experience at scale, not medical quality. The model endpoint is a local stub on the live-provider path.
@@ -97,7 +99,7 @@ test.beforeEach(async ({ page }) => {
     window.__SMARTLEARN_REMOTE_MODE__ = true;
     window.__SMARTLEARN_LOCAL_AUTHORITY__ = true;
   }, API_BASE);
-  const email = `large-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+  const email = `large-${Date.now()}-${randomUUID()}@example.com`;
   const password = 'a genuinely long test password 1';
   await signInRegistered(page, { email: email, password: password });
 });
@@ -113,7 +115,7 @@ test('a 50-question draft: find the flagged items from the findings, fix them, k
   await page.setInputFiles('#sources-file-input', { name: 'grande.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf(PAGES) });
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 15000 });
   const started = Date.now();
-  await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
+  await generateByPages(page);
   const panel = page.locator('.lesson-editor');
   await expect(panel).toBeVisible({ timeout: 20000 });
   console.log(`[CQ-7] generate -> reviewable draft (50 questions): ${Date.now() - started} ms`);

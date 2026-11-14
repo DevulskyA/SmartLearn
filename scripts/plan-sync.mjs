@@ -24,14 +24,44 @@ const LEGEND = 'Legenda das tarefas: [x] feita · [>] ativa · [ ] pendente · [
 
 const subLines = (subtasks, base, mark = true) => subtasks.map((r) => `${' '.repeat(base + r.depth * 2)}- [${r.mark}] ${r.text}${mark && r.mark === '>' ? '  ← EM EXECUÇÃO' : ''}`);
 
+function progressLine(model) {
+  const activeLabel = model.active ? `${model.active.id} (${model.active.group})` : 'nenhuma';
+  const activeProgress = model.progress.active
+    ? `${model.progress.active.id} ${model.progress.active.done}/${model.progress.active.total}`
+    : '—';
+  return `ATIVA AGORA: ${activeLabel} · PRÓXIMA: ${model.next ?? 'nenhuma elegível'} · TAREFAS: ${model.progress.tasksDone}/${model.progress.tasksTotal}`
+    + ` · SUBTAREFAS DA ATIVA: ${activeProgress} · BLOQUEADAS: ${model.blocked.length} · DECISÕES HUMANAS: ${model.decisions.length}`;
+}
+
+function appendReadySection(out, ready) {
+  out.push('', '## PRÓXIMO', '');
+  if (ready.length === 0) out.push('- (nenhuma tarefa pronta pela ordem de PROGRAM.md)', '');
+  for (const item of ready) {
+    out.push(`### ${item.id} — ${item.label} — ${item.title}`, `  Por quê: ${item.why}`);
+    if (item.ready) out.push(`  Subtarefas ${item.counts.done}/${item.counts.total}:`, ...subLines(item.subtasks, 2, false));
+    out.push('');
+  }
+}
+
+function appendRoadmapSection(out, phases) {
+  out.push('## ROADMAP', '');
+  for (const phase of phases) {
+    out.push(`### [${phase.state}] ${phase.id} · ${phase.title} — tarefas ${phase.done}/${phase.total}`, '');
+    for (const row of phase.rows) out.push(`${row.indent}- [${row.mark}] **${row.id}** — ${row.title}${row.note}`); // one line per task: subtasks are never expanded here
+    out.push('');
+  }
+}
+
+function decisionLine(decision) {
+  const after = decision.after.length ? ` (após ${decision.after.join(', ')})` : '';
+  return `- ${decision.id} · ${decision.title} · ${decision.text}${after}`;
+}
+
 /** The generated region (markers included) for a model. Pure. */
 export function renderRegion(model, validationLine = NO_VALIDATION_LINE) {
-  const { active, ready, blocked, decisions, phases, progress } = model;
+  const { active, ready, blocked, decisions, phases } = model;
   const out = [BEGIN, ''];
-  out.push(`ATIVA AGORA: ${active ? `${active.id} (${active.group})` : 'nenhuma'}`
-    + ` · PRÓXIMA: ${model.next ?? 'nenhuma elegível'} · TAREFAS: ${progress.tasksDone}/${progress.tasksTotal}`
-    + ` · SUBTAREFAS DA ATIVA: ${progress.active ? `${progress.active.id} ${progress.active.done}/${progress.active.total}` : '—'}`
-    + ` · BLOQUEADAS: ${blocked.length} · DECISÕES HUMANAS: ${decisions.length}`, '');
+  out.push(progressLine(model), '');
   out.push(LEGEND, '');
   out.push('## AGORA', '');
   if (active) {
@@ -39,25 +69,14 @@ export function renderRegion(model, validationLine = NO_VALIDATION_LINE) {
     for (const f of active.facts) out.push(`  ${f.label}: ${f.text}`);
     out.push(...subLines(active.subtasks, 2));
   } else out.push('- (nenhuma tarefa ativa: tasks.md deve marcar exatamente uma `[>]`)');
-  out.push('', '## PRÓXIMO', '');
-  if (ready.length === 0) out.push('- (nenhuma tarefa pronta pela ordem de PROGRAM.md)', '');
-  for (const r of ready) {
-    out.push(`### ${r.id} — ${r.label} — ${r.title}`, `  Por quê: ${r.why}`);
-    if (r.ready) out.push(`  Subtarefas ${r.counts.done}/${r.counts.total}:`, ...subLines(r.subtasks, 2, false));
-    out.push('');
-  }
-  out.push('## ROADMAP', '');
-  for (const p of phases) {
-    out.push(`### [${p.state}] ${p.id} · ${p.title} — tarefas ${p.done}/${p.total}`, '');
-    for (const r of p.rows) out.push(`${r.indent}- [${r.mark}] **${r.id}** — ${r.title}${r.note}`); // one line per task: subtasks are never expanded here
-    out.push('');
-  }
+  appendReadySection(out, ready);
+  appendRoadmapSection(out, phases);
   out.push('## BLOQUEADAS', '');
   if (blocked.length === 0) out.push('- (nenhuma)');
   for (const b of blocked) out.push(`- ${b.id} BLOQUEADA → ${b.chain}`);
   out.push('', '## DECISÕES HUMANAS PENDENTES', '');
   if (decisions.length === 0) out.push('- (nenhuma)');
-  for (const d of decisions) out.push(`- ${d.id} · ${d.title} · ${d.text}${d.after.length ? ` (após ${d.after.join(', ')})` : ''}`);
+  for (const decision of decisions) out.push(decisionLine(decision));
   out.push('', '## VALIDAÇÃO', '');
   // the current-HEAD sha is NOT written to the tracked plan (it would change on every commit); 'testado <sha>' of recorded results stays
   out.push(validationLine.replace(/;\s*HEAD atual [0-9a-f]{7,40}/, '').replace(/ em [0-9a-f]{7,40}$/, ''), '');

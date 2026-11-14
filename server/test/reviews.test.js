@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import { randomUUID } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -31,7 +32,7 @@ function makeUser(db, email) {
 }
 
 function makeUnitWithReviews(db, userId, studyDate) {
-  return learningUnits.create(db, userId, { newSubjectName: `Subj-${Math.random()}`, title: 'Aula', studyDate });
+  return learningUnits.create(db, userId, { newSubjectName: `Subj-${randomUUID()}`, title: 'Aula', studyDate });
 }
 
 test('localDateString formats a UTC instant into the correct calendar day for a given IANA timezone', () => {

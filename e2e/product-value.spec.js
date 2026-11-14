@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { test, expect } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -8,6 +9,7 @@ import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.j
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
 import { waitForServerReady } from './support/wait-for-server.js';
 
+import { generateByPages } from './support/materials-flow.js';
 // PV1-01: the first real end-to-end product journey on Desktop local-first
 // (ARCH-01) — material -> unit -> "Estudar agora" -> Resumo Mestre ->
 // exercises -> automatic INITIAL_PRACTICE evidence -> next review. Every
@@ -58,7 +60,7 @@ async function registerAndLogin(page, { localAuthority }) {
     window.__SMARTLEARN_REMOTE_MODE__ = true;
     if (local) window.__SMARTLEARN_LOCAL_AUTHORITY__ = true;
   }, { base: API_BASE, local: localAuthority });
-  const email = `product-value-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+  const email = `product-value-${Date.now()}-${randomUUID()}@example.com`;
   const password = 'a genuinely long test password 1';
   await page.goto('/');
   await page.waitForLoadState('networkidle');
@@ -99,12 +101,8 @@ test('LOCAL_DESKTOP_AUTHORITY: PDF -> unit -> Estudar agora -> Resumo Mestre -> 
   });
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
 
-  // 5. Proposal.
-  const item = page.locator('.source-proposal-item').first();
-  await expect(item).toBeVisible();
-
-  // 6. Draft generation using the deterministic test provider.
-  await item.locator('[data-action="generate-draft"]').click();
+  // 5-6. Draft generation (by page range) using the deterministic test provider.
+  await generateByPages(page);
   await expect(page.locator('#sources-message')).toContainText('Resumo gerado', { timeout: 10000 });
   const draftPanel = page.locator('.lesson-editor');
   await expect(draftPanel).toBeVisible();

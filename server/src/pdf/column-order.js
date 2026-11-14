@@ -36,35 +36,81 @@ function geometry(line) {
   return { left, right, y: visible[0].transform[5], yMain: main.transform[5] };
 }
 
+function partitionLines(lines, geo, page) {
+  const head = [];
+  const body = [];
+  const foot = [];
+  const mid = page.width / 2;
+  const margin = page.width * GUTTER_MARGIN;
+  let seenBody = false;
+
+  lines.forEach((line, i) => {
+    const g = geo[i];
+    if (!g) { (seenBody ? body : head).push({ line, column: null }); return; }
+    const inBody = g.y < page.height * (1 - BAND) && g.y > page.height * BAND;
+    if (!inBody) { (seenBody ? foot : head).push({ line, column: null }); return; }
+    seenBody = true;
+    if (g.right <= mid + margin / 2 && g.left < mid - margin) body.push({ line, column: 'L' });
+    else if (g.left >= mid - margin / 2 && g.right > mid + margin) body.push({ line, column: 'R' });
+    else if (g.y < page.height * FOOTNOTE_BAND) foot.push({ line, column: null });
+    else body.push({ line, column: 'X' });
+  });
+  return { head, body, foot };
+}
+
+function hasMonotonicColumnFlow(body, lines, geo) {
+  const lastY = { L: Infinity, R: Infinity };
+  let column = null;
+  for (const entry of body) {
+    if (entry.column !== null) column = entry.column;
+    const y = geo[lines.indexOf(entry.line)]?.yMain;
+    if (column === null || y === undefined) continue;
+    if (y > lastY[column] + Y_TOLERANCE) return false;
+    lastY[column] = Math.min(lastY[column], y);
+  }
+  return true;
+}
+
+function splitBody(body, switches) {
+  const placed = body.filter((entry) => entry.column !== null);
+  if (switches === 1 && placed[0].column === 'R') {
+    const firstLeft = body.findIndex((entry) => entry.column === 'L');
+    return { rightBlock: body.slice(0, firstLeft), leftBlock: body.slice(firstLeft) };
+  }
+
+  const leftBlock = [];
+  const rightBlock = [];
+  let current = leftBlock;
+  for (const entry of body) {
+    if (entry.column === 'L') current = leftBlock;
+    else if (entry.column === 'R') current = rightBlock;
+    current.push(entry);
+  }
+  return { leftBlock, rightBlock };
+}
+
+function closeFinalLine(entries) {
+  return entries.map((entry, i) => {
+    if (i < entries.length - 1 || entry.line.length === 0) return entry.line;
+    const last = entry.line[entry.line.length - 1];
+    return last.hasEOL ? entry.line : [...entry.line.slice(0, -1), { ...last, hasEOL: true }];
+  });
+}
+
+function hasPositiveSize(value) {
+  return value > 0;
+}
+
 /**
  * @param items pdf.js text items of one page, in stream order
  * @param page {width, height} the page's size in the same units as item.transform
  * @returns the same items, reordered only when the page is the right-column-first two-column shape described above
  */
 export function orderItemsByColumns(items, page) {
-  if (!Array.isArray(items) || !page || !(page.width > 0) || !(page.height > 0)) return items;
+  if (!Array.isArray(items) || !page || !hasPositiveSize(page.width) || !hasPositiveSize(page.height)) return items;
   const lines = splitLines(items);
   const geo = lines.map(geometry);
-  const mid = page.width / 2;
-  const margin = page.width * GUTTER_MARGIN;
-  const bodyTop = page.height * (1 - BAND);
-  const bodyBottom = page.height * BAND;
-
-  const head = [];
-  const body = [];
-  const foot = [];
-  let seenBody = false;
-  lines.forEach((line, i) => {
-    const g = geo[i];
-    if (!g) { (seenBody ? body : head).push({ line, column: null }); return; } // blank carrier lines follow their neighbours
-    const inBody = g.y < bodyTop && g.y > bodyBottom;
-    if (!inBody) { (seenBody ? foot : head).push({ line, column: null }); return; }
-    seenBody = true;
-    if (g.right <= mid + margin / 2 && g.left < mid - margin) body.push({ line, column: 'L' });
-    else if (g.left >= mid - margin / 2 && g.right > mid + margin) body.push({ line, column: 'R' });
-    else if (g.y < page.height * FOOTNOTE_BAND) foot.push({ line, column: null }); // a wide line right above the footer is a footnote: furniture
-    else body.push({ line, column: 'X' }); // spans the gutter (or sits on it)
-  });
+  const { head, body, foot } = partitionLines(lines, geo, page);
   if (body.length === 0 || body.some((b) => b.column === 'X')) return items;
 
   const placed = body.filter((b) => b.column !== null);
@@ -80,43 +126,13 @@ export function orderItemsByColumns(items, page) {
   // inside each column, the pieces still run down the page (y never goes back up). A column that does not is some other layout
   // (figures, tables, floating boxes) and is left exactly as painted.
   const switches = placed.reduce((n, entry, i) => (i > 0 && entry.column !== placed[i - 1].column ? n + 1 : n), 0);
-  if (switches !== 1 || placed[0].column !== 'R') {
-    const lastY = { L: Infinity, R: Infinity };
-    let column = null;
-    for (const entry of body) {
-      if (entry.column !== null) column = entry.column;
-      const y = geo[lines.indexOf(entry.line)]?.yMain;
-      if (column === null || y === undefined) continue;
-      if (y > lastY[column] + Y_TOLERANCE) return items;
-      lastY[column] = Math.min(lastY[column], y);
-    }
-  }
+  if ((switches !== 1 || placed[0].column !== 'R') && !hasMonotonicColumnFlow(body, lines, geo)) return items;
 
   // One switch: split where the left column starts (exactly as before). Several pieces: blank carrier lines stay with the column of the
   // line before them.
-  let leftBlock;
-  let rightBlock;
-  if (switches === 1 && placed[0].column === 'R') {
-    const firstLeft = body.findIndex((entry) => entry.column === 'L');
-    rightBlock = body.slice(0, firstLeft);
-    leftBlock = body.slice(firstLeft);
-  } else {
-    leftBlock = [];
-    rightBlock = [];
-    let current = leftBlock;
-    for (const entry of body) {
-      if (entry.column === 'L') current = leftBlock;
-      else if (entry.column === 'R') current = rightBlock;
-      current.push(entry);
-    }
-  }
+  const { leftBlock, rightBlock } = splitBody(body, switches);
   // A block boundary is a line boundary. The line that ended the page in the stream may carry no end-of-line marker (a watermark,
   // a last fragment); moved in front of the other column it would glue to that column's first line and a heading there
   // ("GLOMERULAR FILTRATION") would stop being on a line of its own, so it could no longer be found as a section start.
-  const closed = (entries) => entries.map((entry, i) => {
-    if (i < entries.length - 1 || entry.line.length === 0) return entry.line;
-    const last = entry.line[entry.line.length - 1];
-    return last.hasEOL ? entry.line : [...entry.line.slice(0, -1), { ...last, hasEOL: true }];
-  });
-  return [...head.map((entry) => entry.line), ...closed(leftBlock), ...closed(rightBlock), ...foot.map((entry) => entry.line)].flat();
+  return [...head.map((entry) => entry.line), ...closeFinalLine(leftBlock), ...closeFinalLine(rightBlock), ...foot.map((entry) => entry.line)].flat();
 }

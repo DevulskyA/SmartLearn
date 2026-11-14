@@ -109,31 +109,40 @@ export function parseModelAudit(raw, { questionCount, segments = [] }) {
   const findings = [];
   let discarded = 0;
   for (const f of raw.findings.slice(0, MAX_FINDINGS)) {
-    if (!f || typeof f !== 'object') continue;
-    const issue = clip(f.issue, 80);
-    const scope = typeof f.scope === 'string' ? f.scope : '';
-    const m = /^question:(\d+)$/.exec(scope);
-    const scopeOk = scope === 'summary' || (m && Number(m[1]) < questionCount);
-    if (!issue || !scopeOk) continue;
-    if (f.verdict === 'SUPPORTED') continue; // not a problem
-    const finding = {
-      issue,
-      severity: SEVERITIES.has(f.severity) ? f.severity : 'MEDIUM',
-      scope,
-      generatedClaim: clip(f.generatedClaim, 400),
-      sourceEvidence: clip(f.sourceEvidence, 400),
-      repair: clip(f.repair, 400),
-      source: 'MODEL',
-    };
-    if (f.verdict === 'CONTRADICTED') {
-      const quote = clip(f.evidenceQuote, 300);
-      const page = pageHolding(quote, Number.isInteger(f.evidencePage) ? f.evidencePage : null, segments);
-      if (page === null) { discarded += 1; continue; }
-      findings.push(resolveMessages({ ...finding, verdict: 'CONTRADICTED', evidencePage: page, evidenceQuote: quote, sourceEvidence: msg('EVIDENCE_SOURCE_PASSAGE', { page, text: quote }) }));
-    } else {
-      // NOT_FOUND, NOT_EVALUABLE, or a reply that gave no verdict at all (nothing was established, so it is not evaluable)
-      findings.push({ ...finding, verdict: f.verdict === 'NOT_FOUND' ? 'NOT_FOUND' : 'NOT_EVALUABLE', blocksRepair: false });
-    }
+    const parsed = parseFinding(f, questionCount, segments);
+    if (!parsed) continue;
+    if (parsed.discarded) { discarded += 1; continue; }
+    findings.push(parsed.finding);
   }
   return { findings, malformed: false, discarded };
+}
+
+function parseFinding(f, questionCount, segments) {
+  if (!f || typeof f !== 'object') return null;
+  const issue = clip(f.issue, 80);
+  const scope = typeof f.scope === 'string' ? f.scope : '';
+  const m = /^question:(\d+)$/.exec(scope);
+  const scopeOk = scope === 'summary' || (m && Number(m[1]) < questionCount);
+  if (!issue || !scopeOk || f.verdict === 'SUPPORTED') return null;
+
+  const finding = {
+    issue,
+    severity: SEVERITIES.has(f.severity) ? f.severity : 'MEDIUM',
+    scope,
+    generatedClaim: clip(f.generatedClaim, 400),
+    sourceEvidence: clip(f.sourceEvidence, 400),
+    repair: clip(f.repair, 400),
+    source: 'MODEL',
+  };
+  if (f.verdict !== 'CONTRADICTED') {
+    // NOT_FOUND, NOT_EVALUABLE, or a reply that gave no verdict at all (nothing was established, so it is not evaluable)
+    return { finding: { ...finding, verdict: f.verdict === 'NOT_FOUND' ? 'NOT_FOUND' : 'NOT_EVALUABLE', blocksRepair: false } };
+  }
+
+  const quote = clip(f.evidenceQuote, 300);
+  const page = pageHolding(quote, Number.isInteger(f.evidencePage) ? f.evidencePage : null, segments);
+  if (page === null) return { discarded: true };
+  return {
+    finding: resolveMessages({ ...finding, verdict: 'CONTRADICTED', evidencePage: page, evidenceQuote: quote, sourceEvidence: msg('EVIDENCE_SOURCE_PASSAGE', { page, text: quote }) }),
+  };
 }

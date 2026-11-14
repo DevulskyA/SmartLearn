@@ -39,7 +39,7 @@ function canonicalPath(path) {
   try { return join(realpathSync.native(dirname(absolute)), basename(absolute)).toLowerCase(); } catch { return absolute.toLowerCase(); }
 }
 
-export function pidAlive(pid) {
+function pidAlive(pid) {
   try { process.kill(pid, 0); return true; } catch (err) { return err.code === 'EPERM'; }
 }
 

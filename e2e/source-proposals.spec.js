@@ -1,5 +1,5 @@
+import { randomUUID } from 'node:crypto';
 import { test, expect } from '@playwright/test';
-import AxeBuilder from '@axe-core/playwright';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -10,6 +10,7 @@ import { VITE_ORIGIN, serverPort } from './support/ports.js';
 import { waitForServerReady } from './support/wait-for-server.js';
 import { signInRegistered } from './support/session.js';
 
+import { generateByPages } from './support/materials-flow.js';
 // T36: proves the real inspection UI (src/source-proposals-ui.js, wired
 // into a new "Fontes" card on Configurações) drives the actual T34-T36
 // server pipeline end to end — upload -> extract -> chunk -> inspect ->
@@ -58,12 +59,12 @@ test.beforeEach(async ({ page }) => {
     window.__SMARTLEARN_REMOTE_MODE__ = true;
     window.__SMARTLEARN_LOCAL_AUTHORITY__ = true;
   }, API_BASE);
-  const email = `proposals-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+  const email = `proposals-${Date.now()}-${randomUUID()}@example.com`;
   const password = 'a genuinely long test password 1';
   await signInRegistered(page, { email: email, password: password });
 });
 
-test('uploading a real PDF through the Fontes card produces inspectable proposals attributable to exact pages, and a title can be manually corrected', async ({ page }) => {
+test('uploading a real PDF through the Fontes card opens it on the page range and creates nothing in the learning domain', async ({ page }) => {
   await page.locator('[data-screen="materials"]').click();
   await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
 
@@ -79,35 +80,8 @@ test('uploading a real PDF through the Fontes card produces inspectable proposal
   });
 
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
-  const items = page.locator('.source-proposal-item');
-  // Default chunking groups up to 10 pages per proposal (design.md §8) —
-  // this 3-page fixture stays entirely within one proposal.
-  await expect(items).toHaveCount(1, { timeout: 5000 });
-
-  const firstItem = items.nth(0);
-  await expect(firstItem.locator('.source-proposal-range')).toHaveText('Páginas 1–3');
-
-  // Inspection: the excerpt must be the exact original source text, not a
-  // fabricated summary — nothing has been generated yet at this task.
-  await firstItem.locator('[data-action="toggle-proposal-excerpt"]').click();
-  await expect(firstItem.locator('.source-proposal-excerpt')).toHaveText(
-    'Introdução à fisiologia renal\n\nSegunda página com conteúdo diferente\n\nTerceira e última página do documento',
-    { timeout: 5000 },
-  );
-
-  // Manual correction before acceptance.
-  const titleInput = firstItem.locator('.source-proposal-title-input');
-  await titleInput.fill('Fisiologia renal: aula revisada');
-  await firstItem.locator('[data-action="save-proposal-title"]').click();
-  await expect(firstItem.getByRole('status')).toHaveText('Título salvo', { timeout: 5000 });
-
-  // Confirm the correction actually persisted server-side, not just in the DOM.
-  const proposalId = await firstItem.getAttribute('data-proposal-id');
-  const persisted = await page.evaluate(async ({ base, id }) => {
-    const res = await fetch(`${base}/v1/proposals/${id}`, { credentials: 'include' });
-    return res.json();
-  }, { base: API_BASE, id: proposalId });
-  expect(persisted.proposal.title).toBe('Fisiologia renal: aula revisada');
+  // The document is open on the page range; no automatic slicing of it is offered.
+  await expect(page.locator('#sources-range-form')).toBeVisible();
 
   // Nothing in the real learning domain was ever created by this flow.
   const domainCheck = await page.evaluate(async (base) => {
@@ -155,9 +129,11 @@ test('SCANNED-2: the note about skipped pages stays next to the proposals while 
   await expect(note).toContainText('1 página sem texto extraível (p. 2)');
 
   // the status line is overwritten by the very next action; the coverage note must not be
-  const item = page.locator('.source-proposal-item').first();
-  await item.locator('[data-action="save-proposal-title"]').click();
-  await expect(item.getByRole('status')).toHaveText('Título salvo', { timeout: 8000 });
+  await page.locator('#sources-range-start').fill('1');
+  await page.locator('#sources-range-end').fill('1');
+  await page.locator('#sources-range-form [type="submit"]').click();
+  await expect(page.locator('.lesson-editor')).toBeVisible({ timeout: 10000 });
+  await page.locator('[data-action="lesson-back"]').click();
   await expect(note).toBeVisible();
   await expect(note).toContainText('O resumo não cobre essa página');
 
@@ -171,6 +147,44 @@ test('SCANNED-2: the note about skipped pages stays next to the proposals while 
 // T-F4-03 (R-06 AC-06.3, F-32/F-33)
 const TWO_UNITS = buildFixturePdf(['Fisiologia renal: filtração glomerular', 'Barreira de filtração e podócitos'], { outline: [{ title: 'Filtração', page: 1 }, { title: 'Barreira', page: 2 }] });
 
+test('PBC-2.2: discarding an unfinished draft asks twice; cancelling at either question keeps it, only the second yes removes it', async ({ page }) => {
+  await page.locator('[data-screen="materials"]').click();
+  await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
+  await page.setInputFiles('#sources-file-input', { name: 'descartar.pdf', mimeType: 'application/pdf', buffer: TWO_UNITS });
+  await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
+  await generateByPages(page, { from: 1, to: 1 });
+  await expect(page.locator('.lesson-editor')).toBeVisible({ timeout: 10000 });
+  await page.locator('[data-action="lesson-back"]').click();
+
+  const drafts = page.locator('#sources-drafts');
+  const discard = drafts.locator('[data-action="discard-draft"]');
+  await expect(discard).toHaveCount(1);
+  const dialog = page.locator('#confirm-dialog');
+
+  // cancel at the first question: nothing happens
+  await discard.click();
+  await expect(dialog).toBeVisible();
+  await page.locator('#confirm-dialog-cancel').click();
+  await expect(dialog).toBeHidden();
+  await expect(discard).toHaveCount(1);
+
+  // yes at the first, cancel at the second (a different question): still nothing happens
+  await discard.click();
+  await expect(page.locator('#confirm-dialog-message')).toContainText('Descartar o rascunho');
+  await page.locator('#confirm-dialog-ok').click();
+  await expect(page.locator('#confirm-dialog-message')).toContainText('Confirma mesmo?');
+  await page.locator('#confirm-dialog-cancel').click();
+  await expect(dialog).toBeHidden();
+  await expect(discard).toHaveCount(1);
+
+  // yes twice: the draft is gone
+  await discard.click();
+  await page.locator('#confirm-dialog-ok').click();
+  await expect(page.locator('#confirm-dialog-message')).toContainText('Confirma mesmo?');
+  await page.locator('#confirm-dialog-ok').click();
+  await expect(drafts.locator('[data-action="discard-draft"]')).toHaveCount(0, { timeout: 10000 });
+});
+
 test('F-32: "Rascunhos em andamento" comes BEFORE the topic search when a draft exists; with none it stays out of the way', async ({ page }) => {
   await page.locator('[data-screen="materials"]').click();
   await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
@@ -180,7 +194,7 @@ test('F-32: "Rascunhos em andamento" comes BEFORE the topic search when a draft 
   await expect(page.locator('#sources-drafts')).toBeHidden();
   await expect(page.locator('#sources-topic-form')).toBeVisible();
 
-  await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
+  await generateByPages(page, { from: 1, to: 1 });
   await expect(page.locator('.lesson-editor')).toBeVisible({ timeout: 10000 });
   await page.locator('[data-action="lesson-back"]').click();
 
@@ -189,16 +203,13 @@ test('F-32: "Rascunhos em andamento" comes BEFORE the topic search when a draft 
   const order = await page.evaluate(() => {
     const d = document.querySelector('#sources-drafts');
     const form = document.querySelector('#sources-topic-form');
-    const index = document.querySelector('#sources-index');
     return {
       beforeSearch: Boolean(d.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING),
-      beforeIndex: Boolean(d.compareDocumentPosition(index) & Node.DOCUMENT_POSITION_FOLLOWING),
       draftsTop: d.getBoundingClientRect().top,
       searchTop: form.getBoundingClientRect().top,
     };
   });
   expect(order.beforeSearch).toBe(true);
-  expect(order.beforeIndex).toBe(true);
   expect(order.draftsTop).toBeLessThan(order.searchTop);
 });
 
@@ -206,7 +217,7 @@ test('page range: type "de/até" once instead of picking pages one by one; a rev
   await page.locator('[data-screen="materials"]').click();
   await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
   await page.setInputFiles('#sources-file-input', { name: 'intervalo.pdf', mimeType: 'application/pdf', buffer: TWO_UNITS });
-  await expect(page.locator('.source-proposal-item')).toHaveCount(2, { timeout: 10000 });
+  await expect(page.locator('#sources-range-form')).toBeVisible({ timeout: 10000 });
   // pages come first, title search second
   const pagesFirst = await page.evaluate(() => Boolean(document.querySelector('#sources-range-form').compareDocumentPosition(document.querySelector('#sources-topic-form')) & Node.DOCUMENT_POSITION_FOLLOWING));
   expect(pagesFirst).toBe(true);
@@ -215,33 +226,60 @@ test('page range: type "de/até" once instead of picking pages one by one; a rev
   await page.locator('#sources-range-form [type="submit"]').click();
   await expect(page.locator('#sources-message')).toContainText(/não pode vir antes/);
   await page.locator('#sources-range-start').fill('1');
-  await page.locator('#sources-range-end').fill('2');
+  await page.locator('#sources-range-end').fill('1');
   await page.locator('#sources-range-form [type="submit"]').click();
   await expect(page.locator('.lesson-editor')).toBeVisible({ timeout: 10000 });
 });
 
-test('F-33: "Salvar título" confirms with "Título salvo" in a role=status next to the field, keeps the focus, and the confirmation clears when the title is edited again', async ({ page }) => {
+test('PBC-2.1: clicking the NAME of a material in the library opens it like the "Abrir" button; selecting the name text does not', async ({ page }) => {
   await page.locator('[data-screen="materials"]').click();
   await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
-  await page.setInputFiles('#sources-file-input', { name: 'salvar.pdf', mimeType: 'application/pdf', buffer: TWO_UNITS });
-  await expect(page.locator('.source-proposal-item')).toHaveCount(2, { timeout: 10000 });
-  await page.locator('#sources-index').evaluate((el) => { el.open = true; });
-  const item = page.locator('.source-proposal-item').first();
-  const status = item.getByRole('status');
-  await expect(status).toHaveCount(1); // the live region exists BEFORE the save, so the announcement is not lost
-  await expect(status).toHaveText('');
-  await item.locator('.source-proposal-title-input').fill('Filtração glomerular revisada');
-  const save = item.locator('[data-action="save-proposal-title"]');
-  await save.focus();
-  await page.keyboard.press('Enter');
-  await expect(status).toHaveText('Título salvo', { timeout: 5000 });
-  await expect(status).toBeVisible();
-  await expect(save).toBeFocused();
-  // a second item is untouched
-  await expect(page.locator('.source-proposal-item').nth(1).getByRole('status')).toHaveText('');
-  const axe = await new AxeBuilder({ page }).include('#sources-card').withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
-  expect(axe.violations.filter((v) => ['critical', 'serious'].includes(v.impact)).map((v) => v.id)).toEqual([]);
-  // editing again withdraws a confirmation that no longer describes the field
-  await item.locator('.source-proposal-title-input').fill('Outro título');
-  await expect(status).toHaveText('');
+  await page.setInputFiles('#sources-file-input', { name: 'abrir-pelo-nome.pdf', mimeType: 'application/pdf', buffer: TWO_UNITS });
+  await expect(page.locator('#sources-range-form')).toBeVisible({ timeout: 10000 });
+  await page.locator('#sources-back').click();
+  const item = page.locator('.source-existing-item', { hasText: 'abrir-pelo-nome.pdf' });
+  await expect(item).toBeVisible();
+
+  // a text selection on the name is not a click: the library stays
+  await item.locator('.sl-source-identity').evaluate((el) => {
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+  });
+  await item.locator('.sl-source-identity').click({ position: { x: 4, y: 4 } });
+  await expect(page.locator('#sources-open-bar')).toBeHidden();
+
+  // a plain click on the name opens the material
+  await page.evaluate(() => window.getSelection().removeAllRanges());
+  await item.locator('.sl-source-identity').click({ position: { x: 4, y: 4 } });
+  await expect(page.locator('#sources-open-bar')).toBeVisible({ timeout: 10000 });
+  await expect(page.locator('#sources-open-title')).toHaveText('abrir-pelo-nome.pdf');
+  await expect(page.locator('#sources-range-form')).toBeVisible();
+});
+
+test('one thing at a time: an open material hides the library, "Voltar à biblioteca" brings it back, and leaving Materiais lands on the library', async ({ page }) => {
+  await page.locator('[data-screen="materials"]').click();
+  await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
+  await page.setInputFiles('#sources-file-input', { name: 'um-de-cada-vez.pdf', mimeType: 'application/pdf', buffer: TWO_UNITS });
+  await expect(page.locator('#sources-range-form')).toBeVisible({ timeout: 10000 });
+  // open material: only it is on screen (name, back link, page range); the library and its heading are out of the way
+  await expect(page.locator('#sources-open-bar')).toBeVisible();
+  await expect(page.locator('#sources-open-title')).toHaveText('um-de-cada-vez.pdf');
+  await expect(page.locator('#sources-range-form')).toBeVisible();
+  await expect(page.locator('#sources-existing')).toBeHidden();
+  await expect(page.locator('.sl-library-heading')).toBeHidden();
+  // back to the library: the material is listed, nothing of the open one remains
+  await page.locator('#sources-back').click();
+  await expect(page.locator('#sources-open-bar')).toBeHidden();
+  await expect(page.locator('#sources-proposals-panel')).toBeHidden();
+  await expect(page.locator('.source-existing-item', { hasText: 'um-de-cada-vez.pdf' })).toBeVisible();
+  // open it again from the library, leave Materiais and return: it lands on the library, not on the open material
+  await page.locator('.source-existing-item', { hasText: 'um-de-cada-vez.pdf' }).locator('[data-action="open-source"]').click();
+  await expect(page.locator('#sources-range-form')).toBeVisible({ timeout: 10000 });
+  await page.locator('[data-screen="plan"]').click();
+  await page.locator('[data-screen="materials"]').click();
+  await expect(page.locator('#sources-open-bar')).toBeHidden();
+  await expect(page.locator('.source-existing-item', { hasText: 'um-de-cada-vez.pdf' })).toBeVisible();
 });

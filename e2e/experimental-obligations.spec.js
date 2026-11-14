@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -34,7 +35,7 @@ test.afterAll(async () => {
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript((base) => { window.__SMARTLEARN_API_BASE__ = base; window.__SMARTLEARN_REMOTE_MODE__ = true; }, API_BASE);
-  const email = `exp-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+  const email = `exp-${Date.now()}-${randomUUID()}@example.com`;
   const password = 'a genuinely long test password 1';
   await page.goto('/');
   await page.waitForLoadState('networkidle');
@@ -92,7 +93,7 @@ test('off by default; the switch shows the panel; doing a review re-dates from t
   await panel.getByRole('button', { name: 'Fazer a revisão' }).click();
   await expect(panel.locator('li', { hasText: 'Aula experimento' }).locator('.experiment-unit-status')).toContainText('Nada a revisar hoje');
   const tasks = (await api(page, '/v1/review-tasks')).reviewTasks;
-  expect(tasks.filter((t) => t.completedAt).length).toBe(1);
+  expect(tasks.filter((t) => t.completedAt)).toHaveLength(1);
   const evidence = (await api(page, '/v1/learning-evidence')).evidence;
   expect(evidence).toHaveLength(0);
 

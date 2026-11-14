@@ -5,6 +5,9 @@ import { planSectionUnits, findTopicSections, textOfSpans } from './section-span
 import { classifyUnit, effectiveKind } from './unit-kind.js';
 import { segmentsForProposal, parseSpans } from './proposal-scope.js';
 import { activeJobOfProposals } from './generation-jobs.js';
+import { cleanSourceTitle, displayProposalTitle } from './source-title.js';
+import { pdfPageOfPrinted, printedOfPdfPage } from '../../../shared/page-numbering.js';
+import { MAX_PAGES_PER_LESSON, pageCountOf, findPageConflict } from '../../../shared/lesson-limits.js';
 
 export class ProposalError extends Error {
   constructor(code, message, field) {
@@ -45,14 +48,12 @@ function proposalText(db, userId, row) {
 // uploaded filename including its extension, e.g. "insuficiencia-
 // cardiaca.pdf — páginas 1-3". A raw filename as the first thing a
 // student sees on their study screen reads as unfinished. Still fully
-// editable either way (this only changes the DEFAULT).
-function stripKnownExtension(filename) {
-  return filename.replace(/\.(pdf|PDF)$/, '');
-}
+// editable either way (this only changes the DEFAULT). The name is now also cleaned
+// of site tags and format words by cleanSourceTitle (source-title.js).
 
 function defaultTitle(source, pageStart, pageEnd) {
   const range = pageStart === pageEnd ? `página ${pageStart}` : `páginas ${pageStart}-${pageEnd}`;
-  return `${stripKnownExtension(source.original_name)} — ${range}`;
+  return `${cleanSourceTitle(source.original_name)} — ${range}`;
 }
 
 function proposalChars(db, userId, row) {
@@ -272,13 +273,38 @@ export function searchTopics(db, userId, sourceId, query) {
   });
 }
 
-function insertApprovedScope(db, userId, source, { title, topic, spans, kind }) {
+/** One lesson never holds more than a class of ~2 h: above the cap the student splits the book into parts. */
+function assertWithinLessonCap(pageStart, pageEnd, field) {
+  const count = pageCountOf(pageStart, pageEnd);
+  if (count > MAX_PAGES_PER_LESSON) throw new ProposalError('VALIDATION_FAILED', dm('LESSON_TOO_MANY_PAGES', { count, max: MAX_PAGES_PER_LESSON }), field);
+}
+
+/** Lessons of the same book never repeat pages: only ONE boundary page may be shared (the subject changes in the middle of it). */
+function assertPagesNotAlreadyAdded(db, userId, source, pageStart, pageEnd, numbering) {
+  // "Added" = a lesson is being or was made from those pages (a live or accepted draft). A suggestion nobody used (the automatic slices of a
+  // PDF with an outline, or a scope approved and never generated) does not block the pages: the student may still choose any range.
+  const others = db.prepare(`
+    SELECT p.title, p.page_start AS pageStart, p.page_end AS pageEnd FROM content_proposals p
+    WHERE p.user_id = ? AND p.source_id = ? AND p.spans_json IS NOT NULL
+      AND EXISTS (SELECT 1 FROM generated_drafts d WHERE d.user_id = p.user_id AND d.proposal_id = p.id AND d.status IN ('DRAFT', 'ACCEPTED'))
+  `).all(userId, source.id);
+  const clash = findPageConflict({ pageStart, pageEnd }, others);
+  if (!clash) return;
+  const shown = (pdfPage) => printedOfPdfPage(numbering, pdfPage) ?? pdfPage;
+  const from = shown(clash.pageStart);
+  const to = shown(clash.pageEnd);
+  const pages = from === to ? `A página ${from}` : `As páginas ${from} a ${to}`;
+  throw new ProposalError('VALIDATION_FAILED', dm('LESSON_PAGES_ALREADY_ADDED', { pages, title: others[clash.withIndex].title }), 'range');
+}
+
+function insertApprovedScope(db, userId, source, { title, topic, spans, kind }, numbering = null) {
   const pagesTouched = spans.map((s) => s.pageIndex);
   const pageStart = Math.min(...pagesTouched);
   const pageEnd = Math.max(...pagesTouched);
   const spansJson = JSON.stringify(spans);
   const existing = db.prepare('SELECT * FROM content_proposals WHERE user_id = ? AND source_id = ? AND spans_json = ?').get(userId, source.id, spansJson);
   if (existing) return toDetail(db, userId, existing);
+  assertPagesNotAlreadyAdded(db, userId, source, pageStart, pageEnd, numbering);
   const now = new Date().toISOString();
   const next = db.prepare('SELECT COALESCE(MAX(chunk_index), -1) + 1 AS n FROM content_proposals WHERE user_id = ? AND source_id = ?').get(userId, source.id).n;
   const id = db.prepare(`
@@ -297,51 +323,106 @@ function toDetail(db, userId, row) {
  * optional character offsets inside the first and last page. The result is an ordinary proposal whose spans are the ONLY
  * text a provider will ever receive for it. Approving the same scope twice returns the same proposal.
  */
-export function approveScope(db, userId, sourceId, { ordinal, range, title, topic } = {}) {
+export function approveScope(db, userId, sourceId, { ordinal, range, title, topic } = {}, { maxCharsPerChunk = DEFAULT_MAX_CHARS_PER_CHUNK, numbering = null } = {}) {
   const { source, pages, outline } = outlineAndPages(db, userId, sourceId);
+  // The student types the numbers printed in the book when the document has them (numbering.mode 'printed'), else the PDF's own.
+  if (range && numbering?.mode === 'printed' && Number.isInteger(range.pageStart) && Number.isInteger(range.pageEnd)) {
+    const pageStart = pdfPageOfPrinted(numbering, range.pageStart);
+    const pageEnd = pdfPageOfPrinted(numbering, range.pageEnd);
+    const lastPdfPage = pages.length > 0 ? Math.max(...pages.map((p) => p.pageIndex)) : 0;
+    if (pageStart < 1 || pageEnd > lastPdfPage) throw new ProposalError('VALIDATION_FAILED', dm('PAGE_RANGE_OUTSIDE_BOOK', { start: range.pageStart, end: range.pageEnd }), 'range');
+    range = { ...range, pageStart, pageEnd };
+  }
   const pageText = new Map(pages.map((p) => [p.pageIndex, p.text]));
 
   if (Number.isInteger(ordinal)) {
-    const entry = outline.find((e) => e.ordinal === ordinal);
-    if (!entry) throw new ProposalError('NOT_FOUND', dm('SECTION_NOT_FOUND'), 'ordinal');
-    const match = findTopicSections(pages, outline, entry.title, { limit: 50 }).find((m) => m.ordinal === ordinal);
-    if (!match) throw new ProposalError('NOT_FOUND', dm('SECTION_NO_USABLE_TEXT'), 'ordinal');
-    const { kind } = classifyUnit(match.title, textOfSpans(pageText, match.spans));
-    const acronyms = acronymsIn(pages.map((p) => p.text));
-    return insertApprovedScope(db, userId, source, { title: readableTitle(match.title, acronyms), topic: topic ?? match.title, spans: match.spans, kind });
+    return approveOrdinalScope(db, userId, source, pages, outline, pageText, ordinal, topic, numbering);
   }
 
   if (range && Number.isInteger(range.pageStart) && Number.isInteger(range.pageEnd)) {
-    const { pageStart, pageEnd } = range;
-    if (pageEnd < pageStart) throw new ProposalError('VALIDATION_FAILED', dm('PAGE_RANGE_REVERSED'), 'range');
-    const inRange = pages.filter((p) => p.pageIndex >= pageStart && p.pageIndex <= pageEnd);
-    if (inRange.length === 0) throw new ProposalError('VALIDATION_FAILED', dm('PAGE_RANGE_NO_TEXT'), 'range');
-    const first = inRange[0];
-    const last = inRange[inRange.length - 1];
-    const startOffset = range.startOffset ?? 0;
-    const endOffset = range.endOffset ?? last.text.length;
-    if (!Number.isInteger(startOffset) || startOffset < 0 || startOffset >= first.text.length) throw new ProposalError('VALIDATION_FAILED', dm('OFFSET_START_OUTSIDE'), 'startOffset');
-    if (!Number.isInteger(endOffset) || endOffset <= 0 || endOffset > last.text.length) throw new ProposalError('VALIDATION_FAILED', dm('OFFSET_END_OUTSIDE'), 'endOffset');
-    const spans = inRange.map((p) => ({
-      pageIndex: p.pageIndex,
-      start: p === first ? startOffset : 0,
-      end: p === last ? endOffset : p.text.length,
-    })).filter((s) => s.end > s.start);
-    if (spans.length === 0) throw new ProposalError('VALIDATION_FAILED', dm('RANGE_NO_TEXT'), 'range');
-    const chosenTitle = typeof title === 'string' && title.trim().length > 0 ? title.trim() : defaultTitle(source, pageStart, pageEnd);
-    const { kind } = classifyUnit(chosenTitle, textOfSpans(pageText, spans));
-    return insertApprovedScope(db, userId, source, { title: chosenTitle, topic: topic ?? chosenTitle, spans, kind });
+    return approvePageRange(db, userId, source, pages, pageText, range, title, topic, maxCharsPerChunk, numbering);
   }
 
   throw new ProposalError('VALIDATION_FAILED', 'Informe a seção (ordinal) ou o intervalo de páginas (range).', 'scope');
 }
 
+function approveOrdinalScope(db, userId, source, pages, outline, pageText, ordinal, topic, numbering) {
+  const entry = outline.find((item) => item.ordinal === ordinal);
+  if (!entry) throw new ProposalError('NOT_FOUND', dm('SECTION_NOT_FOUND'), 'ordinal');
+  const match = findTopicSections(pages, outline, entry.title, { limit: 50 }).find((item) => item.ordinal === ordinal);
+  if (!match) throw new ProposalError('NOT_FOUND', dm('SECTION_NO_USABLE_TEXT'), 'ordinal');
+  const { kind } = classifyUnit(match.title, textOfSpans(pageText, match.spans));
+  const acronyms = acronymsIn(pages.map((page) => page.text));
+  const sectionPages = match.spans.map((span) => span.pageIndex);
+  assertWithinLessonCap(Math.min(...sectionPages), Math.max(...sectionPages), 'ordinal');
+  return insertApprovedScope(db, userId, source, {
+    title: readableTitle(match.title, acronyms), topic: topic ?? match.title, spans: match.spans, kind,
+  }, numbering);
+}
+
+/** Consecutive spans grouped so each group stays within the model input limit. A single span above the limit stays alone
+ * (its own, later, "text too large" answer): text is never dropped or cut inside a page. */
+export function splitSpansByBudget(spans, budget) {
+  const groups = [];
+  let current = [];
+  let size = 0;
+  for (const span of spans) {
+    const length = span.end - span.start;
+    if (current.length > 0 && size + length > budget) { groups.push(current); current = []; size = 0; }
+    current.push(span);
+    size += length;
+  }
+  if (current.length > 0) groups.push(current);
+  return groups;
+}
+
+function approvePageRange(db, userId, source, pages, pageText, range, title, topic, maxCharsPerChunk, numbering) {
+  const { pageStart, pageEnd } = range;
+  // titles name the pages with the numbers the student knows (the book's when the PDF has them)
+  const shown = (pdfPage) => printedOfPdfPage(numbering, pdfPage) ?? pdfPage;
+  if (pageEnd < pageStart) throw new ProposalError('VALIDATION_FAILED', dm('PAGE_RANGE_REVERSED'), 'range');
+  assertWithinLessonCap(pageStart, pageEnd, 'range');
+  const inRange = pages.filter((page) => page.pageIndex >= pageStart && page.pageIndex <= pageEnd);
+  if (inRange.length === 0) throw new ProposalError('VALIDATION_FAILED', dm('PAGE_RANGE_NO_TEXT'), 'range');
+  const first = inRange[0];
+  const last = inRange[inRange.length - 1];
+  const startOffset = range.startOffset ?? 0;
+  const endOffset = range.endOffset ?? last.text.length;
+  if (!Number.isInteger(startOffset) || startOffset < 0 || startOffset >= first.text.length) throw new ProposalError('VALIDATION_FAILED', dm('OFFSET_START_OUTSIDE'), 'startOffset');
+  if (!Number.isInteger(endOffset) || endOffset <= 0 || endOffset > last.text.length) throw new ProposalError('VALIDATION_FAILED', dm('OFFSET_END_OUTSIDE'), 'endOffset');
+  const spans = inRange.map((page) => ({
+    pageIndex: page.pageIndex,
+    start: page === first ? startOffset : 0,
+    end: page === last ? endOffset : page.text.length,
+  })).filter((span) => span.end > span.start);
+  if (spans.length === 0) throw new ProposalError('VALIDATION_FAILED', dm('RANGE_NO_TEXT'), 'range');
+  const chosenTitle = typeof title === 'string' && title.trim().length > 0 ? title.trim() : null;
+  const groups = splitSpansByBudget(spans, maxCharsPerChunk);
+  if (groups.length === 1) {
+    const only = chosenTitle ?? defaultTitle(source, shown(pageStart), shown(pageEnd));
+    const { kind } = classifyUnit(only, textOfSpans(pageText, spans));
+    return insertApprovedScope(db, userId, source, { title: only, topic: topic ?? only, spans, kind }, numbering);
+  }
+  // Too much text for one summary: the range becomes consecutive parts that each fit, all created together or not at all.
+  const parts = db.transaction(() => groups.map((group, i) => {
+    const first = group[0].pageIndex;
+    const last = group[group.length - 1].pageIndex;
+    const base = chosenTitle ?? defaultTitle(source, shown(first), shown(last));
+    const partTitle = chosenTitle ? `${chosenTitle} (parte ${i + 1} de ${groups.length})` : `${base} (parte ${i + 1} de ${groups.length})`;
+    const { kind } = classifyUnit(partTitle, textOfSpans(pageText, group));
+    return insertApprovedScope(db, userId, source, { title: partTitle, topic: topic ?? partTitle, spans: group, kind }, numbering);
+  }))();
+  return { ...parts[0], parts };
+}
+
 export function listProposals(db, userId, sourceId) {
-  if (!findOwnedSource(db, userId, sourceId)) throw new ProposalError('NOT_FOUND', dm('SOURCE_NOT_FOUND'));
+  const source = findOwnedSource(db, userId, sourceId);
+  if (!source) throw new ProposalError('NOT_FOUND', dm('SOURCE_NOT_FOUND'));
   const rows = db.prepare('SELECT * FROM content_proposals WHERE user_id = ? AND source_id = ? ORDER BY chunk_index').all(userId, sourceId);
   const drafts = latestDraftsByProposal(db, userId, sourceId);
   return rows.map((row) => ({
     ...toSummaryDto(row, drafts.get(row.id) ?? null),
+    title: displayProposalTitle(row.title, source.original_name),
     excerpt: proposalText(db, userId, row).slice(0, EXCERPT_LENGTH),
     chars: proposalChars(db, userId, row),
   }));
@@ -353,8 +434,10 @@ export function listProposals(db, userId, sourceId) {
 export function getProposal(db, userId, proposalId) {
   const row = findOwnedProposal(db, userId, proposalId);
   if (!row) throw new ProposalError('NOT_FOUND', dm('PROPOSAL_NOT_FOUND'));
+  const source = findOwnedSource(db, userId, row.source_id);
   return {
     ...toSummaryDto(row),
+    title: displayProposalTitle(row.title, source?.original_name),
     excerpt: proposalText(db, userId, row),
     chars: proposalChars(db, userId, row),
     spans: parseSpans(row),

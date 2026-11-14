@@ -22,3 +22,4 @@ Before modifying this repository:
 4. Preserve NO_PUSH / NO_MERGE / NO_DEPLOY and other human authorization boundaries from the repository instructions. `main` is read-only for agents.
 5. Claude-specific runtime commands or capabilities in `CLAUDE.md` do not imply equivalent Codex capabilities. Use the Codex-native equivalent when one exists; otherwise preserve the intended invariant.
 6. Do not duplicate persistent project rules here. Keep shared rules in their existing authoritative source.
+7. Codex delegation models, by level (only if available in the host): routine `gpt-6-luna` effort `medium`; difficult `gpt-6-luna` effort `max`; exceptional with speed priority `gpt-6.1-terra` effort `medium`. Claude agents follow `~/.claude/AGENTS.md`.

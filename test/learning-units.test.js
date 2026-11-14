@@ -127,7 +127,8 @@ test("importAll com schemaVersion incorreto lança erro fail-closed", async () =
 test("importAll sem schemaVersion lança erro fail-closed", async () => {
   await DB.init();
   const backup = await DB.exportAll();
-  const { schemaVersion: _dropped, ...noVersion } = backup;
+  const noVersion = { ...backup };
+  delete noVersion.schemaVersion;
   await assert.rejects(() => DB.importAll(noVersion), /schemaVersion/i);
 });
 

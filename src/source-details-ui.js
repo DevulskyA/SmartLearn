@@ -78,7 +78,7 @@ export function setOriginalPdfOpener(fn) { openOriginalPdf = fn ?? openDialogVie
 // it is best-effort: a failing recorder never blocks the viewer, and an opening is never reading or evidence.
 let recordOpening = null;
 export function setSourceOpeningRecorder(fn) { recordOpening = fn ?? null; }
-const newOperationKey = () => (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+const newOperationKey = () => globalThis.crypto.randomUUID();
 function noteOpening(citation, context) {
   if (!recordOpening) return;
   try {

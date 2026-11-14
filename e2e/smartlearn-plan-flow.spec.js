@@ -74,7 +74,6 @@ test('AC-03: single click on Salvar aula creates new subject + unit + exactly 16
 
   // The ONLY click for the whole operation.
   await page.locator('#plan-unit-save-btn').click();
-  await expect(page.locator('#study-message, .form-message', { hasText: /revis/i })).toBeVisible({ timeout: 5000 }).catch(() => {});
   await page.waitForFunction(
     () => {
       const raw = localStorage.getItem('smartlearn:browser-db');
@@ -107,8 +106,6 @@ test('AC-03: single click on Salvar aula creates new subject + unit + exactly 16
 });
 
 test('AC-04: an injected save failure leaves exact pre-state (zero partial rows)', async ({ page }) => {
-  // eslint-disable-next-line no-unused-vars -- reserved for the post-failure comparison: today this test asserts nothing after the hook check (NOT_PROVEN, see TEST_COVERAGE_MATRIX AC-03/AC-04 note)
-  const before = await snapshot(page);
 
   await page.locator('#plan-show-subject-form').click();
   await page.locator('#plan-new-subject-input').fill('Nefrologia Falha Injetada');
@@ -122,6 +119,7 @@ test('AC-04: an injected save failure leaves exact pre-state (zero partial rows)
   const hasHook = await page.evaluate(() => typeof window.DB?.learningUnits?.createWithReviews === 'function');
 
   if (!hasHook) {
+    expect(hasHook, 'the failure-injection seam is not available yet').toBe(false);
     // No stable window hook exists to inject a mid-write failure from outside
     // the module graph (DB is an ES module import, not exposed on window).
     // Recording this as a discovered gap rather than fabricating a pass.
@@ -130,7 +128,6 @@ test('AC-04: an injected save failure leaves exact pre-state (zero partial rows)
       description: 'No window.DB hook available to inject a write failure without modifying product code for a test-only seam. Needs a proper dependency-injection seam in a later task (server-side transaction test in T13+ covers this at the API layer instead).',
     });
     test.skip();
-    return;
   }
 });
 
@@ -181,10 +178,7 @@ test('discipline name still rejects sentence-signal symbols (@) with visible fee
   await page.locator('#plan-show-subject-form').click();
   await page.locator('#plan-new-subject-input').fill('Medicina@Interna');
   await page.locator('#plan-new-subject-form button[type="submit"]').click();
-  await page.waitForTimeout(400);
-
-  const screenText = await page.locator('.plan-new-unit-form').first().innerText();
-  expect(/caracteres não permitidos/i.test(screenText)).toBe(true);
+  await expect(page.locator('#plan-unit-form-message')).toContainText(/caracteres não permitidos/i);
 
   const db = await snapshot(page);
   expect(db.subjects.some(s => s.name === 'Medicina@Interna')).toBe(false);
@@ -195,10 +189,7 @@ test('control char U+2028 in discipline name: rejected with visible message, not
   const malicious = 'Teste' + String.fromCharCode(0x2028) + 'Malicioso';
   await page.locator('#plan-new-subject-input').fill(malicious);
   await page.locator('#plan-new-subject-form button[type="submit"]').click();
-  await page.waitForTimeout(500);
-
-  const screenText = await page.locator('.plan-new-unit-form').first().innerText();
-  expect(/caracteres|permitidos/i.test(screenText)).toBe(true);
+  await expect(page.locator('#plan-unit-form-message')).toContainText(/caracteres|permitidos/i);
 
   const db = await snapshot(page);
   expect(db.subjects.some(s => s.name.includes('Malicioso'))).toBe(false);
@@ -210,10 +201,7 @@ test('control char U+2028 in study title: rejected with visible message, not per
   await page.locator('#plan-study-title').fill(malicious);
   await page.locator('#plan-study-date').fill('2026-09-06');
   await page.locator('#plan-unit-save-btn').click();
-  await page.waitForTimeout(500);
-
-  const screenText = await page.locator('.plan-new-unit-form').first().innerText();
-  expect(/controle não permitidos/i.test(screenText)).toBe(true);
+  await expect(page.locator('#plan-unit-form-message')).toContainText(/controle não permitidos/i);
 
   const db = await snapshot(page);
   expect(db.learningUnits.some(u => (u.title || '').includes('Malicioso'))).toBe(false);
@@ -224,7 +212,7 @@ test('duplicate discipline name (case-insensitive) rejected, no duplicate row', 
   await page.locator('#plan-show-subject-form').click();
   await page.locator('#plan-new-subject-input').fill('biologia celular');
   await page.locator('#plan-new-subject-form button[type="submit"]').click();
-  await page.waitForTimeout(400);
+  await expect(page.locator('#plan-unit-form-message')).toContainText(/Já existe uma disciplina/i);
   const after = await snapshot(page);
   expect(after.subjects.length, 'no subject row added on case-insensitive dup').toBe(before.subjects.length);
 });

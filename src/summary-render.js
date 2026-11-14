@@ -128,52 +128,93 @@ function appendInline(parent, children, ctx) {
   }
 }
 
+function appendHeading(token, stack, top) {
+  const heading = document.createElement(`h${Math.min(Number(token.tag.slice(1)) + 2, 6)}`);
+  heading.className = "summary-heading";
+  top().append(heading);
+  stack.push(heading);
+}
+
+function appendParagraph(token, stack, top) {
+  if (token.hidden) return; // tight list item: the text goes straight into the item
+  const paragraph = document.createElement("p");
+  paragraph.className = "summary-paragraph";
+  top().append(paragraph);
+  stack.push(paragraph);
+}
+
+function appendList(token, stack, top) {
+  const list = document.createElement(token.tag === "ol" ? "ol" : "ul");
+  list.className = "summary-list";
+  top().append(list);
+  stack.push(list);
+}
+
+function appendBlockElement(token, stack, top) {
+  const element = document.createElement(token.tag);
+  if (token.tag === "table") element.className = "summary-table";
+  if (token.tag === "th" || token.tag === "td") {
+    const alignment = alignOf(token);
+    if (alignment) element.style.textAlign = alignment;
+    if (token.tag === "th") element.scope = "col";
+  }
+  if (token.tag === "table") {
+    const wrapper = document.createElement("div");
+    wrapper.className = "summary-table-wrap";
+    wrapper.append(element);
+    top().append(wrapper);
+  } else top().append(element);
+  stack.push(element);
+}
+
+function appendCodeBlock(token, top) {
+  const pre = document.createElement("pre");
+  const code = document.createElement("code");
+  code.textContent = token.content;
+  pre.append(code);
+  top().append(pre);
+}
+
+function appendOtherBlock(token, stack, top, ctx) {
+  if (token.nesting === 1 && BLOCK_TAGS.has(token.tag)) {
+    appendBlockElement(token, stack, top);
+  } else if (token.nesting === -1 && BLOCK_TAGS.has(token.tag)) {
+    stack.pop();
+  } else if (token.type === "hr") {
+    top().append(document.createElement("hr"));
+  } else if (token.type === "fence" || token.type === "code_block") {
+    appendCodeBlock(token, top);
+  } else if (token.type === "math_block") {
+    top().append(renderMath(token.content, true, ctx, ctx.nextMath()));
+  } else if (token.type === "figure") {
+    top().append(renderFigure(token.meta.id, ctx, token.meta.width ?? null));
+  }
+}
+
+function appendBlockToken(token, stack, top, ctx) {
+  if (token.type === "inline") {
+    appendInline(top(), token.children, ctx);
+  } else if (token.type === "heading_open") {
+    appendHeading(token, stack, top);
+  } else if (token.type === "heading_close") {
+    stack.pop();
+  } else if (token.type === "paragraph_open") {
+    appendParagraph(token, stack, top);
+  } else if (token.type === "paragraph_close") {
+    if (!token.hidden) stack.pop();
+  } else if (token.type === "bullet_list_open" || token.type === "ordered_list_open") {
+    appendList(token, stack, top);
+  } else if (token.type === "bullet_list_close" || token.type === "ordered_list_close") {
+    stack.pop();
+  } else {
+    appendOtherBlock(token, stack, top, ctx);
+  }
+}
+
 function buildBlocks(tokens, root, ctx) {
   const stack = [root];
   const top = () => stack[stack.length - 1];
-  for (const token of tokens) {
-    if (token.type === "inline") { appendInline(top(), token.children, ctx); continue; }
-    if (token.type === "heading_open") {
-      const h = document.createElement(`h${Math.min(Number(token.tag.slice(1)) + 2, 6)}`);
-      h.className = "summary-heading";
-      top().append(h);
-      stack.push(h);
-    } else if (token.type === "heading_close") stack.pop();
-    else if (token.type === "paragraph_open") {
-      if (token.hidden) continue; // tight list item: the text goes straight into the item
-      const p = document.createElement("p");
-      p.className = "summary-paragraph";
-      top().append(p);
-      stack.push(p);
-    } else if (token.type === "paragraph_close") { if (!token.hidden) stack.pop(); }
-    else if (token.type === "bullet_list_open" || token.type === "ordered_list_open") {
-      const list = document.createElement(token.tag === "ol" ? "ol" : "ul");
-      list.className = "summary-list";
-      top().append(list);
-      stack.push(list);
-    } else if (token.type === "bullet_list_close" || token.type === "ordered_list_close") stack.pop();
-    else if (token.nesting === 1 && BLOCK_TAGS.has(token.tag)) {
-      const el = document.createElement(token.tag);
-      if (token.tag === "table") el.className = "summary-table";
-      if (token.tag === "th" || token.tag === "td") { const a = alignOf(token); if (a) el.style.textAlign = a; if (token.tag === "th") el.scope = "col"; }
-      if (token.tag === "table") {
-        const wrap = document.createElement("div");
-        wrap.className = "summary-table-wrap";
-        wrap.append(el);
-        top().append(wrap);
-      } else top().append(el);
-      stack.push(el);
-    } else if (token.nesting === -1 && BLOCK_TAGS.has(token.tag)) stack.pop();
-    else if (token.type === "hr") top().append(document.createElement("hr"));
-    else if (token.type === "fence" || token.type === "code_block") {
-      const pre = document.createElement("pre");
-      const code = document.createElement("code");
-      code.textContent = token.content;
-      pre.append(code);
-      top().append(pre);
-    } else if (token.type === "math_block") top().append(renderMath(token.content, true, ctx, ctx.nextMath()));
-    else if (token.type === "figure") top().append(renderFigure(token.meta.id, ctx, token.meta.width ?? null));
-  }
+  for (const token of tokens) appendBlockToken(token, stack, top, ctx);
 }
 
 /** One formula drawn exactly as on every screen (an invalid one shows its message and original text); `onEdit` makes it clickable. For the visual editor. */
@@ -191,6 +232,41 @@ export function renderFigureElement(id, { loadFigure = loadFigureRecord, onOpenS
   };
   draw();
   return host;
+}
+
+/**
+ * The table of contents of a rendered summary, in the left margin like a PDF reader's navigation pane: one entry per heading, each moving
+ * the reading position to that heading INSIDE the page (no hash links: the app's own routing lives in the hash). Offered only when the
+ * summary has at least two headings; `nav` is emptied and hidden otherwise.
+ */
+export function renderSummaryOutline(nav, container) {
+  const headings = [...container.querySelectorAll(".summary-heading")];
+  nav.replaceChildren();
+  nav.hidden = headings.length < 2;
+  if (nav.hidden) return;
+  const title = document.createElement("p");
+  title.className = "summary-outline-title";
+  title.textContent = t("summary.outline.title");
+  const list = document.createElement("ul");
+  list.className = "summary-outline-list";
+  for (const heading of headings) {
+    const level = Number(heading.tagName.slice(1)); // h3 = a section, h4 and below = its subsections
+    const item = document.createElement("li");
+    item.style.setProperty("--outline-level", String(Math.max(level - 3, 0)));
+    const go = document.createElement("button");
+    go.type = "button";
+    go.className = "text-button summary-outline-item";
+    go.textContent = heading.textContent;
+    go.addEventListener("click", () => {
+      heading.tabIndex = -1;
+      const calm = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      heading.scrollIntoView({ block: "start", behavior: calm ? "auto" : "smooth" });
+      heading.focus({ preventScroll: true });
+    });
+    item.append(go);
+    list.append(item);
+  }
+  nav.append(title, list);
 }
 
 /**

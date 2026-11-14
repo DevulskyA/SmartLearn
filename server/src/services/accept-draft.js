@@ -4,6 +4,7 @@ import { isDraftStale, normalizeContent, acceptanceBlockers } from './generated-
 import { contributeAcceptedDraft } from './shared-reuse.js';
 import { findUnresolvedRefs, refsMessage } from './visual-assets.js';
 import { carry, dm, splitMessage } from '../api-error-messages.js';
+import { SOURCE_KINDS } from '../../../shared/source-kinds.js';
 
 export class AcceptDraftError extends Error {
   constructor(code, message, field) {
@@ -200,7 +201,7 @@ function acceptLessonQuestions(db, userId, draftRow, { expectedRevision }, now) 
  * medically validated — it is ordinary, editable learning material like
  * any manually created exercise, just tagged with its real provenance.
  */
-export function acceptDraft(db, userId, draftId, { subjectId, newSubjectName, newSubjectColor, studyDate, lessonDate, expectedRevision, acknowledgeSummaryFindings } = {}, now = () => new Date()) {
+export function acceptDraft(db, userId, draftId, { subjectId, newSubjectName, newSubjectColor, studyDate, lessonDate, sourceKind, expectedRevision, acknowledgeSummaryFindings } = {}, now = () => new Date()) {
   const draftRow = db.prepare('SELECT * FROM generated_drafts WHERE user_id = ? AND id = ?').get(userId, draftId);
   if (!draftRow) throw new AcceptDraftError('NOT_FOUND', dm('DRAFT_NOT_FOUND'));
 
@@ -233,10 +234,12 @@ export function acceptDraft(db, userId, draftId, { subjectId, newSubjectName, ne
     }
 
     const nowIso = now().toISOString();
+    if (sourceKind != null && !SOURCE_KINDS.includes(sourceKind)) throw new AcceptDraftError('VALIDATION_FAILED', dm('INPUT_INVALID', { field: 'sourceKind' }), 'sourceKind');
+    const storedSourceKind = sourceKind ?? null;
     const unitResult = db.prepare(`
-      INSERT INTO learning_units (user_id, subject_id, title, source_text, summary_body, study_date, lesson_date, created_at, updated_at)
-      VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?)
-    `).run(userId, subject.id, proposal.title, draftContent.summary, studyDate, storedLessonDate, nowIso, nowIso);
+      INSERT INTO learning_units (user_id, subject_id, title, source_text, source_kind, summary_body, study_date, lesson_date, created_at, updated_at)
+      VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)
+    `).run(userId, subject.id, proposal.title, storedSourceKind, draftContent.summary, studyDate, storedLessonDate, nowIso, nowIso);
     const unit = db.prepare('SELECT * FROM learning_units WHERE id = ?').get(unitResult.lastInsertRowid);
 
     // The summary's own provenance, frozen like a question citation. A draft created before summary

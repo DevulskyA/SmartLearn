@@ -48,6 +48,7 @@ export default class QuietReporter {
       try { mkdirSync('test-results', { recursive: true }); writeFileSync(DETAIL_FILE, this.problems.join('\n\n')); } catch { /* the console line is enough */ }
       if (this.problems.length > MAX_SHOWN) console.log(`… ${this.problems.length - MAX_SHOWN} more problem(s) in ${DETAIL_FILE}`);
     }
-    console.log(`E2E ${result.status}: ${c.passed} passed, ${c.failed} failed, ${c.flaky} flaky, ${c.skipped} skipped${c.interrupted ? `, ${c.interrupted} interrupted` : ''} in ${seconds} s`);
+    const interrupted = c.interrupted ? `, ${c.interrupted} interrupted` : '';
+    console.log(`E2E ${result.status}: ${c.passed} passed, ${c.failed} failed, ${c.flaky} flaky, ${c.skipped} skipped${interrupted} in ${seconds} s`);
   }
 }

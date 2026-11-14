@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { test, expect } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -38,7 +39,7 @@ async function signUp(page, { localAuthority }) {
     window.__SMARTLEARN_REMOTE_MODE__ = true;
     if (local) window.__SMARTLEARN_LOCAL_AUTHORITY__ = true;
   }, { base: API_BASE, local: localAuthority });
-  const email = `first-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+  const email = `first-${Date.now()}-${randomUUID()}@example.com`;
   const password = 'a genuinely long test password 1';
   await page.goto('/');
   await page.waitForLoadState('networkidle');

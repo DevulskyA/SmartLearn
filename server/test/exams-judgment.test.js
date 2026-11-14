@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -31,7 +32,7 @@ function makeUser(db, email) {
 }
 
 function submittedExam(db, userId, count = 3) {
-  const { unit } = learningUnits.create(db, userId, { newSubjectName: `D ${Math.random()}`, title: 'Aula', summaryBody: 'r', studyDate: '2026-03-01' });
+  const { unit } = learningUnits.create(db, userId, { newSubjectName: `D ${randomUUID()}`, title: 'Aula', summaryBody: 'r', studyDate: '2026-03-01' });
   for (let i = 1; i <= count; i += 1) exercises.create(db, userId, { unitId: unit.id, question: `Q${i}?`, answer: `A${i}`, explanation: `E${i}`, provenance: 'MANUAL' });
   const { exam } = exams.start(db, userId, { unitId: unit.id });
   return exams.submit(db, userId, exam.id);
@@ -50,8 +51,8 @@ test('judging is only possible AFTER submitting; the score appears only when eve
     assert.equal(submitted.score, null);
     assert.ok(submitted.items.every((i) => i.outcome === null), 'nothing is pre-judged');
 
-    let exam = exams.judge(db, userId, submitted.id, submitted.items[0].id, { outcome: 'CORRECT' });
-    exam = exams.judge(db, userId, submitted.id, submitted.items[1].id, { outcome: 'INCORRECT' });
+    exams.judge(db, userId, submitted.id, submitted.items[0].id, { outcome: 'CORRECT' });
+    let exam = exams.judge(db, userId, submitted.id, submitted.items[1].id, { outcome: 'INCORRECT' });
     assert.equal(exam.score, null, 'two of three judged: no score yet — never a partial score dressed as a result');
     exam = exams.judge(db, userId, submitted.id, submitted.items[2].id, { outcome: 'CORRECT' });
     assert.deepEqual(exam.score, { correct: 2, total: 3, percent: (2 / 3) * 100 });

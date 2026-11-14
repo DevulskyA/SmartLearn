@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { spawn } from 'node:child_process';
@@ -43,7 +44,7 @@ test.afterAll(async () => {
   rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 });
 
-const uniqueEmail = () => `sweep-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+const uniqueEmail = () => `sweep-${Date.now()}-${randomUUID()}@example.com`;
 
 async function signIn(page, email = uniqueEmail()) {
   await page.addInitScript((base) => {

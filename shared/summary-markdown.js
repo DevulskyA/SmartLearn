@@ -26,32 +26,36 @@ function mathInline(state, silent) {
   return true;
 }
 
+function readMultilineMath(state, startLine, endLine, first) {
+  const parts = [first.slice(2)];
+  for (let line = startLine + 1; line < endLine; line++) {
+    const text = state.src.slice(state.bMarks[line], state.eMarks[line]);
+    const close = text.indexOf('\\]');
+    if (close === -1) {
+      parts.push(text);
+      continue;
+    }
+    if (text.slice(close + 2).trim() !== '') return null;
+    parts.push(text.slice(0, close));
+    return { content: parts.join('\n'), last: line };
+  }
+  return null;
+}
+
 function mathBlock(state, startLine, endLine, silent) {
   const first = state.src.slice(state.bMarks[startLine] + state.tShift[startLine], state.eMarks[startLine]);
   if (state.sCount[startLine] - state.blkIndent >= 4 || !first.startsWith('\\[')) return false;
+  const sameLine = first.indexOf('\\]', 2);
   let content;
   let last = startLine;
-  const sameLine = first.indexOf('\\]', 2);
   if (sameLine !== -1) {
     if (first.slice(sameLine + 2).trim() !== '') return false; // text after the closing marker: it is a paragraph with a formula, not a block
     content = first.slice(2, sameLine);
   } else {
-    const parts = [first.slice(2)];
-    let found = false;
-    for (let line = startLine + 1; line < endLine; line++) {
-      const text = state.src.slice(state.bMarks[line], state.eMarks[line]);
-      const close = text.indexOf('\\]');
-      if (close !== -1) {
-        if (text.slice(close + 2).trim() !== '') return false;
-        parts.push(text.slice(0, close));
-        last = line;
-        found = true;
-        break;
-      }
-      parts.push(text);
-    }
-    if (!found) return false;
-    content = parts.join('\n');
+    const block = readMultilineMath(state, startLine, endLine, first);
+    if (!block) return false;
+    content = block.content;
+    last = block.last;
   }
   if (content.trim() === '') return false;
   if (silent) return true;
@@ -96,6 +100,36 @@ export function parseSummaryTokens(text) {
   return markdown().parse(String(text ?? ''), {});
 }
 
+function appendBlockMathLocation(token, text, lineStart, found) {
+  const from = lineStart(token.map[0]);
+  const to = Math.min(lineStart(token.map[1]), text.length);
+  const open = text.indexOf('\\[', from);
+  const close = text.lastIndexOf('\\]', to);
+  if (open !== -1 && close > open) found.push({ kind: 'block', tex: token.content, start: open, end: close + 2 });
+  else found.push({ kind: 'block', tex: token.content, start: -1, end: -1 });
+  return to;
+}
+
+function appendInlineMathLocation(child, text, cursor, limit, found) {
+  const raw = `\\(${child.content}\\)`;
+  const at = text.indexOf(raw, cursor);
+  if (at === -1 || at + raw.length > limit) {
+    found.push({ kind: 'inline', tex: child.content, start: -1, end: -1 });
+    return cursor;
+  }
+  found.push({ kind: 'inline', tex: child.content, start: at, end: at + raw.length });
+  return at + raw.length;
+}
+
+function appendInlineTokenLocations(token, map, text, lineStart, cursor, found) {
+  cursor = Math.max(cursor, lineStart(map[0]));
+  const limit = Math.min(lineStart(map[1]), text.length);
+  for (const child of token.children ?? []) {
+    if (child.type === 'math_inline') cursor = appendInlineMathLocation(child, text, cursor, limit, found);
+  }
+  return cursor;
+}
+
 /**
  * Every formula in the text with the exact character range it occupies, in document order, so the editor can replace ONE formula
  * without touching the text around it. One entry per formula in document order (the renderer counts them the same way); a formula that
@@ -113,24 +147,9 @@ export function locateMath(source) {
   for (const token of parseSummaryTokens(text)) {
     if (token.map) map = token.map;
     if (token.type === 'math_block') {
-      const from = lineStart(token.map[0]);
-      const to = Math.min(lineStart(token.map[1]), text.length);
-      const open = text.indexOf('\\[', from);
-      const close = text.lastIndexOf('\\]', to);
-      if (open !== -1 && close > open) found.push({ kind: 'block', tex: token.content, start: open, end: close + 2 });
-      else found.push({ kind: 'block', tex: token.content, start: -1, end: -1 });
-      cursor = Math.max(cursor, to);
+      cursor = Math.max(cursor, appendBlockMathLocation(token, text, lineStart, found));
     } else if (token.type === 'inline' && map) {
-      cursor = Math.max(cursor, lineStart(map[0]));
-      const limit = Math.min(lineStart(map[1]), text.length);
-      for (const child of token.children ?? []) {
-        if (child.type !== 'math_inline') continue;
-        const raw = `\\(${child.content}\\)`;
-        const at = text.indexOf(raw, cursor);
-        if (at === -1 || at + raw.length > limit) { found.push({ kind: 'inline', tex: child.content, start: -1, end: -1 }); continue; }
-        found.push({ kind: 'inline', tex: child.content, start: at, end: at + raw.length });
-        cursor = at + raw.length;
-      }
+      cursor = appendInlineTokenLocations(token, map, text, lineStart, cursor, found);
     }
   }
   return found;

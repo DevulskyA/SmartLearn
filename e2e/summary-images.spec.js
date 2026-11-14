@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { test, expect } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -10,6 +11,7 @@ import { waitForServerReady } from './support/wait-for-server.js';
 import { signInRegistered } from './support/session.js';
 import { startEditingSummary } from './support/summary-editing.js';
 
+import { generateByPages } from './support/materials-flow.js';
 // Delivery B: private images in the Resumo Mestre. Insert from a file and from the clipboard through the details dialog (description is
 // required), see it in the preview and in every screen, enlarge and edit its texts, refuse hostile files, keep it owner-only, keep it
 // after a reload and when the lesson is accepted.
@@ -56,7 +58,7 @@ async function prepare(page) {
     window.__SMARTLEARN_REMOTE_MODE__ = true;
     window.__SMARTLEARN_LOCAL_AUTHORITY__ = true;
   }, API_BASE);
-  const email = `img-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+  const email = `img-${Date.now()}-${randomUUID()}@example.com`;
   await signInRegistered(page, { email, password: PASSWORD });
   return email;
 }
@@ -224,7 +226,7 @@ test('lesson editor: an image inserted in the draft survives the save and the ac
   await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
   await page.setInputFiles('#sources-file-input', { name: 'aula.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf(['Fisiologia renal: filtração glomerular', 'Barreira de filtração e podócitos', 'Clearance de inulina mede a TFG']) });
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
-  await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
+  await generateByPages(page);
   const editor = page.locator('.lesson-editor');
   await expect(editor).toBeVisible({ timeout: 10000 });
   await startEditingSummary(page);

@@ -8,6 +8,7 @@ import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.j
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
 import { waitForServerReady } from './support/wait-for-server.js';
 
+import { generateByPages } from './support/materials-flow.js';
 // REALMODEL-1 (CODEX): the whole content pipeline with a REAL model, through the real UI:
 //   PDF upload -> extraction -> proposal -> "Gerar resumo com IA" -> Codex (generation, model audit, at most one
 //   repair) -> schema validation + deterministic audit -> DRAFT shown for human review -> accept -> a real unit.
@@ -81,8 +82,7 @@ test('REALMODEL-1 via Codex: PDF -> real model draft -> review UI -> accept -> a
   await page.setInputFiles('#sources-file-input', { name: 'fisiologia-renal.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf([PAGE_1, PAGE_2]) });
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 15000 });
 
-  const item = page.locator('.source-proposal-item').first();
-  await item.locator('[data-action="generate-draft"]').click();
+  await generateByPages(page);
   await expect(page.locator('#sources-message')).toContainText('Resumo gerado', { timeout: 600_000 });
 
   const draftPanel = page.locator('.lesson-editor');

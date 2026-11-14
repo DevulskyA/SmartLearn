@@ -1,18 +1,25 @@
-// FIX_PLAN P2-3 (final engineering audit, .specs/quick/final-engineering-audit-v1): the one
-// automated static-analysis gate this repo had none of. Deliberately minimal — structural errors
-// only (unused variable, reference to an undeclared name, loose equality), not style. Calibrated
-// against the real codebase, not the other way around: no product code was changed to satisfy
-// this config (Safe Evolution §4.29 — the config proves itself against the healthy code, the
-// healthy code is not bent to please an arbitrary rule).
+// The existing core ESLint gate stays deliberately narrow. SonarJS is layered below as the
+// repository-wide quality analysis requested for JavaScript and Node scripts.
 import globals from 'globals';
+import sonarjs from 'eslint-plugin-sonarjs';
 
-const browserFiles = ['src/**/*.js'];
-const nodeFiles = ['server/**/*.js', 'scripts/**/*.js', 'shared/**/*.js', '*.js'];
-const testFiles = ['test/**/*.js', 'e2e/**/*.js', 'server/test/**/*.js'];
+const browserFiles = ['src/**/*.{js,mjs}'];
+const nodeFiles = ['server/**/*.{js,mjs}', 'scripts/**/*.{js,mjs}', 'shared/**/*.{js,mjs}', '*.{js,mjs}'];
+const testFiles = ['test/**/*.{js,mjs}', 'e2e/**/*.{js,mjs}', 'server/test/**/*.{js,mjs}'];
+const javascriptFiles = [...browserFiles, ...nodeFiles, ...testFiles];
+const browserExecutionFiles = [
+  'scripts/desktop-nav-n7.mjs', 'scripts/desktop-smoke-import-verdict.mjs',
+  'scripts/desktop-stats-capture.mjs', 'scripts/desktop-study-journey.mjs',
+  'scripts/desktop-study-resume.mjs', 'scripts/homologation-proof.mjs',
+  'scripts/style-diff-v72.mjs', 'scripts/zz-dump-ui.mjs', 'scripts/zz-ui-driver.mjs',
+  'scripts/zz-v3-dm.mjs', 'scripts/zz-v3-plan.mjs', 'scripts/zz-v3-shots.mjs',
+];
+const customExpectationFiles = [
+  'scripts/desktop-nav-n7.mjs', 'scripts/desktop-study-journey.mjs', 'scripts/desktop-study-resume.mjs',
+];
 
-// Deliberately NOT eslint:recommended — that pulls in ~20 stylistic rules (no-useless-escape,
-// no-control-regex, no-useless-assignment, ...) never promised by FIX_PLAN P2-3. Exactly the 3
-// structural rules the plan named, no more.
+// Keep the existing core ESLint baseline to its three structural rules; SonarJS supplies the
+// separately requested broader analysis without expanding the core ESLint rule set.
 const baseRules = {
   eqeqeq: ['error', 'always', { null: 'ignore' }],
   'no-undef': 'error',
@@ -28,6 +35,7 @@ export default [
     ignores: [
       'node_modules/**', '**/node_modules/**', 'dist/**', 'src-tauri/target/**',
       'src-tauri/resources/**', 'test-results/**', 'playwright-report/**',
+      '.claude/worktrees/**', '.codex/worktrees/**',
       '**/*.json', 'conductor/.view/**', '.impeccable/**',
     ],
   },
@@ -45,5 +53,18 @@ export default [
     files: testFiles,
     languageOptions: { ecmaVersion: 'latest', sourceType: 'module', globals: { ...globals.browser, ...globals.node } },
     rules: baseRules,
+  },
+  {
+    ...sonarjs.configs.recommended,
+    files: javascriptFiles,
+  },
+  {
+    files: browserExecutionFiles,
+    languageOptions: { globals: { ...globals.node, ...globals.browser } },
+  },
+  {
+    // These scripts define throwing expect(condition, message) helpers; SonarJS mistakes calls for incomplete test assertions.
+    files: customExpectationFiles,
+    rules: { 'sonarjs/no-incomplete-assertions': 'off' },
   },
 ];

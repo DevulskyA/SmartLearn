@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { test, expect } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -10,6 +11,7 @@ import { waitForServerReady } from './support/wait-for-server.js';
 import { signInRegistered } from './support/session.js';
 import { startEditingSummary } from './support/summary-editing.js';
 
+import { generateByPages } from './support/materials-flow.js';
 // T-F4-05 (R-06 AC-06.2, F-35): the lesson editor with the KEYBOARD alone and with a screen reader's contract: the tabs follow the
 // tab pattern (arrows / Home / End, one tab stop), saving / accepting / rejecting keeps the focus somewhere meaningful (never on
 // <body>), the "salvo" messages live in regions that exist BEFORE they change (so they are announced), and every question in the
@@ -51,14 +53,14 @@ test.beforeEach(async ({ page }) => {
     window.__SMARTLEARN_REMOTE_MODE__ = true;
     window.__SMARTLEARN_LOCAL_AUTHORITY__ = true;
   }, API_BASE);
-  const email = `leda11y-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+  const email = `leda11y-${Date.now()}-${randomUUID()}@example.com`;
   await signInRegistered(page, { email, password: 'a genuinely long test password 1' });
   await page.locator('[data-screen="materials"]').click();
   await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
   const pdf = buildFixturePdf(['Fisiologia renal: filtração glomerular', 'Barreira de filtração e podócitos', 'Clearance de inulina mede a TFG']);
   await page.setInputFiles('#sources-file-input', { name: 'teclado.pdf', mimeType: 'application/pdf', buffer: pdf });
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
-  await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
+  await generateByPages(page);
   await expect(page.locator('.lesson-editor')).toBeVisible({ timeout: 10000 });
   await startEditingSummary(page);
 });

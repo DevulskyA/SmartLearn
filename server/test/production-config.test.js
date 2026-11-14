@@ -60,7 +60,7 @@ test('each unsafe setting is reported by its own code (table-driven, one defect 
     ['AI_CONFIG_INCOMPLETE', { SMARTLEARN_AI_API_KEY: 'k', SMARTLEARN_AI_BUDGET_CAP_USD: '5' }],
     ['AI_CONFIG_INCOMPLETE', { SMARTLEARN_AI_CONSENT: 'true' }],
     ['AI_BUDGET_REQUIRED', { SMARTLEARN_AI_API_KEY: 'k', SMARTLEARN_AI_MODEL: 'm', SMARTLEARN_AI_CONSENT: 'true' }],
-    ['DEV_FLAG_PRESENT', { SMARTLEARN_DEV_DATA_DIR: '/tmp/x' }],
+    ['DEV_FLAG_PRESENT', { SMARTLEARN_DEV_DATA_DIR: abs('dev-data') }],
     ['DEV_FLAG_PRESENT', { SMARTLEARN_SEED: '1' }],
   ];
   for (const [code, override] of cases) {
@@ -198,7 +198,10 @@ function scanForSecrets(dir, out = []) {
   for (const name of readdirSync(dir)) {
     const full = join(dir, name);
     const st = statSync(full);
-    if (st.isDirectory()) { if (!SKIP_DIRS.has(name)) scanForSecrets(full, out); continue; }
+    if (st.isDirectory()) {
+      if (!SKIP_DIRS.has(name)) scanForSecrets(full, out);
+      continue;
+    }
     if (SKIP_EXT.has(extname(name).toLowerCase()) || st.size > 2_000_000) continue;
     const text = readFileSync(full, 'utf8');
     for (const [label, re] of SECRET_PATTERNS) if (re.test(text)) out.push(`${full}: ${label}`);

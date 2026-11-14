@@ -18,12 +18,73 @@ export const STATE_NAME = { '✓': 'DONE', '>': 'IN_PROGRESS', ' ': 'PENDING', '
 
 const ID = /T-[A-Z0-9]+-\d+[a-z]?/;
 
+function isWordCharacter(char) {
+  return char !== undefined && /\w/.test(char);
+}
+
+function stripSizeMarker(text) {
+  for (let index = 0; index < text.length; index += 1) {
+    if (text[index] !== '·') continue;
+    let marker = index + 1;
+    while (/\s/.test(text[marker] ?? '')) marker += 1;
+    if (text[marker] && 'SML'.includes(text[marker]) && !isWordCharacter(text[marker + 1])) return text.slice(0, index).trimEnd();
+  }
+  return text;
+}
+
+function stripParentheticalSegments(text) {
+  let result = '';
+  let index = 0;
+  while (index < text.length) {
+    if (text[index] !== '(') { result += text[index]; index += 1; continue; }
+    const close = text.indexOf(')', index + 1);
+    if (close === -1) { result += text[index]; index += 1; continue; }
+    index = close + 1;
+  }
+  return result;
+}
+
+function stripParentheticalText(text) {
+  let result = '';
+  let index = 0;
+  while (index < text.length) {
+    if (text[index] !== '(') { result += text[index]; index += 1; continue; }
+    const close = text.indexOf(')', index + 1);
+    if (close === -1) { result += text[index]; index += 1; continue; }
+    while (result && /\s/.test(result.at(-1))) result = result.slice(0, -1);
+    index = close + 1;
+  }
+  return result;
+}
+
+function trimTrailingCharacters(text, extraCharacters = '') {
+  let end = text.length;
+  while (end > 0 && (/\s/.test(text[end - 1]) || extraCharacters.includes(text[end - 1]))) end -= 1;
+  return text.slice(0, end);
+}
+
+function stripHeadingDivider(text) {
+  let end = text.length;
+  while (end > 0 && /\s/.test(text[end - 1])) end -= 1;
+  if (text[end - 1] === '—' || text[end - 1] === '-') {
+    end -= 1;
+    while (end > 0 && /\s/.test(text[end - 1])) end -= 1;
+  }
+  if (text[end - 1] !== '·') return text;
+  return text.slice(0, end - 1).trimEnd();
+}
+
+function humanDecisionSegment(statusLine) {
+  const clean = stripParentheticalSegments(statusLine);
+  return clean.split(/[·.;]/).find((part) => part.includes('UAT humano') || part.includes('Decisão') || part.includes('decisão'))?.trim();
+}
+
 export const norm = (text) => (text ?? '').split('\r\n').join('\n');
 
 export function taskBlocks(tasksText) {
   return norm(tasksText).split(/^### (?=T-)/m).slice(1).map((body) => {
     const id = new RegExp(`^(${ID.source})`).exec(body)?.[1] ?? null;
-    const heading = /^[^\n]*/.exec(body)[0].replace(new RegExp(`^${ID.source}\\s*—\\s*`), '').replace(/\s*·\s*[SML]\b.*$/, '');
+    const heading = stripSizeMarker(/^[^\n]*/.exec(body)[0].replace(new RegExp(`^${ID.source}\\s*—\\s*`), ''));
     const statusLine = /^- Status:.*$/m.exec(body)?.[0] ?? '';
     const status = /^- Status: `\[(.)\]`/m.exec(body)?.[1] ?? null;
     const segment = (name) => new RegExp(`${name}:([^·\\n]*)`).exec(statusLine)?.[1] ?? '';
@@ -31,7 +92,7 @@ export function taskBlocks(tasksText) {
       id, heading, body, status, statusLine,
       // "NÃO depende de ..." / notes after the list are not dependencies
       // only ids OUTSIDE parentheses are dependencies; parenthesised ids are annotations
-      deps: expandRanges(segment('Dependências').split(/NÃO depende|Contrato adicional/)[0].replace(/\([^)]*\)/g, '')).match(new RegExp(ID.source, 'g')) ?? [],
+      deps: expandRanges(stripParentheticalSegments(segment('Dependências').split(/NÃO depende|Contrato adicional/)[0])).match(new RegExp(ID.source, 'g')) ?? [],
       gates: [...new Set(body.match(/HG-\d+/g) ?? [])],
       // human gates the task itself waits for, as written in its Dependências (the spec §8 table has no per-gate state: all are pending)
       hgDeps: [...new Set(segment('Dependências').split(/NÃO depende|Contrato adicional/)[0].match(/HG-\d+/g) ?? [])],
@@ -57,7 +118,7 @@ export function parseSubtasks(body) {
   const problems = [];
   let prev = -1;
   for (let i = at + 1; i < lines.length; i++) {
-    const m = /^( +)- \[(x| |>|!)\] (.+)$/.exec(lines[i]);
+    const m = /^( +)- \[([x >!])\] (.+)$/.exec(lines[i]);
     if (!m) break;
     const indent = m[1].length;
     if (indent % 2 !== 0) problems.push(`subtask "${m[3].slice(0, 40)}": indentation must be a multiple of 2`);
@@ -97,27 +158,38 @@ const HUMAN_TEXT = /decisão humana|decisão de produto|humano avalia|avaliaçã
  *   'D' human decision (shown [H])  · 'B' blocked by dependency (shown [!]; proceeds by itself when the dependency closes)
  *   'P' deferred by priority (status line says ADIADA): pending, visible in the roadmap, never offered as next nor counted as safe work
  */
-export function classifyTasks(blocks) {
-  const byId = new Map(blocks.map((b) => [b.id, b]));
-  const open = (id) => { const st = byId.get(id)?.status; return st !== '✓' && st !== '='; };
-  const eff = new Map();
-  for (const b of blocks) {
-    if (b.status === '✓' || b.status === '>' || b.status === '=') eff.set(b.id, b.status);
-    else if (b.status === 'H') {
-      const own = /HG-\d+/.test(b.statusLine);
-      eff.set(b.id, own || !b.deps.some(open) || HUMAN_TEXT.test(`${b.heading}\n${b.body}`) ? 'D' : 'B');
-    } else if (b.status === '!') eff.set(b.id, 'B');
-    // an explicit ADIADA (deferred by priority, e.g. USE-FIRST) in the status line keeps a runnable task out of 'safe work remaining'
-    else eff.set(b.id, /ADIADA/.test(b.statusLine) ? 'P' : b.hgDeps?.length ? 'B' : ' ');
+function initialTaskClass(block, isOpen) {
+  if (block.status === '✓' || block.status === '>' || block.status === '=') return block.status;
+  if (block.status === 'H') {
+    const own = /HG-\d+/.test(block.statusLine);
+    return own || !block.deps.some(isOpen) || HUMAN_TEXT.test(`${block.heading}\n${block.body}`) ? 'D' : 'B';
   }
-  // a pending task whose open dependency is itself a decision or blocked cannot run: blocked by dependency (to a fixpoint)
+  if (block.status === '!') return 'B';
+  // an explicit ADIADA (deferred by priority, e.g. USE-FIRST) is never runnable
+  if (/ADIADA/.test(block.statusLine)) return 'P';
+  return block.hgDeps?.length ? 'B' : ' ';
+}
+
+function propagateBlockedTasks(blocks, effective, isOpen) {
   for (let changed = true; changed;) {
     changed = false;
     for (const b of blocks) {
-      if (eff.get(b.id) === ' ' && b.deps.some((d) => open(d) && ['D', 'B'].includes(eff.get(d)))) { eff.set(b.id, 'B'); changed = true; }
+      if (effective.get(b.id) === ' ' && b.deps.some((d) => isOpen(d) && ['D', 'B'].includes(effective.get(d)))) {
+        effective.set(b.id, 'B');
+        changed = true;
+      }
     }
   }
-  return eff;
+}
+
+export function classifyTasks(blocks) {
+  const byId = new Map(blocks.map((b) => [b.id, b]));
+  const isOpen = (id) => { const status = byId.get(id)?.status; return status !== '✓' && status !== '='; };
+  const effective = new Map();
+  for (const block of blocks) effective.set(block.id, initialTaskClass(block, isOpen));
+  // a pending task whose open dependency is itself a decision or blocked cannot run: blocked by dependency (to a fixpoint)
+  propagateBlockedTasks(blocks, effective, isOpen);
+  return effective;
 }
 
 /**
@@ -132,7 +204,7 @@ export function safeWorkRemaining(blocks, eff = classifyTasks(blocks)) {
  * Why a task is blocked, when the cause is a human decision: [{hg:[HG-xx], task, via}] — own HG ids in its Dependências, and the
  * decisions its open dependencies are (or chain to). Empty when it only waits for ordinary tasks.
  */
-export function humanRoots(b, blocks, eff, seen = new Set()) {
+function humanRoots(b, blocks, eff, seen = new Set()) {
   const byId = new Map(blocks.map((x) => [x.id, x]));
   const open = (id) => byId.get(id)?.status !== '✓' && byId.get(id)?.status !== '=';
   if (seen.has(b.id)) return [];
@@ -149,15 +221,21 @@ export function humanRoots(b, blocks, eff, seen = new Set()) {
 }
 
 /** "aguarda decisão humana: HG-02 (via T-F2-03)" / "aguarda decisão humana: T-F5-03" / "aguarda T-F6-06a, T-F6-06b" (every open dependency, ranges expanded). */
-export function blockNote(b, blocks, eff) {
+function blockNote(b, blocks, eff) {
   const byId = new Map(blocks.map((x) => [x.id, x]));
   const roots = humanRoots(b, blocks, eff);
   if (roots.length) {
-    const parts = roots.map((r) => (r.hg.length ? `${r.hg.join(' + ')}${r.via ? ` (via ${r.via})` : ''}` : r.task));
+    const parts = roots.map((root) => formatHumanRoot(root));
     return `aguarda decisão humana: ${[...new Set(parts)].join('; ')}`;
   }
   const waits = b.deps.filter((d) => byId.get(d)?.status !== '✓' && byId.get(d)?.status !== '=');
   return waits.length ? `aguarda ${waits.join(', ')}` : 'marcada bloqueada';
+}
+
+function formatHumanRoot(root) {
+  if (!root.hg.length) return root.task;
+  const via = root.via ? ` (via ${root.via})` : '';
+  return `${root.hg.join(' + ')}${via}`;
 }
 
 // PROGRESSIVE ROADMAP: detail just in time, visibility all the time. Only the active task and the ONE next ready task carry a
@@ -166,9 +244,15 @@ const GENERIC_SUBTASKS = [
   'trabalhar na implementação', 'trabalhar na tarefa', 'revisar código', 'revisar o código', 'testar tudo', 'testar', 'revisar', 'implementar',
   'implementação', 'fazer a tarefa', 'fazer', 'concluir', 'terminar', 'ajustes finais', 'finalizar', 'desenvolver',
 ];
-export const isGenericSubtask = (text) => GENERIC_SUBTASKS.includes(String(text).toLowerCase().replace(/[.\s]+$/g, '').replace(/\s+/g, ' ').trim());
+function normalizeGenericSubtask(text) {
+  const lower = String(text).toLowerCase();
+  let end = lower.length;
+  while (end > 0 && (lower[end - 1] === '.' || /\s/.test(lower[end - 1]))) end -= 1;
+  return lower.slice(0, end).replace(/\s+/g, ' ').trim();
+}
+const isGenericSubtask = (text) => GENERIC_SUBTASKS.includes(normalizeGenericSubtask(text));
 /** EXECUTION_READY: at least one leaf subtask. */
-export const executionReady = (b) => !!b?.subtasks?.some((r) => r.leaf);
+const executionReady = (b) => !!b?.subtasks?.some((r) => r.leaf);
 /** Leaf subtasks too generic to verify (small denylist). */
 export const genericSubtasks = (b) => (b?.subtasks ?? []).filter((r) => r.leaf && isGenericSubtask(r.text));
 
@@ -203,7 +287,7 @@ export function progressCounts(blocks) {
 }
 
 const field = (block, name) => new RegExp(`^- ${name}:\\s*(.+)$`, 'm').exec(block?.body ?? '')?.[1]?.trim() ?? null;
-export const taskField = field;
+const taskField = field;
 /** Cuts at a sentence or word boundary (never mid-word, no ellipsis); backticks and parentheses are left balanced. */
 export function boundaryCut(text, n) {
   const t = String(text ?? '');
@@ -218,11 +302,11 @@ export function boundaryCut(text, n) {
     if (!ticks && !parens) break;
     out = out.slice(0, Math.max(ticks ? out.lastIndexOf('`') : -1, parens ? out.lastIndexOf('(') : -1)).trimEnd();
   }
-  return out.replace(/[\s,;:(—-]+$/, '');
+  return trimTrailingCharacters(out, ',;:(—-');
 }
 
 /** "T-F3-01..05" -> "T-F3-01 T-F3-02 ... T-F3-05" (a range in PROGRAM.md means every id in it, in order). */
-export function expandRanges(text) {
+function expandRanges(text) {
   return text.replace(/(T-[A-Z0-9]+-)(\d+)\.\.(\d+)/g, (_m, pre, a, b) => {
     const out = [];
     for (let n = Number(a); n <= Number(b); n++) out.push(`${pre}${String(n).padStart(a.length, '0')}`);
@@ -242,8 +326,8 @@ export function programOrder(programText) {
   return order;
 }
 
-export const EXECUTION_MODEL = 'OUTCOME_DRIVEN_LEAN';
-export const POLICY = '.specs/governance/00_PROJECT_GOVERNANCE_STANDARD.md#outcome-driven-lean-execution';
+const EXECUTION_MODEL = 'OUTCOME_DRIVEN_LEAN';
+const POLICY = '.specs/governance/00_PROJECT_GOVERNANCE_STANDARD.md#outcome-driven-lean-execution';
 
 /** @param read (path) => string|null   @returns {string[]} the cockpit lines (derived, never authority) */
 export function resumeCockpit(read, { head = '(unknown)', validationLine = 'VALIDAÇÃO DO HEAD ATUAL: ⚠ NÃO PROVADA (nenhuma validação registrada)' } = {}) {
@@ -257,7 +341,10 @@ export function resumeCockpit(read, { head = '(unknown)', validationLine = 'VALI
   const ruleText = (n) => new RegExp(`^${n}\\. (.+)$`, 'm').exec(norm(tasksText))?.[1] ?? '';
   // long values are cut at a sentence/word boundary and point to where the whole text lives
   const where = active ? ` [completo: tasks.md, bloco ${active.id}]` : '';
-  const fit = (v, n = 230) => (v == null ? null : v.length > n ? `${boundaryCut(v, n)}${where}` : v);
+  const fit = (value, limit = 230) => {
+    if (value == null) return null;
+    return value.length > limit ? `${boundaryCut(value, limit)}${where}` : value;
+  };
   const prohibitions = [ruleText(8), ruleText(9)].filter(Boolean).map((r) => r.replace(/`/g, '')).join(' | '); // whole rules: a cut prohibition is worse than a long line
   const safe = safeWorkRemaining(blocks);
   const current = active?.subtasks.find((r) => r.leaf && r.mark === '>')?.text;
@@ -266,23 +353,49 @@ export function resumeCockpit(read, { head = '(unknown)', validationLine = 'VALI
   const next = model.ready[0];
   const decisions = model.decisions.map((d) => d.id);
   const id = active?.id ?? '<ACTIVE_TASK>';
+  const currentOutcome = formatCurrentOutcome(active, safe, fit);
+  const nextOutcome = formatNextOutcome(next);
+  const decisionsLine = formatHumanDecisions(decisions);
+  const requirementsReadNow = active?.requirements.length
+    ? ' · ' + FILES.spec + ' ' + active.requirements.map((requirement) => '"### ' + requirement + '"').join(', ')
+    : '';
   return [
     `EXECUTION_MODEL=${EXECUTION_MODEL}`,
     `POLICY=${POLICY}`,
     `HEAD=${head}`,
-    `CURRENT_OUTCOME=${active ? `${active.id} — ${active.heading}${field(active, 'Outcome') ?? field(active, 'Fazer') ? ` — ${fit(field(active, 'Outcome') ?? field(active, 'Fazer'))}` : ''}` : `(none${safe ? ': tasks.md must mark exactly one task [>]' : ': SAFE_WORK_REMAINING=NO'})`}`,
+    `CURRENT_OUTCOME=${currentOutcome}`,
     `ACCEPTANCE=${fit(field(active, 'Gate')) ?? '(none)'}`,
     `CURRENT_STEP=${fit(step || null, 300) ?? '(none)'}`,
-    `NEXT_OUTCOME=${next ? `${next.id} — ${next.title}${next.ready ? '' : ' (SEM SUBTAREFAS: elaborar antes de promover)'}` : '(none ready)'}`,
+    `NEXT_OUTCOME=${nextOutcome}`,
     `BLOCKERS=${unmet.length ? unmet.join(', ') : 'none'}`,
-    `HUMAN_DECISIONS=${decisions.length}${decisions.length ? ` (${decisions.slice(0, 8).join(' ')}${decisions.length > 8 ? ' …' : ''}; detalhe: spec.md §8 / plan.md)` : ''}`,
+    `HUMAN_DECISIONS=${decisionsLine}`,
     `TASKS=${pc.tasksDone}/${pc.tasksTotal} · PHASE=${model.marco} · BLOCKED=${pc.blockedByDep} (waits for a task) · HUMAN_GATES=${pc.decisions} (needs the user)`,
     validationLine,
     `PROHIBITIONS=${prohibitions || '(see tasks.md "Regras de execução" 8-9)'}`,
-    `READ_NOW: ${FILES.tasks} grep -n "${id}" (that block only) · ${FILES.validation} grep -n "${id}"${active?.requirements.length ? ` · ${FILES.spec} ${active.requirements.map((r) => `"### ${r}"`).join(', ')}` : ''} · the code the task names`,
+    `READ_NOW: ${FILES.tasks} grep -n "${id}" (that block only) · ${FILES.validation} grep -n "${id}"${requirementsReadNow} · the code the task names`,
     'DO_NOT_READ_NOW: whole PROGRAM/tasks/spec/validation, .specs/archive/**, .specs/benchmarks, .specs/HANDOFF.md (derived, may not exist)',
     '(cockpit is DERIVED from tasks.md/PROGRAM.md/spec.md and recomputed on every run; it is never authority)',
   ];
+}
+
+function formatCurrentOutcome(active, safe, fit) {
+  if (!active) return `(none${safe ? ': tasks.md must mark exactly one task [>]' : ': SAFE_WORK_REMAINING=NO'})`;
+  const outcome = field(active, 'Outcome') ?? field(active, 'Fazer');
+  const detail = outcome ? ` — ${fit(outcome)}` : '';
+  return `${active.id} — ${active.heading}${detail}`;
+}
+
+function formatNextOutcome(next) {
+  if (!next) return '(none ready)';
+  const warning = next.ready ? '' : ' (SEM SUBTAREFAS: elaborar antes de promover)';
+  return `${next.id} — ${next.title}${warning}`;
+}
+
+function formatHumanDecisions(decisions) {
+  if (!decisions.length) return '0';
+  const visible = decisions.slice(0, 8).join(' ');
+  const more = decisions.length > 8 ? ' …' : '';
+  return `${decisions.length} (${visible}${more}; detalhe: spec.md §8 / plan.md)`;
 }
 
 // ======================================================================================================================
@@ -297,16 +410,16 @@ export function cut(text, n) {
   const clause = /[?:]|\s—\s|\.\s/.exec(t);
   if (clause && clause.index >= 12) t = t.slice(0, clause.index);
   if (t.length > n) { t = t.slice(0, n + 1); t = t.slice(0, Math.max(t.lastIndexOf(' '), 1)); }
-  return t.replace(/[\s,;:.(—-]+$/, '');
+  return trimTrailingCharacters(t, ',;:.(—-');
 }
 
 /** The first COMPLETE sentence of a text (parentheticals and backticks dropped); never cut by character count. */
 export function firstSentence(text, { clauses = true } = {}) {
-  const t = String(text ?? '').replace(/`/g, '').replace(/\s*\([^)]*\)/g, '').replace(/\s+/g, ' ').trim();
+  const t = stripParentheticalText(String(text ?? '').split('`').join('')).replace(/\s+/g, ' ').trim();
   const m = /^(.+?[.?!])(?:\s|$)/.exec(t);
   let out = (m ? m[1] : t);
   if (clauses) out = out.split(/[;:]\s/)[0];
-  out = out.trim().replace(/[.,;:]+$/, '');
+  out = trimTrailingCharacters(out.trim(), '.,;:');
   return out;
 }
 
@@ -371,7 +484,7 @@ export function buildModel({ tasksText, programText = '', specText = '' }) {
   const open = (id) => byId.get(id)?.status !== '✓' && byId.get(id)?.status !== '=';
   const active = blocks.find((b) => b.status === '>') ?? null;
   const shown = nextReady(blocks, programText);
-  const title = (b) => b.heading.replace(/\s*·\s*[—-]?\s*$/, '').trim();
+  const title = (b) => stripHeadingDivider(b.heading).trim();
   const MARK = { '✓': 'x', '>': '>', ' ': ' ', B: '!', D: 'H', P: ' ', '=': '=' };
   const capital = (t) => (t ? `${t.charAt(0).toUpperCase()}${t.slice(1)}` : t);
   const sc = (b) => subtaskCounts(b.subtasks);
@@ -417,7 +530,10 @@ export function buildModel({ tasksText, programText = '', specText = '' }) {
   const rowOf = (b, indent = '') => {
     const cls = eff.get(b.id);
     const kids = b.status === '=' ? blocks.filter((c) => childOf(c)?.id === b.id) : [];
-    const note = b.status === '=' ? ` — dividida em ${b.id}${kids.map((c) => c.id.slice(b.id.length)).join('/')} (tarefas)` : cls === 'B' ? ` — BLOQUEADA → ${chainText(b)}` : cls === 'D' && gatesOf(b).length ? ` — ${gatesOf(b).join(', ')}` : '';
+    let note = '';
+    if (b.status === '=') note = ` — dividida em ${b.id}${kids.map((child) => child.id.slice(b.id.length)).join('/')} (tarefas)`;
+    else if (cls === 'B') note = ` — BLOQUEADA → ${chainText(b)}`;
+    else if (cls === 'D' && gatesOf(b).length) note = ` — ${gatesOf(b).join(', ')}`;
     return { id: b.id, title: title(b), mark: MARK[cls], note, indent };
   };
   const phases = groups.map((g) => {
@@ -444,7 +560,7 @@ export function buildModel({ tasksText, programText = '', specText = '' }) {
     const ids = gatesOf(b);
     if (ids.length) return ids.map((g) => `${g} ${gateTitle(g)}`.trim()).join('; ');
     // what the user must decide: the human sentence of the Status line when there is one, else the task's own Outcome/Fazer, else its title
-    const human = /(?:^|[·.;]\s*)([^·.;]*(?:UAT humano|[Dd]ecisão)[^·.;]*)/.exec(b.statusLine.replace(/\([^)]*\)/g, ''))?.[1];
+    const human = humanDecisionSegment(b.statusLine);
     return capital(firstSentence(human ?? field(b, 'Outcome') ?? field(b, 'Fazer') ?? '') || title(b));
   };
 
@@ -470,10 +586,13 @@ export function buildModel({ tasksText, programText = '', specText = '' }) {
     tasksTotal: realBlocks.length,
     active: active ? { id: active.id, ...sc(active) } : null,
   };
+  let status = 'IDLE';
+  if (active) status = 'ACTIVE';
+  else if (realBlocks.every((b) => b.status === '✓')) status = 'DONE';
   return {
     blocks, eff, byId, active: activeModel, ready, blocked, decisions, phases, progress,
     next: ready[0]?.id ?? null,
     marco: activeGroup ? `${activeGroup.id} — ${activeGroup.title}` : '—',
-    status: active ? 'ACTIVE' : (realBlocks.every((b) => b.status === '✓') ? 'DONE' : 'IDLE'),
+    status,
   };
 }

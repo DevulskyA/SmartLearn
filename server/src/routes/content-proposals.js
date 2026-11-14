@@ -1,6 +1,7 @@
 import { config } from '../config.js';
 import * as proposals from '../services/content-proposals.js';
 import { generationState } from '../services/generated-drafts.js';
+import { getPageNumbering } from '../services/page-numbering.js';
 
 function handleError(err, reply) {
   if (err instanceof proposals.ProposalError) {
@@ -11,7 +12,16 @@ function handleError(err, reply) {
   throw err;
 }
 
-export function registerContentProposalRoutes(app, db) {
+export function registerContentProposalRoutes(app, db, { sourcesDir = config.sourcesDir } = {}) {
+  // How the page numbers of this source work: the numbers printed in the book (when the PDF headers/footers show them) or the PDF's own.
+  app.get('/sources/:id/page-numbering', {
+    schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },
+  }, async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
+    return { numbering: await getPageNumbering(db, request.actor.userId, id, { sourcesDir }) };
+  });
+
   app.post('/sources/:id/proposals', {
     schema: {
       params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } },
@@ -51,13 +61,19 @@ export function registerContentProposalRoutes(app, db) {
       body: {
         type: 'object',
         properties: {
-          ordinal: { type: 'integer' },
+          ordinal: { type: 'integer', minimum: 0, maximum: 1000000 },
           title: { type: 'string', maxLength: 300 },
           topic: { type: 'string', maxLength: 300 },
           range: {
             type: 'object',
             required: ['pageStart', 'pageEnd'],
-            properties: { pageStart: { type: 'integer' }, pageEnd: { type: 'integer' }, startOffset: { type: 'integer' }, endOffset: { type: 'integer' } },
+            // pages start at 1 and no book has 100000 of them; offsets are character positions inside a page, never negative
+            properties: {
+              pageStart: { type: 'integer', minimum: 1, maximum: 100000 },
+              pageEnd: { type: 'integer', minimum: 1, maximum: 100000 },
+              startOffset: { type: 'integer', minimum: 0, maximum: 10000000 },
+              endOffset: { type: 'integer', minimum: 0, maximum: 10000000 },
+            },
           },
         },
       },
@@ -67,7 +83,11 @@ export function registerContentProposalRoutes(app, db) {
     if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
     try {
       reply.status(201);
-      return { proposal: proposals.approveScope(db, request.actor.userId, id, request.body ?? {}) };
+      // the page numbers typed are the ones printed in the book when the document has them, else the PDF's own
+      const numbering = request.body?.range ? await getPageNumbering(db, request.actor.userId, id, { sourcesDir }) : null;
+      // a range with more text than one summary can take becomes consecutive parts that each fit (same 0.9 margin as chunkSource)
+      const { parts, ...proposal } = proposals.approveScope(db, request.actor.userId, id, request.body ?? {}, { maxCharsPerChunk: Math.floor(config.aiMaxInputChars * 0.9), numbering });
+      return parts ? { proposal, parts } : { proposal };
     } catch (err) { return handleError(err, reply); }
   });
 

@@ -54,7 +54,11 @@ test('recovery is a NAMED parameter: NONE keeps the older overdue ones owed in t
 });
 
 test('applying SUPERSEDE_OVERDUE leaves exactly the future reviews pending; applying NONE leaves one required per step (no relief)', () => {
-  const apply = (tasks, instr) => tasks.map((t) => (t.id === instr.completedId ? { ...t, completedAt: 'x' } : instr.supersededIds.includes(t.id) ? { ...t, completedAt: null, superseded: true } : t));
+  const apply = (tasks, instr) => tasks.map((task) => {
+    if (task.id === instr.completedId) return { ...task, completedAt: 'x' };
+    if (instr.supersededIds.includes(task.id)) return { ...task, completedAt: null, superseded: true };
+    return task;
+  });
   const base = unitTasks(1, '2026-01-01');
   const owed = (tasks) => deriveObligations(tasks.filter((t) => !t.superseded), '2026-08-01')[0];
   const afterSup = apply(base, completeRequired(base, 1, '2026-08-01', { recovery: RECOVERY.SUPERSEDE_OVERDUE }));

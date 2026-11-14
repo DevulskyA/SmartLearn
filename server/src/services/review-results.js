@@ -1,6 +1,6 @@
 import { normalizeLearningEvent, LearningEventError } from '../domain/learning-event.js';
 
-export class ReviewResultError extends Error {
+class ReviewResultError extends Error {
   constructor(code, message, field) {
     super(message);
     this.code = code;

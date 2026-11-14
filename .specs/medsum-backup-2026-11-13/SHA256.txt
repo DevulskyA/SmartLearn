@@ -1,0 +1,4 @@
+6ec2edda83e2ef5c0f51d8684b14f3925e7cd9257db4e3ceaac92eadd3b6848e *./server/src/ai/draft-audit-model.js
+f4ee3ed269d03e3c59ca1bf42b177732d86e8136cb31c127996682b77bd992ea *./server/src/ai/draft-prompt.js
+c79ca107f9c564f0ba467ba95f358440084a7e2f84dee17a5236bde5efb5d046 *./server/src/ai/draft-schema.js
+7f19016776f29248ec4dabb34edfba4e90c26021dbd62da3782edce3d1a02318 *./test/medsum-v275-integration.test.js

@@ -114,6 +114,44 @@ test('TOPIC: an explicit range with offsets is honoured exactly and validated', 
   } finally { cleanup(); }
 });
 
+test('RANGE OVER THE AI LIMIT: it becomes consecutive parts that each fit, with every page of the range covered exactly once', () => {
+  const { db, userId, sourceId, cleanup } = setup();
+  try {
+    const sizes = PAGES.filter(([i]) => i >= 10 && i <= 13).map(([, text]) => text.length);
+    const budget = sizes[0] + sizes[1] + 5; // pages 10+11 fit together, 12 would not
+    const approved = proposals.approveScope(db, userId, sourceId, { range: { pageStart: 10, pageEnd: 13 } }, { maxCharsPerChunk: budget });
+    assert.equal(approved.parts.length, 2);
+    assert.deepEqual(approved.parts.map((p) => [p.pageStart, p.pageEnd]), [[10, 11], [12, 13]]);
+    assert.match(approved.parts[0].title, /\(parte 1 de 2\)$/);
+    assert.match(approved.parts[1].title, /\(parte 2 de 2\)$/);
+    for (const part of approved.parts) assert.ok(part.chars <= budget);
+    assert.equal(approved.parts.reduce((n, p) => n + p.chars, 0), sizes.reduce((a, b) => a + b, 0));
+    assert.equal(approved.id, approved.parts[0].id);
+    // approving the same range again returns the same parts (no duplicates)
+    const again = proposals.approveScope(db, userId, sourceId, { range: { pageStart: 10, pageEnd: 13 } }, { maxCharsPerChunk: budget });
+    assert.deepEqual(again.parts.map((p) => p.id), approved.parts.map((p) => p.id));
+    // a range that fits stays ONE proposal, with no parts
+    assert.equal(proposals.approveScope(db, userId, sourceId, { range: { pageStart: 12, pageEnd: 13 } }, { maxCharsPerChunk: 45_000 }).parts, undefined);
+  } finally { cleanup(); }
+});
+
+test('BOOK PAGE NUMBERS: with a printed numbering the typed range is the book\'s; without one it is the PDF\'s; outside the book is refused', () => {
+  const { db, userId, sourceId, cleanup } = setup();
+  try {
+    const printed = { mode: 'printed', segments: [{ offset: 2, firstPdf: 10, lastPdf: 14 }] }; // book page 8 is PDF page 10
+    const approved = proposals.approveScope(db, userId, sourceId, { range: { pageStart: 8, pageEnd: 11 } }, { numbering: printed });
+    assert.deepEqual([approved.pageStart, approved.pageEnd], [10, 13]);
+    assert.match(approved.title, /páginas 8-11$/); // named with the numbers the student typed
+    // no printed numbers found: the same typed numbers are PDF pages, exactly as before
+    const pdf = proposals.approveScope(db, userId, sourceId, { range: { pageStart: 14, pageEnd: 14 } }, { numbering: { mode: 'pdf' } });
+    assert.deepEqual([pdf.pageStart, pdf.pageEnd], [14, 14]);
+    // book pages that map past the end of the PDF are refused with a message, nothing is created
+    const before = db.prepare('SELECT COUNT(*) AS n FROM content_proposals').get().n;
+    assert.throws(() => proposals.approveScope(db, userId, sourceId, { range: { pageStart: 8, pageEnd: 13 } }, { numbering: printed }), (e) => e.code === 'VALIDATION_FAILED' && /não existem neste PDF/.test(e.message));
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM content_proposals').get().n, before);
+  } finally { cleanup(); }
+});
+
 test('PAYLOAD INVARIANT: inside the approved scope passes; a page outside, altered text or an inflated payload aborts', () => {
   const { db, userId, sourceId, cleanup } = setup();
   try {
@@ -138,6 +176,21 @@ test('PAYLOAD INVARIANT: inside the approved scope passes; a page outside, alter
 
     const wholeBookPage = [{ pageIndex: 12, text: PAGES.find(([i]) => i === 12)[1] }, good[1]];
     assert.throws(() => assertPayloadWithinScope(db, userId, row, wholeBookPage), (e) => e.code === 'SCOPE_VIOLATION', 'a whole page where only part was approved');
+  } finally { cleanup(); }
+});
+
+test('PAYLOAD INVARIANT: spans that are stored but unreadable abort the send instead of widening it to the whole pages', () => {
+  const { db, userId, sourceId, cleanup } = setup();
+  try {
+    const startOffset = PAGES.find(([i]) => i === 12)[1].indexOf('Measurement');
+    const approved = proposals.approveScope(db, userId, sourceId, { range: { pageStart: 12, pageEnd: 13, startOffset } });
+    const row = db.prepare('SELECT * FROM content_proposals WHERE id = ?').get(approved.id);
+    const whole = [{ pageIndex: 12, text: PAGES.find(([i]) => i === 12)[1] }];
+    for (const bad of ['{not json', '{"pageIndex":12}', '"text"']) {
+      assert.throws(() => assertPayloadWithinScope(db, userId, { ...row, spans_json: bad }, whole), (e) => e.code === 'SCOPE_VIOLATION' && /não puderam ser lidos/.test(e.message), bad);
+    }
+    // a legacy proposal (no spans at all) is still the whole pages of its range: unchanged
+    assert.doesNotThrow(() => assertPayloadWithinScope(db, userId, { ...row, spans_json: null }, segmentsForProposal(db, userId, { ...row, spans_json: null })));
   } finally { cleanup(); }
 });
 
@@ -220,5 +273,37 @@ test('PROVIDER BOUNDARY: a spy receives exactly the approved unit and none of th
       await assert.rejects(drafts.createDraft(db, userId, front.id, { providerImpl: spy }), (err) => err.code === 'NOT_GENERATABLE');
       assert.equal(spy.calls, 2);
     }
+  } finally { cleanup(); }
+});
+
+// LESSON LIMITS: a lesson is a class (never more than MAX_PAGES_PER_LESSON pages) and lessons of one book never repeat pages,
+// except ONE boundary page (the subject changes in the middle of it).
+test('LESSON CAP: a range above the page cap is refused with the cap in the message and nothing is created', () => {
+  const { db, userId, sourceId, cleanup } = setup();
+  try {
+    const before = db.prepare('SELECT COUNT(*) AS n FROM content_proposals').get().n;
+    assert.throws(() => proposals.approveScope(db, userId, sourceId, { range: { pageStart: 1, pageEnd: 1000 } }), (e) => e.code === 'VALIDATION_FAILED' && /no máximo 30 páginas/.test(e.message) && /1000/.test(e.message));
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM content_proposals').get().n, before);
+  } finally { cleanup(); }
+});
+
+test('NO REPEATED PAGES: a second lesson of the same book cannot reuse pages; one boundary page is the only exception', () => {
+  const { db, userId, sourceId, cleanup } = setup();
+  try {
+    const first = proposals.approveScope(db, userId, sourceId, { range: { pageStart: 10, pageEnd: 13 }, title: 'Aula A' });
+    assert.deepEqual([first.pageStart, first.pageEnd], [10, 13]);
+    const count = () => db.prepare('SELECT COUNT(*) AS n FROM content_proposals').get().n;
+    // a scope approved but never used does not block the pages: the same range can be chosen again
+    assert.equal(proposals.approveScope(db, userId, sourceId, { range: { pageStart: 12, pageEnd: 14 } }).pageStart, 12);
+    db.prepare('DELETE FROM content_proposals WHERE page_start = 12 AND page_end = 14').run();
+    // once a lesson (draft) exists for it, its pages are taken
+    db.prepare("INSERT INTO generated_drafts (user_id, proposal_id, provider, model_version, prompt_version, status, draft_json, created_at) VALUES (?, ?, 'FAKE', 'm', 'p', 'DRAFT', '{}', ?)").run(userId, first.id, new Date().toISOString());
+    const before = count();
+    // 12-14 repeats pages 12 and 13 of "Aula A": refused, saying which pages and which lesson
+    assert.throws(() => proposals.approveScope(db, userId, sourceId, { range: { pageStart: 12, pageEnd: 14 } }), (e) => e.code === 'VALIDATION_FAILED' && /12 a 13/.test(e.message) && /Aula A/.test(e.message));
+    assert.equal(count(), before);
+    // 13-14 shares ONLY page 13, where "Aula A" ends: allowed
+    const next = proposals.approveScope(db, userId, sourceId, { range: { pageStart: 13, pageEnd: 14 }, title: 'Aula B' });
+    assert.deepEqual([next.pageStart, next.pageEnd], [13, 14]);
   } finally { cleanup(); }
 });

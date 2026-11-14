@@ -5,7 +5,7 @@
 // Pure functions: no database, no PDF.
 
 /** Greedy sequential chunking by safety bounds only (the pre-outline behaviour, unchanged). */
-export function greedyChunks(pages, { maxPages, maxChars }) {
+function greedyChunks(pages, { maxPages, maxChars }) {
   const chunks = [];
   let current = [];
   let chars = 0;
@@ -35,14 +35,7 @@ export function planUnits(pages, outline, bounds) {
   if (entries.length === 0) return greedyChunks(pages, bounds).map((c) => ({ ...c, title: null }));
 
   const lastPage = pages.length > 0 ? pages[pages.length - 1].pageIndex : 0;
-  const roots = [];
-  const stack = [];
-  entries.forEach((entry, i) => {
-    const node = { ...entry, i, children: [] };
-    while (stack.length > 0 && stack[stack.length - 1].level >= entry.level) stack.pop();
-    (stack.length > 0 ? stack[stack.length - 1].children : roots).push(node);
-    stack.push(node);
-  });
+  const roots = buildOutlineTree(entries);
 
   const lastDescendantIndex = (node) => (node.children.length > 0 ? lastDescendantIndex(node.children[node.children.length - 1]) : node.i);
   // A section ends on the page before the next heading starts (or on its own page when the next heading shares it).
@@ -77,13 +70,38 @@ export function planUnits(pages, outline, bounds) {
   roots.forEach(visit);
 
   // Sections that share exactly the same pages (several headings on one page) become one unit with a joined title.
+  const merged = mergeUnitsOnSamePages(units);
+
+  // Pages the outline did not reach (front matter, gaps) are never dropped: chunk them by the safety bounds.
+  appendUncoveredPages(merged, pages, bounds);
+
+  const ordered = merged.sort((x, y) => x.pageStart - y.pageStart || x.pageEnd - y.pageEnd);
+  return bounds.minChars > 0 ? mergeSmallUnits(ordered, pages, bounds) : ordered;
+}
+
+function buildOutlineTree(entries) {
+  const roots = [];
+  const stack = [];
+  entries.forEach((entry, i) => {
+    const node = { ...entry, i, children: [] };
+    while (stack.length > 0 && stack[stack.length - 1].level >= entry.level) stack.pop();
+    (stack.length > 0 ? stack[stack.length - 1].children : roots).push(node);
+    stack.push(node);
+  });
+  return roots;
+}
+
+function mergeUnitsOnSamePages(units) {
   const merged = [];
   for (const unit of units) {
     const same = merged.find((m) => m.pageStart === unit.pageStart && m.pageEnd === unit.pageEnd);
     if (same) same.title = joinTitles(same.title, unit.title);
     else merged.push({ ...unit });
   }
+  return merged;
+}
 
+function appendUncoveredPages(merged, pages, bounds) {
   // Pages the outline did not reach (front matter, gaps) are never dropped: chunk them by the safety bounds.
   const covered = new Set();
   for (const u of merged) for (const p of pages) if (p.pageIndex >= u.pageStart && p.pageIndex <= u.pageEnd) covered.add(p.pageIndex);
@@ -98,9 +116,6 @@ export function planUnits(pages, outline, bounds) {
     run.push(p);
   }
   flushRun();
-
-  const ordered = merged.sort((x, y) => x.pageStart - y.pageStart || x.pageEnd - y.pageEnd);
-  return bounds.minChars > 0 ? mergeSmallUnits(ordered, pages, bounds) : ordered;
 }
 
 // At most three titles are listed; a merge of many tiny units reads "A · B · C · …" instead of a wall of titles.
@@ -117,14 +132,19 @@ function mergeSmallUnits(units, pages, { maxPages, maxChars, minChars }) {
   const charsOf = (u) => within(u).reduce((sum, p) => sum + p.chars, 0);
   const out = [];
   for (const unit of units) {
-    const last = out[out.length - 1];
-    if (last && charsOf(last) < minChars) {
-      const combined = { pageStart: last.pageStart, pageEnd: Math.max(last.pageEnd, unit.pageEnd), title: joinTitles(last.title, unit.title) };
-      if (within(combined).length <= maxPages && charsOf(combined) <= maxChars) { out[out.length - 1] = combined; continue; }
-    }
-    out.push({ ...unit });
+    if (!mergeWithSmallUnit(out, unit, { maxPages, maxChars, minChars, within, charsOf })) out.push({ ...unit });
   }
   return out;
+}
+
+function mergeWithSmallUnit(out, unit, { maxPages, maxChars, minChars, within, charsOf }) {
+  const lastIndex = out.length - 1;
+  const last = out[lastIndex];
+  if (!last || charsOf(last) >= minChars) return false;
+  const combined = { pageStart: last.pageStart, pageEnd: Math.max(last.pageEnd, unit.pageEnd), title: joinTitles(last.title, unit.title) };
+  if (within(combined).length > maxPages || charsOf(combined) > maxChars) return false;
+  out[lastIndex] = combined;
+  return true;
 }
 
 // ---- unit titles --------------------------------------------------------------------------------------------------
@@ -146,18 +166,28 @@ export function acronymsIn(texts) {
   const upper = new Map();
   const lower = new Map();
   const bump = (map, key) => map.set(key, (map.get(key) ?? 0) + 1);
-  for (const text of texts) {
-    for (const line of text.split('\n')) {
-      if (isAllCapsLine(line)) continue;
-      for (const token of line.match(/[\p{L}\p{N}]{2,8}/gu) ?? []) {
-        if (token === token.toLowerCase()) bump(lower, token);
-        else if ((token.match(/\p{Lu}/gu) ?? []).length >= 2 && !/^\p{Lu}\p{Ll}+$/u.test(token)) { found.set(token.toUpperCase(), token); bump(upper, token.toUpperCase()); }
-      }
+  for (const text of texts) for (const line of text.split('\n')) collectAcronymsFromLine(line, { found, upper, lower, bump });
+  // A token the document mostly writes in lowercase ("in", "and") is a word, not an acronym
+  removeCommonWords(found, upper, lower);
+  return found;
+}
+
+function collectAcronymsFromLine(line, { found, upper, lower, bump }) {
+  if (isAllCapsLine(line)) return;
+  for (const token of line.match(/[\p{L}\p{N}]{2,8}/gu) ?? []) {
+    if (token === token.toLowerCase()) bump(lower, token);
+    else if ((token.match(/\p{Lu}/gu) ?? []).length >= 2 && !/^\p{Lu}\p{Ll}+$/u.test(token)) {
+      const key = token.toUpperCase();
+      found.set(key, token);
+      bump(upper, key);
     }
   }
-  // A token the document mostly writes in lowercase ("in", "and") is a word, not an acronym
-  for (const key of [...found.keys()]) if ((upper.get(key) ?? 0) <= 2 * (lower.get(key.toLowerCase()) ?? 0)) found.delete(key);
-  return found;
+}
+
+function removeCommonWords(found, upper, lower) {
+  for (const key of [...found.keys()]) {
+    if ((upper.get(key) ?? 0) <= 2 * (lower.get(key.toLowerCase()) ?? 0)) found.delete(key);
+  }
 }
 
 /** An all-capitals title in sentence case, keeping the document's own acronyms; any other title is returned untouched. */

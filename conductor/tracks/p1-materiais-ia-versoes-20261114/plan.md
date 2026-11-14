@@ -1,55 +1,103 @@
 # TRACK: P1 — Materiais + IA + Versões (jornada operacional do aluno)
 
-> Criado em 2026-11-14 por ordem do dono (prioridade P1 da V1). LEDGER MACRO escrito à mão (não é projeção gerada).
-> Relação com `tracks/pb-consolidation-20261114/plan.md`: aquele track é o mapa geral; este é a prioridade P1 e vence na ordem de execução. Não duplica cartões do PB: aponta por id.
-> REGRA DE CODIFICAÇÃO: `conductor/code_styleguides/smartlearn.md` (menor mudança completa; código de IA é rascunho; textos em `src/i18n/` pt-BR/en/es).
-> ESTADO REAL = branch `design/redesign-geral-20261110` + working tree (preservado em `safety/preserve-working-tree-20261114`). Parte do que funciona só existe NÃO commitado (ex.: `server/src/services/draft-replacements.js` e seu teste são arquivos não rastreados). Um checkout limpo da branch NÃO tem essa funcionalidade.
+Status: ACTIVE · Criado 2026-11-14 por ordem do autor · Quadro resumido; texto integral, provas e registro de erros em `DETALHES.md` (mesma pasta). Cada tarefa traz entre parênteses o id antigo `P1-…`, que é o usado em `DETALHES.md`.
 
-## Objetivo
+> Jornada: importar PDF → escolher páginas → resumo (manual, colado ou IA) → auditar contra a fonte → corrigir só o errado → versões → questões → aceitar.
+> Estado real = branch `design/redesign-geral-20261110` + working tree, NADA commitado (árvore mistura várias frentes). Sem push, merge, deploy ou chamada paga de IA.
+> Quadro visual: `node scripts/tasklist.mjs conductor/tracks/p1-materiais-ia-versoes-20261114/plan.md --html conductor/tracks/p1-materiais-ia-versoes-20261114/quadro.html` (gerado; `test-results/` é apagado pelo Playwright)
 
-Toda a jornada de Materiais operacional: importar PDF/bibliografia → escolher páginas → resumo (manual, colado ou por IA) → auditar contra a fonte → corrigir só o que está errado → guardar e restaurar versões → questões objetivas/discursivas → revisar e aceitar. Prioridade: o que impede o aluno de estudar, usar a IA ou preservar o trabalho.
+### [✓] A · Regressões que o autor já bateu
 
-## Restrições da fase 1 (auditoria)
+- [✓] **IA Aviso de IA desligada (P1-BUG-IA)** — "IA desligada neste ambiente" quando o provedor é simulado
+  PROOF: e2e/summary-versions-button.spec.js
+- [✓] **COSTANZO Erro ao adicionar o livro (P1-BUG-COSTANZO)** — PDF repetido não duplica; seção grande oferece Parte 1/2/3
+  PROOF: source-file 3/3, lesson-limits 8/8, clique com PDF real de 70 páginas na instância sintética
+- [✓] **FANTASMA Versões fantasma (P1-BUG-VERSOES-FANTASMA)** — o painel aparecia sem versões; agora é o botão "Versões anteriores"
+  PROOF: e2e/summary-versions-button.spec.js
 
-Somente leitura. Sem chamada paga de IA (provedor simulado `server/src/ai/fake-provider.js`), sem banco humano, sem migração, merge, push, limpeza ou implementação. Preservar todas as worktrees. Sem novas iniciativas de infraestrutura/governança.
+### [ ] B · Limites e regras de bom senso
 
-## Fase 1 — Auditoria dos 8 fluxos (estados: IMPLEMENTADO E FUNCIONAL · PARCIAL · DEFEITUOSO · AUSENTE · NÃO VERIFICADO)
+- [✓] **RG-1 Resumo exige páginas (P1-RG1)** — já garantido pelo banco (páginas NOT NULL)
+- [ ] **RG-2 Teto de 30 páginas por aula (P1-RG2)** — acima disso, divide em Parte 1, Parte 2
+  PROOF: servidor e aviso na tela, em testes dirigidos
+  NOT_PROVEN: falta commit limpo
+- [ ] **RG-6 Sem páginas repetidas (P1-RG6)** — só 1 página de fronteira entre aulas do mesmo livro
+  PROOF: source-scope.test.js
+  NOT_PROVEN: falta commit limpo
+- [✓] **RG-3 Revisão só da aula (P1-RG3)** — nunca cobre o livro inteiro
+- [✓] **RG-4 Estimativa antes de gerar (P1-RG4)** — páginas, caracteres e minutos de aula
+- [ ] **RG-5 Regra geral (P1-RG5)** — situação sem sentido apontada pelo autor vira tarefa com teste que falha primeiro
 
-- [x] F1 Importação de PDF, bibliografia, identificação da aula, seleção de páginas — servidor IMPLEMENTADO E FUNCIONAL (40/40 em source-bibliography, printed-page-numbers, source-scope, create-unit; sem rede). Interface NÃO VERIFICADA (nenhum e2e rodado ainda: `materials-library`, `large-pdf`). Arquivos: `src/materials-ui.js`, `server/src/services/{source-*,page-numbering,section-spans,outline-units}.js`.
-- [x] F2 Criação manual, colagem e edição de resumo — IMPLEMENTADO E FUNCIONAL por leitura de código (formulário "Nova aula" no Plano aceita `summaryBody`; edição em `app.js:2152-2225`; editor com autosave 2,5 s e cópia local em IndexedDB, `lesson-editor-ui.js`). Specs não rodados. Dúvida: resumo manual não passa por nenhuma regra de qualidade (ver F4).
-- [x] F3 Geração e regeneração por IA — IMPLEMENTADO E FUNCIONAL (60/60 testes dirigidos, sem rede). `generated-drafts.js createDraft`, `draft-replacements.js` (KEEP_NEW/RESTORE_PREVIOUS, `confirmDiscard` se houver edição do aluno), UI em `lesson-editor-ui.js:303-324`. Limite: a nova geração parte do zero e ignora o texto do aluno. Só no working tree.
-- [x] F4 Auditoria do resumo contra a fonte — PARCIAL. Existe só para rascunho gerado (`auditAndRepair`, `buildAuditPrompt`, QUALIFIER_PRESERVATION). Resumo escrito/colado pelo aluno recebe só sensores determinísticos (`reviseSummary` → `persistEdit`; `POST /drafts/:id/reaudit` sem modelo). Lição já aceita: resumo somente leitura (`LESSON_SUMMARY_READONLY`). Consequência: o aluno que escreve o próprio resumo (o caminho recomendado) não é avisado de omissão, imprecisão ou qualificador perdido. Menor correção: serviço/endpoint novo (`audit-summary`) reutilizando `buildAuditPrompt`/`parseModelAudit` sobre o resumo atual, sob orçamento e consentimento; OMISSIONS ainda sem veredito estruturado.
-- [x] F5 Correções pontuais com aceite/rejeição — AUSENTE. Só existe reparo automático inteiro (`buildRepairPrompt`, roda na geração, sem trecho antes→depois). Menor correção: reparo devolve lista {trecho original, trecho proposto, motivo}, aplicado só após aceite por item, validado em `draft-schema.js`; muda contrato do prompt e `draft-review-ui.js` (precisa plano).
-- [x] F6 Autosave, recuperação, histórico, comparação, restauração — PARCIAL. Autosave 2,5 s com espera crescente: FUNCIONAL (`draft-autosave.js`, 13/13). Versões: só rascunho NÃO aceito é protegido (par atual/anterior em `draft_replacements`, decisão KEEP_NEW/RESTORE_PREVIOUS, `confirmDiscard`; 29/29). LACUNAS por leitura: (1) não há tabela nem histórico de versões do resumo (`revision` da 019 é só contador de conflito); (2) não há UI de histórico, comparação nem restauração; (3) lição ACEITA nunca entra em substituição (`generated-drafts.js:669-674`) e não ganha snapshot — editar/regerar depois do aceite não guarda o texto anterior (caminho de edição pós-aceite não rastreado); (4) descartar apaga de fato. Consequência: depois de aceito ou decidido, o aluno não volta a uma versão antiga nem compara. Menor correção: tabela `lesson_summary_versions` (MIGRAÇÃO, precisa autorização), snapshot antes de aceitar/regerar/editar lição, lista com comparar/restaurar. `draft-recovery.js` e e2e de autosave NÃO VERIFICADOS. RISCO: `draft-replacements.js` (serviço) é arquivo NÃO rastreado; a migração 043 e o teste estão no Git.
-- [x] F7 Questões — revisão/aceite IMPLEMENTADO E FUNCIONAL (edição, REJECTED por questão, `acceptDraft`, questões depois em lição existente, migração 045). Questões OBJETIVAS (múltipla escolha) e mistura ~50/50: AUSENTES (todas as questões são abertas; schema sem alternativas; `questionType` é nível cognitivo, não formato). A filosofia v1.3 §7 registra o 50/50 como orientação recente: exige DECISÃO do dono antes de mexer em schema/prompt/UI.
-- [~] F8 Navegação, erros, acessibilidade e clareza de Materiais — PARCIAL / NÃO VERIFICADO na interface. Defeitos pequenos achados por leitura: (a) `materials-ui.js:1143-1145` descarta a causa do erro de processamento (só `console.error`; aluno não sabe se foi PDF inválido, tamanho ou rede; há `import-error.js` para traduzir); (b) `materials-ui.js:160` engole falha de `listActiveSubjects` com `.catch(() => [])` (lista vazia sem aviso). Nenhum defeito que impeça estudar. PENDENTE: checagem visual renderizada em instância sintética (o dono relatou "muitos erros" em Materiais; a leitura não os reproduz, então só a tela mostra).
-- [ ] F9 Comparar outras branches só onde houver funcionalidade recuperável
-- [ ] F10 Cruzar com Planban e consolidar tarefas por dependência e prioridade
+### [ ] C · Disciplinas, dados e integridade
 
-## Fase 2 — Proposta de implementação em etapas pequenas (preencher após a fase 1)
+- [✓] **DISC-1 Tipo da fonte e disciplina vazia (P1-DISC1)** — apostila/livro/vídeo/outro e estado vazio explícito
+  PROOF: source-kind 3/3, accept-draft, logical-restore 20/20, conferido no navegador
+- [✓] **INTEG-1 Integridade do banco (P1-INTEG1)** — auditoria e reparo na cópia do autor (3 aulas sem resumo removidas)
+  PROOF: scripts/db-integrity-audit.mjs e db-integrity-repair.mjs
+- [✓] **SEED-1 Dados de teste coerentes (P1-SEED1)** — toda disciplina do seed tem resumo ou diz por que está vazia
+  PROOF: seed-dev.test.js 4/4 (o teste novo falhou primeiro em Patologia Geral; correção: `emptyOnPurpose` no seed)
+- [ ] **GIT-1 Pôr no Git o que só existe no working tree (P1-1)** — `draft-replacements.js` não rastreado
 
-Ordem por dependência e prioridade (da auditoria; ainda sem a checagem visual):
-- P1-1 Pôr no Git o que já funciona só no working tree: `draft-replacements.js` (não rastreado) e a UI/serviço de substituição, em worktree limpo (armadilha do HEAD sem o código da outra frente). Sem isso, um checkout limpo perde o regerar seguro. Sem decisão humana.
-- P1-2 Mensagens de erro de Materiais (F8 a,b) — PARCIAL FEITO (working tree, não commitado): `uploadFailureMessage` em `src/materials-ui.js` mostra "Sem conexão" para `OfflineError`/`NetworkError` em vez da mensagem genérica (correção da auditoria: `source-proposals-ui.js fail()` já devolvia a causa para `ApiError` e rede; só o offline escapava). eslint: sem erro novo (2 antigos). Falta: aviso quando `listActiveSubjects` falha (`materials-ui.js:160`).
-- P1-3 Checagem visual de Materiais em instância sintética — PARCIAL FEITO (2026-11-14, `design-preview --seed --port 5190`, 800x600, tema escuro, provedor simulado, instância encerrada): biblioteca, abrir material, páginas 1–2, "Preparar resumo", abas Resumo/Questões/Fonte/Revisão e "Aceitar a aula" renderizam e funcionam sem defeito visível; console só com 401 pré-login. NÃO reproduziu os "muitos erros" do dono: faltam (a) a conta DELE (cópia `design-real`, dados reais), (b) largura de celular 390 px e tema claro, (c) estados de erro (envio falho, PDF sem texto), (d) lição aceita e "Gerar perguntas". Pedir ao dono 2–3 exemplos concretos do que viu quebrado.
-- P1-4 Histórico de versões do resumo (F6): SERVIDOR FEITO e commitado local (510ce5a9, migração 048 autorizada pelo dono em 2026-11-14): `draft_summary_versions`, snapshot do texto substituído em `persistEdit` (rajada de autosave do aluno <60 s dobra numa versão; texto da IA e restauração sempre guardados), rotas GET `/drafts/:id/summary-versions[/:version]` e POST `.../restore`. Prova: `draft-summary-versions.test.js` 4/4 + 36/36 relacionados. UI FEITA (aba Resumo, "Versões anteriores do resumo": lista, comparação lado a lado, restaurar; verificada na instância sintética). Falha anterior à mudança: `draft-audit` "rule set cannot change without a new AUDIT_RULES_VERSION" (draft-audit.js alterado por outra frente, não commitado).
-- P1-5 PARTE SERVIDOR FEITA (working tree, não commitado, 2026-11-14): `auditSummaryWithModel` + `storeModelAudit` em `server/src/services/generated-drafts.js` e rota `POST /drafts/:id/audit-summary`. Só REPORTA (não reescreve o texto do aluno, rascunho segue DRAFT), substitui achados MODEL antigos, passa pelo livro de crédito (reserva/liquida/recusa) e recusa provedor sem auditoria. Prova: `server/test/summary-audit-on-demand.test.js` 3/3 com provedor simulado (sem chamada paga) + 54/54 em draft-replacements, lesson-questions, summary-first, draft-audit-model; eslint sem erro novo. BOTÃO FEITO (2026-11-14): "Conferir meu resumo" na aba Revisão (`lesson-editor-ui.js`, `auditSummary` em `draft-review-ui.js`, dep em `materials-ui.js`, 5 chaves pt-BR/en/es, contagem 1836); verificado na instância sintética: renderiza e, com provedor simulado, mostra "Este gerador não confere o resumo contra a fonte." (recusa clara). FALTA: (b) teste de rota, (c) veredito estruturado de omissão, (d) uso com IA real só com autorização. Texto original do item:
-- P1-5 Verificar o resumo do aluno contra a fonte (F4): serviço `audit-summary` sob orçamento/consentimento; testes com provedor simulado; veredito estruturado de omissão. DEPENDE de P1-4 (não perder o texto do aluno) e de autorização para medir com IA real.
-- P1-6 FEITO (2026-11-14, 4b8f2dd3 servidor + b4e1d8c1 tela; contrato decidido por mim por ordem do dono "faça sempre o recomendado"): `POST /drafts/:id/corrections` faz UMA chamada de reparo do provedor, guarda só a diferença como trechos {key, original, proposto, motivo} sem alterar o resumo; `POST /corrections/:key/apply` troca só aquele trecho (precisa estar uma vez no texto; passa por reviseSummary, então gera versão) e `DELETE` dispensa; trecho obsoleto é descartado. Testes com provedor simulado 7/7. Tela: bloco na aba Revisão (verificado na instância sintética: renderiza e recusa clara com gerador simulado; fluxo aceitar/dispensar só nos testes de servidor, não na tela).
-- P1-7 Regerar partindo do texto do aluno (opcional após P1-6).
-- P1-8 Questões objetivas e mistura 50/50 (F7): DECISÃO RECOMENDADA (2026-11-14, ordem do dono "faça sempre o recomendado"): NÃO entra neste track. O modelo atual não tem alternativas nem gabarito estruturado (tipos são só RECALL/CONCEPT/MECHANISM/APPLICATION/DISCRIMINATION/CLINICAL_REASONING/TRANSFER, resposta é texto livre), então objetiva exige: esquema {opções[], correta}, prompt de questões novo (o do resumo não muda), correção automática no estudo, tela de exercício e migração. É uma feature própria; abrir track `p1-questoes-objetivas` com spec antes de codar. Nada foi implementado para evitar um formato de questão sem contrato.
-- P1-9 PARTE (a) FEITA (2026-11-14, `server/src/ai/fidelity-loss.js` + `fidelity-loss.test.js` 3/3): medida determinística sem IA de negação/qualificador/número da fonte ausente na frase do resumo que a reafirma; só reporta. LIGADA (2f74fab2): GET `/drafts/:id/fidelity` e bloco "Palavras que podem ter mudado o sentido" na aba Revisão (sem verificar na tela). FALTA calibrar em fonte real (falsos positivos) e, se aprovado, virar achado do relatório em `draft-audit.js` (alterado por outra frente). - P1-9 Fidelidade do resumo (confirmado pelo dono em 2026-11-14; PB `pend-ncia-reproduzir-e-resolver-o-problema-da-ess-ncia`): a IA elimina palavras que mudam o sentido (negações, qualificadores, condições, números) e torna verdadeiro o falso. REGRA: NÃO alterar o prompt de geração atual (MED-SUM 2.7.5 / prompt interno 10, `server/src/ai/draft-prompt.js`): é a única versão que funciona. Atacar por fora do prompt: (a) medida determinística sem IA da perda (qualificadores, negações e números da fonte ausentes no resumo; `draft-audit.js` já tem parte); (b) P1-5/P1-6 (verificar e propor correção por trecho). Experimento com IA real só com autorização.
+### [ ] D · Resumo: versões, auditoria e correção
 
-## Decisões humanas indispensáveis (abertas)
+- [ ] **VERSOES-1 Histórico de versões do resumo (P1-4)** — servidor, migração 048 e tela feitos
+  PROOF: draft-summary-versions 4/4
+  NOT_PROVEN: falta commit limpo
+- [ ] **AUDITA-1 Conferir meu resumo contra a fonte (P1-5)** — servidor, rota e botão feitos
+  PROOF: summary-audit-on-demand 4/4 (inclui a rota HTTP, sessão e recusa clara)
+  NOT_PROVEN: veredito estruturado de omissão; uso com IA real (só com autorização do autor)
+- [✓] **CORRIGE-1 Correção por trecho (P1-6)** — original, proposto e motivo; aceita ou dispensa item a item
+  PROOF: testes com provedor simulado 7/7
+- [ ] **REGERA-1 Regerar partindo do texto do aluno (P1-7)** — opcional
+- [ ] **OBJETIVAS-1 Questões objetivas e mistura 50/50 (P1-8)** — decidido NÃO entrar neste track; feature própria com spec
+- [ ] **FIDELIDADE-1 Palavras que mudam o sentido (P1-9)** — medida sem IA de negação, qualificador e número perdidos; o prompt NÃO se altera
+  PROOF: fidelity-loss 5/5; calibrado no rascunho real do Costanzo (cópia do autor, só leitura): 18 achados falsos → 0, agora "não comparado" por idioma diferente
+  NOT_PROVEN: precisão com fonte e resumo no mesmo idioma (só o caso inglês→português existe em dado real); e2e FIDELIDADE-1 passou (resposta real do servidor e ramo "não comparado", 2/2 com o ERROS-1); captura visual não feita
 
-- Armazenamento de PDF: política do dono (não ficam no servidor) × código atual (grava e serve).
-- Autorizar chamadas reais de IA para medir a auditoria do resumo do aluno (custo; hoje só provedor simulado).
-- (Resolvida) Problema sem solução = perda de palavras que mudam o sentido no resumo; o dono manda não mexer no prompt atual (P1-9).
-- Contrato de reparo por trecho (F5): aprovar antes de mexer no prompt.
-- Revisão médica dos conteúdos gerados: só o dono.
+### [>] E · Interface de Materiais
 
-## Registro de erros observados
+- [✓] **IDX-1 Lista "Explorar os conteúdos" removida (P1-IDX1)** — 31 specs migrados
+  PROOF: último lote passou, captura conferida, CSS morto removido (source-proposals passou)
+  NOT_PROVEN: e2e/lesson-editor-responsive (migração 49 de outra frente) e realmodel-codex (IA real)
+- [✓] **SUMARIO-1 Índice com âncoras no resumo (P1-SUMARIO1)** — botão por título dentro da página
+- [✓] **BOTAO-1 Botão Versões anteriores no resumo (P1-VERSOES-UI)** — lista, comparar e restaurar na mesma tela
+- [✓] **UX-1 Adicionar material separado de Buscar materiais (P1-UX1)** — um botão principal
+  PROOF: draft-acceptance 10/10, captura na instância sintética
+  NOT_PROVEN: o autor ver na prévia 5188 com a conta dele
+- [✓] **ERROS-1 Mensagens de erro de Materiais (P1-2)** — "Sem conexão" no envio e aviso quando a lista de disciplinas falha
+  PROOF: e2e/draft-acceptance.spec.js ERROS-1 passou (52 s, 1/1)
+- [ ] **VISUAL-1 Checagem visual (P1-3)** — conta do autor, celular 390 px, tema claro e estados de erro
+  PROOF: 2026-11-14, instância sintética 5190, 390 px, tema escuro e claro: Materiais sem rolagem horizontal, CSS aplicado, capturas conferidas (o botão de tema funciona; meu 1º clique por coordenada errou o alvo)
+  NOT_PROVEN: conta do autor (5188) e estados de erro na tela
 
-- E2E completo em working tree (2026-11-14, sem baseline): 492 ok, 2 falhas: `materials-themes.spec.js:43` (worker caiu, código 3221226505: provável instrumento/memória) e `summary-wysiwyg.spec.js:144` (timeout 60 s em tabelas). Não reproduzidas isoladamente ainda; reexecutar `--files` antes de tratar como defeito de produto.
-  - Reexecução isolada (2026-11-14, HEAD 21897d9e, specs posicionais, 1 vez): `materials-themes` 1/1 (157 s), `summary-wysiwyg` 6/6 (79 s), `draft-autosave` 17/17 (232 s). Não reproduzem: classe provável instrumento/carga (worker caiu na suíte inteira). Sem baseline de duração gravado (NO BASELINE); gravar só em rodada limpa autorizada.
-- `test/i18n-scan.test.js` ratchet servidor: 617 > 595. Anterior ao meu trabalho (outras frentes no working tree); meus 2 textos em `api-error-messages.js` contam 2.
+### [✓] F · Validação de dados
+
+- [✓] **VAL-1 Limites de entrada (P1-VAL1)** — servidor e interface, mensagens claras ao aluno
+  PROOF: input-bounds 3/3, 587 testes de servidor, HTML 3/3
+
+### [ ] G · Leitura do PDF só das páginas escolhidas
+
+- [ ] **LEITURA-1 Ler qualquer PDF sem o aluno ver nada técnico (2026-11-14)** — texto do pdf.js, conferência automática e OCR invisível (xberg, MIT) só nas páginas reprovadas
+  PROOF: PDF só de imagem lido em 2 s com acentos certos; pdf-extraction e extraction-text-fidelity passam (server/src/pdf/ocr-fallback.js)
+  NOT_PROVEN: foto isolada (imagem avulsa); livro real escaneado; Android/web (binário nativo só win32); licenças dos modelos baixados; mensagem de página ilegível
+
+- [ ] **FIGURAS-1 Figuras do livro no resumo, escolhidas pelo agente (2026-11-14)** — decisão do autor: PDF sobe, é lido e apagado; ao gerar o resumo das páginas marcadas, as figuras dessas páginas são extraídas de graça (xberg) e o agente que escreve o resumo escolhe quais inserir e onde, conforme o que considera importante
+  PROOF: —
+  NOT_PROVEN: custo de armazenamento limitado (figura reduzida e comprimida, teto de figuras por resumo e de espaço por aluno, PDF nunca fica); extração das figuras por página; escolha por legenda (barato) ou vendo a imagem (mais tokens); só as figuras inseridas no resumo ficam guardadas (na conta do aluno); todas as outras, e o PDF, são excluídas ao fim da geração; remover figura do resumo apaga o arquivo dela; apagar o PDF após a leitura sem quebrar recorte (pdf-crop-dialog), link do original e visual-assets
+
+## Faltam só do autor
+
+- Ver Materiais na prévia 5188 com a conta dele (UX-1).
+- Decidir o commit: a árvore mistura várias frentes e commitar só os meus arquivos deixaria o HEAD inconsistente.
+- Autorizar chamadas reais de IA para medir a auditoria do resumo (AUDITA-1, FIDELIDADE-1).
+- Política de armazenamento de PDF (hoje o servidor grava e serve).
+- Revisão médica dos conteúdos gerados.
+
+## Bloqueios fora deste track
+
+- `AUDIT_RULES_VERSION`: outra frente alterou `draft-audit.js` sem subir a versão.
+- Migração 49 de outra frente impede e2e/lesson-editor-responsive.
+
+## Última prova integrada
+
+- 2026-11-14: `draft-acceptance`, `summary-versions-button`, `source-proposals` e `lesson-editor` juntos, 44/44 em 4,3 min (pelo vigia), depois de todas as edições de hoje em `lesson-editor-ui.js`, `styles.css`, i18n e seed. Escopo: working tree atual; não prova o HEAD isolado.

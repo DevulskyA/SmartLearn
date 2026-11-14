@@ -7,6 +7,11 @@ const blockLead = (value, start) => {
   return before.endsWith("\n") ? "\n" : "\n\n";
 };
 
+function insertionTail(rest, newlinesAfter) {
+  if (rest.trim() === "") return newlinesAfter === 0 ? "\n" : "";
+  return "\n".repeat(Math.max(0, 2 - newlinesAfter));
+}
+
 /**
  * The new value and the range to select after inserting `kind` at [start, end) of `value`.
  *   inline - `text` goes at the cursor (after a selection, never over it)
@@ -24,7 +29,7 @@ export function applyInsertion(value, start, end, kind, text = "") {
   // exactly one blank line between the new block and whatever follows (never a pile of empty lines); at the very end, one final newline
   const rest = value.slice(at);
   const newlinesAfter = /^\n*/.exec(rest)[0].length;
-  const tail = rest.trim() === "" ? (newlinesAfter === 0 ? "\n" : "") : "\n".repeat(Math.max(0, 2 - newlinesAfter));
+  const tail = insertionTail(rest, newlinesAfter);
   const snippet = `${lead}${body}${tail}`;
   const selectFrom = kind === "table" ? at + lead.length + 2 : at + snippet.length;
   const selectTo = kind === "table" ? selectFrom + "Coluna 1".length : selectFrom;

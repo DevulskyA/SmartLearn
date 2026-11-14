@@ -200,11 +200,20 @@ test('only the DEV launcher, the Homologacao launcher and the Homologacao start-
   for (const r of roots) { try { walk(join(REPO_ROOT, r)); } catch { /* optional root */ } }
   // Assignment forms only: PowerShell, process.env.X =, an env object entry, Rust Command::env, a .env/batch/shell line. Messages that merely
   // mention "SMARTLEARN_AI_CONSENT=true" to the operator are not assignments.
-  const assigns = /\$env:SMARTLEARN_AI_CONSENT\s*=|process\.env\.SMARTLEARN_AI_CONSENT\s*=(?!=)|['"`]SMARTLEARN_AI_CONSENT['"`]\s*:\s*['"`]true|\.env\(\s*["']SMARTLEARN_AI_CONSENT|set_var\(\s*"SMARTLEARN_AI_CONSENT"|\(\s*"SMARTLEARN_AI_CONSENT"(\.to_string\(\))?\s*,\s*"true"|(^|\n)\s*(set\s+|export\s+)?SMARTLEARN_AI_CONSENT\s*=/i;
+  const assigns = [
+    /\$env:SMARTLEARN_AI_CONSENT\s*=/,
+    /process\.env\.SMARTLEARN_AI_CONSENT\s*=(?!=)/,
+    /['"`]SMARTLEARN_AI_CONSENT['"`]\s*:\s*['"`]true/,
+    /\.env\(\s*["']SMARTLEARN_AI_CONSENT/,
+    /set_var\(\s*"SMARTLEARN_AI_CONSENT"/,
+    /\(\s*"SMARTLEARN_AI_CONSENT"(?:\.to_string\(\))?\s*,\s*"true"/,
+    /^[ \t]*(?:set[ \t]+|export[ \t]+)?SMARTLEARN_AI_CONSENT[ \t]*=/im,
+  ];
   const assigning = files.filter((f) => {
     const rel = relative(REPO_ROOT, f).split(sep).join('/');
-    if (/^(test|server\/test)\//.test(rel) || rel.startsWith('scripts/prompt-lab/') && false) return false;
-    return assigns.test(readFileSync(f, 'utf8').split(/\r?\n/).filter((l) => !/^\s*(\/\/|\*|#)/.test(l) && !/^\s*\/\*/.test(l)).join('\n'));
+    if (/^(test|server\/test)\//.test(rel)) return false;
+    const source = readFileSync(f, 'utf8').split(/\r?\n/).filter((l) => !/^\s*(\/\/|\*|#)/.test(l) && !/^\s*\/\*/.test(l)).join('\n');
+    return assigns.some((pattern) => pattern.test(source));
   }).map((f) => relative(REPO_ROOT, f).split(sep).join('/'));
   // scripts/inspect-package.mjs only LISTS the name (to look for it in the artifact); it never assigns it.
   // Owner decision 2026-11-08: the isolated Homologacao may also give consent, but only for the real CODEX provider (asserted below): through its

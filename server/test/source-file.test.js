@@ -79,3 +79,19 @@ test('a stored file that no longer matches its checksum, or is gone, is refused 
     assert.equal(JSON.parse(gone.body).error.code, 'SOURCE_FILE_MISSING');
   } finally { await t.cleanup(); }
 });
+
+// P1-BUG-COSTANZO: sending the SAME PDF again must not create a second source (the book was being duplicated); another student's identical file is theirs.
+test('the same PDF sent twice by one student is one source; the same bytes from another student is a separate source', async () => {
+  const t = await boot();
+  try {
+    const alice = await t.login('dedup-a@example.com');
+    const bob = await t.login('dedup-b@example.com');
+    const pdf = buildFixturePdf(['pagina um', 'pagina dois']);
+    const first = await t.upload(alice, pdf);
+    const again = await t.upload(alice, pdf);
+    assert.equal(again, first);
+    assert.equal(t.db.prepare('SELECT COUNT(*) AS n FROM sources').get().n, 1);
+    assert.notEqual(await t.upload(bob, pdf), first);
+    assert.equal(t.db.prepare('SELECT COUNT(*) AS n FROM sources').get().n, 2);
+  } finally { await t.cleanup(); }
+});

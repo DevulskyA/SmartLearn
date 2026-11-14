@@ -34,11 +34,22 @@ test('every file path cited between backticks in the F6 block exists (a rename o
   for (const p of cited) assert.ok(existsSync(join(root, p)), `cited path does not exist: ${p}`);
 });
 
+function hasLongParenthesizedText(value) {
+  let firstOpen = -1;
+  for (let index = 0; index < value.length; index++) {
+    const char = value[index];
+    if (char === '\n' || char === '\r' || char === '\u2028' || char === '\u2029') { firstOpen = -1; continue; }
+    if (char === '(' && firstOpen === -1) firstOpen = index;
+    else if (char === ')' && firstOpen !== -1 && index - firstOpen - 1 >= 8) return true;
+  }
+  return false;
+}
+
 test('every row states a proof class; NOT_PROVEN and MUTATION-KILLED rows say why/which; no row is blank', () => {
   for (const r of rows) {
     assert.match(r.proof, /^(TESTED|MUTATION-KILLED M\d+[a-z]?(, M\d+[a-z]?)*|HUMAN|NOT_PROVEN)\b/, `${r.ac}: unknown proof class "${r.proof}"`);
     assert.ok(r.evidence.trim().length > 0, `${r.ac}: empty evidence`);
-    if (r.proof.startsWith('NOT_PROVEN')) assert.match(r.proof, /\(.{8,}\)/, `${r.ac}: NOT_PROVEN needs a reason in parentheses`);
+    if (r.proof.startsWith('NOT_PROVEN')) assert.ok(hasLongParenthesizedText(r.proof), `${r.ac}: NOT_PROVEN needs a reason in parentheses`);
     if (r.proof.startsWith('TESTED') || r.proof.startsWith('MUTATION')) assert.match(r.evidence, /`[^`]+\.(js|mjs|rs)`/, `${r.ac}: a TESTED row must cite at least one test or script file`);
   }
 });

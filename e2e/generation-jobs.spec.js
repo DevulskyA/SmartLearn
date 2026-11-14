@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
 import { answerConfirm } from './support/confirm.js';
 import AxeBuilder from '@axe-core/playwright';
 import { spawn } from 'node:child_process';
@@ -7,12 +8,15 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import Database from '../server/node_modules/better-sqlite3/lib/index.js';
+import { createRequire } from 'node:module';
+const requireServerDependency = createRequire(new URL('../server/package.json', import.meta.url));
+const Database = requireServerDependency('better-sqlite3');
 import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.js';
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
 import { waitForServerReady } from './support/wait-for-server.js';
 import { signInRegistered } from './support/session.js';
 
+import { generateByPages } from './support/materials-flow.js';
 // T-F3-04 (R-04 AC-04.3, F-14): the student can leave the screen while a draft is generated and come back to the REAL state:
 // "Gerando", then the finished draft, or the explained failure; cancel frees the unit; silence is a calm warning. Real server and
 // real UI, with the model endpoint replaced by a local stub that HOLDS each generation call until the spec releases it (a slow
@@ -105,7 +109,7 @@ test.beforeEach(async ({ page }) => {
     window.__SMARTLEARN_REMOTE_MODE__ = true;
     window.__SMARTLEARN_LOCAL_AUTHORITY__ = true;
   }, API_BASE);
-  const email = `genjobs-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+  const email = `genjobs-${Date.now()}-${randomUUID()}@example.com`;
   await signInRegistered(page, { email, password: 'a genuinely long test password 1' });
 });
 
@@ -114,11 +118,11 @@ async function startGeneration(page) {
   await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
   await page.setInputFiles('#sources-file-input', { name: 'fisiologia.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf([PAGE_1, PAGE_2]) });
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
-  await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
+  await generateByPages(page);
 }
 
 const progress = (page) => page.locator('#sources-generation');
-const firstItem = (page) => page.locator('.source-proposal-item').first();
+const firstItem = (page) => page.locator('#sources-drafts-list .source-draft-item').first();
 const draftCount = () => {
   const db = new Database(dbPath);
   try { return db.prepare('SELECT COUNT(*) AS n FROM generated_drafts').get().n; } finally { db.close(); }
@@ -132,6 +136,10 @@ const noSeriousAxeViolation = async (page, where) => {
 test('leave the screen while it generates, come back (even after a reload) and see Gerando; then the finished draft opens from the list', async ({ page }) => {
   await startGeneration(page);
   await expect(progress(page)).toBeVisible();
+  // the result of the click appears where the student is looking: on screen, and above everything that can start a generation
+  await expect(progress(page)).toBeInViewport();
+  const progressY = (await progress(page).boundingBox()).y;
+  expect(progressY).toBeLessThan((await page.locator('#sources-range-form').boundingBox()).y);
   await expect(progress(page)).toContainText('pode levar alguns minutos');
   await expect(progress(page).locator('.sources-generation-phase')).toContainText(/Gerando|Preparando|Na fila/);
   await expect(progress(page).locator('.sources-generation-timer')).toHaveText(/^\d\d:\d\d$/);
@@ -149,7 +157,6 @@ test('leave the screen while it generates, come back (even after a reload) and s
   // back on the list the unit says it is still being generated, and it cannot be started a second time
   await expect(progress(page)).toBeHidden();
   await expect(firstItem(page)).toContainText('Gerando…');
-  await expect(firstItem(page).locator('[data-action="generate-draft"]')).toHaveCount(0);
   await expect(page.locator('#sources-drafts')).toContainText('Gerando…');
   await expect(firstItem(page).getByRole('button', { name: 'Ver andamento' })).toBeFocused();
   await noSeriousAxeViolation(page, 'Gerando item');
@@ -170,8 +177,27 @@ test('leave the screen while it generates, come back (even after a reload) and s
   await release('ok');
   await expect(firstItem(page)).toContainText('Pronto', { timeout: 15000 });
   await expect(page.locator('#sources-drafts')).toContainText('Pronto');
-  await firstItem(page).locator('[data-action="open-draft"]').click();
+  await firstItem(page).locator('[data-action="open-draft-in-progress"]').click();
   await expect(page.locator('.lesson-editor')).toBeVisible({ timeout: 10000 });
+});
+
+test('reloading the page while the progress panel is open brings the panel back, with its proof of life; a lost connection is said out loud', async ({ page }) => {
+  await startGeneration(page);
+  await expect(progress(page)).toBeVisible();
+  await expect(progress(page).locator('.sources-generation-live')).toContainText(/Funcionando|Aguardando|Na fila|Iniciada/);
+
+  await page.reload();
+  await page.locator('[data-screen="materials"]').click();
+  // no click on the material, no "Ver andamento": the panel is simply there again
+  await expect(progress(page)).toBeVisible({ timeout: 10000 });
+  await expect(progress(page).locator('.sources-generation-timer')).toHaveText(/^\d\d:\d\d$/);
+
+  // the server cannot be reached: the panel says so (the job is fine, only the screen cannot see it), then recovers on its own
+  await page.route('**/v1/generation-jobs', (route) => route.abort());
+  await expect(progress(page).locator('.sources-generation-connection')).toContainText('Sem conexão com o servidor', { timeout: 10000 });
+  await page.unroute('**/v1/generation-jobs');
+  await expect(progress(page).locator('.sources-generation-connection')).toBeEmpty({ timeout: 10000 });
+  await release('ok');
 });
 
 test('cancel asks for confirmation, frees the unit, leaves no draft even if the provider answers late, and the unit generates again', async ({ page }) => {
@@ -190,13 +216,11 @@ test('cancel asks for confirmation, frees the unit, leaves no draft even if the 
   await release('ok');
   await expect(progress(page)).toBeHidden({ timeout: 15000 });
   await expect(page.locator('#sources-message')).toContainText('cancelada');
-  await expect(firstItem(page)).not.toContainText('Gerando…');
-  await expect(firstItem(page).locator('[data-action="generate-draft"]')).toBeEnabled();
-  await expect(firstItem(page).locator('[data-action="open-draft"]')).toHaveCount(0);
+  await expect(firstItem(page)).toHaveCount(0);
   await expect(page.locator('#sources-drafts')).toBeHidden();
   expect(draftCount()).toBe(draftsBefore);
   // the unit is free: generating it again works and ends in a draft
-  await firstItem(page).locator('[data-action="generate-draft"]').click();
+  await generateByPages(page);
   await release('ok');
   await expect(page.locator('.lesson-editor')).toBeVisible({ timeout: 15000 });
 });
@@ -211,9 +235,9 @@ test('a failed generation says so in plain Portuguese, in the list too, and the 
   await expect(message).not.toContainText(/boom|ProviderRequestError|undefined/);
   await expect(firstItem(page)).toContainText('Falhou');
   await expect(page.locator('#sources-drafts')).toContainText('Falhou');
-  await expect(firstItem(page).locator('[data-action="generate-draft"]')).toHaveText(/Tentar de novo/);
+  await expect(firstItem(page).locator('[data-action="retry-generation"]')).toHaveText(/Tentar de novo/);
   await noSeriousAxeViolation(page, 'Falhou item');
-  await firstItem(page).locator('[data-action="generate-draft"]').click();
+  await firstItem(page).locator('[data-action="retry-generation"]').click();
   await release('ok');
   await expect(page.locator('.lesson-editor')).toBeVisible({ timeout: 15000 });
 });

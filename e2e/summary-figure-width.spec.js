@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { test, expect } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -11,6 +12,7 @@ import { waitForServerReady } from './support/wait-for-server.js';
 import { signInRegistered } from './support/session.js';
 import { startEditingSummary } from './support/summary-editing.js';
 
+import { generateByPages, openDraftInProgress } from './support/materials-flow.js';
 // A figure occurrence can be moved and resized in the summary (Tiptap's own drag and ResizableNodeView on the existing Figure node). The width lives in the
 // marker, [[fig:UUID|w=N]]; legacy markers are untouched. What is proven here is what the student sees: one copy after a move, the proportion kept,
 // the text saved by itself, and the same page after reopening.
@@ -46,7 +48,7 @@ test.beforeEach(async ({ page }) => {
     window.__SMARTLEARN_REMOTE_MODE__ = true;
     window.__SMARTLEARN_LOCAL_AUTHORITY__ = true;
   }, API_BASE);
-  await signInRegistered(page, { email: `visual-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`, password: 'a genuinely long test password 1', summaryMode: null });
+  await signInRegistered(page, { email: `visual-${Date.now()}-${randomUUID()}@example.com`, password: 'a genuinely long test password 1', summaryMode: null });
 });
 
 async function openDraft(page) {
@@ -54,7 +56,7 @@ async function openDraft(page) {
   await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
   await page.setInputFiles('#sources-file-input', { name: 'aula.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf(['Fisiologia renal: filtração glomerular', 'Barreira de filtração e podócitos', 'Clearance de inulina mede a TFG']) });
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
-  await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
+  await generateByPages(page);
   const editor = page.locator('.lesson-editor');
   await expect(editor).toBeVisible({ timeout: 10000 });
   await startEditingSummary(page);
@@ -68,7 +70,7 @@ async function reopenDraft(page, editor) {
   await page.locator('[data-screen="materials"]').click();
   await page.locator('#sources-existing-list .source-existing-item', { hasText: 'aula.pdf' }).locator('[data-action="open-source"]').click();
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 15000 });
-  await page.locator('.source-proposal-item').first().locator('[data-action="open-draft"]').click();
+  await openDraftInProgress(page);
   await expect(editor).toBeVisible({ timeout: 10000 });
   await startEditingSummary(page);
 }

@@ -26,7 +26,7 @@ export function openMathDialog({ tex = "", display = false, lockDisplay = false 
     const previouslyFocused = document.activeElement;
     const dialog = document.createElement("dialog");
     dialog.className = "math-dialog";
-    const titleId = `math-dialog-title-${Math.random().toString(36).slice(2)}`;
+    const titleId = `math-dialog-title-${globalThis.crypto.randomUUID()}`;
     dialog.setAttribute("aria-labelledby", titleId);
 
     const title = document.createElement("h2");

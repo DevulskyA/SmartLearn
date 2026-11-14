@@ -134,6 +134,7 @@ const names = (rows) => rows.map((r) => r.name);
 for (const adapter of adapters) {
   const t = (title, fn) => test(`[${adapter.name}] ${title}`, async () => {
     const store = await adapter.fresh();
+    assert.ok(store, 'adapter.fresh() returns a store');
     try { await fn(store); } finally { adapter.cleanup?.(); }
   });
 

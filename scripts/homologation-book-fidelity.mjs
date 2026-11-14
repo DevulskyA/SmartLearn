@@ -10,7 +10,6 @@
 // They are a screen, not a medical judgment: the clinical review of the content stays human (T-F4-01, VALID-8).
 // The helpers below mirror scripts/homologation-proof.mjs on purpose (that script is proven and left untouched).
 import { createHash } from 'node:crypto';
-import { createRequire } from 'node:module';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { homedir, tmpdir } from 'node:os';
@@ -19,12 +18,13 @@ import { execFileSync, spawn } from 'node:child_process';
 import http from 'node:http';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const ps = (script) => execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(`$ProgressPreference = 'SilentlyContinue'; [Console]::OutputEncoding = [System.Text.Encoding]::UTF8\n${script}\nexit 0`, 'utf16le').toString('base64')], { encoding: 'utf8', maxBuffer: 1 << 24 }).trim();
+const POWERSHELL_EXE = 'C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
+const TASKKILL_EXE = 'C:\\WINDOWS\\System32\\taskkill.exe';
+const PYTHON_EXE = 'C:\\Program Files\\Python314\\python.exe';
+const ps = (script) => execFileSync(POWERSHELL_EXE, ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(`$ProgressPreference = 'SilentlyContinue'; [Console]::OutputEncoding = [System.Text.Encoding]::UTF8\n${script}\nexit 0`, 'utf16le').toString('base64')], { encoding: 'utf8', maxBuffer: 1 << 24 }).trim();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const arg = (name, fallback) => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : fallback; };
 const sha256 = (file) => createHash('sha256').update(readFileSync(file)).digest('hex');
-const lc = (p) => resolve(p).toLowerCase();
-
 const BOOK = 'C:\\Users\\Ariel\\SmartLearn-DevData\\sources\\7c2e0168880f65b135f4f63daf07831e.pdf';
 const BOOK_SHA = 'b0a8da11631acaa2939ae8278d521d80f16d38e89e0c78b2a18531d5a01ac81c';  // A-01
 const from = Number(arg('--from', 267));
@@ -37,7 +37,14 @@ const scratch = join(homedir(), 'SmartLearn-Homologacao-Prova');
 const work = join(tmpdir(), 'book-fidelity');
 
 const results = [];
-const check = (name, ok, detail) => { results.push({ name, ok: Boolean(ok), detail: detail ?? null }); console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail === undefined ? '' : ` :: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`}`); return ok; };
+function checkMessage(name, ok, detail) {
+  const result = `${ok ? 'PASS' : 'FAIL'} ${name}`;
+  if (detail === undefined) return result;
+  const detailText = typeof detail === 'string' ? detail : JSON.stringify(detail);
+  return `${result} :: ${detailText}`;
+}
+
+const check = (name, ok, detail) => { results.push({ name, ok: Boolean(ok), detail: detail ?? null }); console.log(checkMessage(name, ok, detail)); return ok; };
 
 function appProcess() {
   const out = ps(`Get-Process -Name smartlearn -ErrorAction SilentlyContinue | Where-Object { $_.Path -ieq '${exe.replace(/'/g, "''")}' } | Select-Object -First 1 | ForEach-Object { "$($_.Id)|$($_.MainWindowTitle)|$($_.MainWindowHandle)" }`);
@@ -49,10 +56,14 @@ async function openThroughShortcut() {
   if (appProcess()) throw new Error('the Homologacao is already open; close it first');
   const env = { ...process.env, SMARTLEARN_AI_PROVIDER: PROVIDER, SMARTLEARN_HOMOLOGACAO_DATA_DIR: scratch };
   delete env.SMARTLEARN_DEV_DATA_DIR; delete env.SMARTLEARN_DB_PATH; delete env.SMARTLEARN_SOURCES_DIR;
-  spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `Start-Process -FilePath '${shortcutPath.replace(/'/g, "''")}'`], { env, stdio: 'ignore', windowsHide: true }).unref();
+  spawn(POWERSHELL_EXE, ['-NoProfile', '-NonInteractive', '-Command', `Start-Process -FilePath '${shortcutPath.replace(/'/g, "''")}'`], { env, stdio: 'ignore', windowsHide: true }).unref();
   const until = Date.now() + 60000;
   let app = null;
-  while (Date.now() < until && !(app = appProcess())) await sleep(500);
+  while (Date.now() < until) {
+    app = appProcess();
+    if (app) break;
+    await sleep(500);
+  }
   if (!app) throw new Error('the shortcut did not start the installed executable within 60 s');
   return app;
 }
@@ -68,12 +79,12 @@ async function backendBase() {
 }
 async function closeGracefully(app) {
   const children = backendOf(app.pid);
-  try { execFileSync('taskkill', ['/PID', String(app.pid)], { stdio: 'ignore' }); } catch { /* may refuse */ }
+  try { execFileSync(TASKKILL_EXE, ['/PID', String(app.pid)], { stdio: 'ignore' }); } catch { /* may refuse */ }
   const until = Date.now() + 25000;
   while (Date.now() < until && appProcess()) await sleep(400);
-  if (appProcess()) { try { execFileSync('taskkill', ['/PID', String(app.pid), '/T', '/F'], { stdio: 'ignore' }); } catch { /* gone */ } }
+  if (appProcess()) { try { execFileSync(TASKKILL_EXE, ['/PID', String(app.pid), '/T', '/F'], { stdio: 'ignore' }); } catch { /* gone */ } }
   await sleep(2500);
-  for (const p of children) { try { execFileSync('taskkill', ['/PID', String(p), '/T', '/F'], { stdio: 'ignore' }); } catch { /* gone */ } }
+  for (const p of children) { try { execFileSync(TASKKILL_EXE, ['/PID', String(p), '/T', '/F'], { stdio: 'ignore' }); } catch { /* gone */ } }
 }
 
 function client(base) {
@@ -123,7 +134,7 @@ async function main() {
   check('book exists and its sha256 equals A-01 in ARTIFACTS.md', existsSync(BOOK) && sha256(BOOK) === BOOK_SHA);
   rmSync(work, { recursive: true, force: true }); mkdirSync(work, { recursive: true });
   const slice = join(work, 'recorte.pdf');
-  execFileSync('python', ['-c', 'import sys;from pypdf import PdfReader,PdfWriter;r=PdfReader(sys.argv[1]);w=PdfWriter();[w.add_page(r.pages[i]) for i in range(int(sys.argv[3])-1,int(sys.argv[4]))];w.write(sys.argv[2])', BOOK, slice, String(from), String(to)]);
+  execFileSync(PYTHON_EXE, ['-c', 'import sys;from pypdf import PdfReader,PdfWriter;r=PdfReader(sys.argv[1]);w=PdfWriter();[w.add_page(r.pages[i]) for i in range(int(sys.argv[3])-1,int(sys.argv[4]))];w.write(sys.argv[2])', BOOK, slice, String(from), String(to)]);
   const pages = to - from + 1;
   check(`slice of ${pages} pages (${from}-${to}) cut into a temp copy`, existsSync(slice));
 
@@ -188,4 +199,4 @@ async function main() {
   process.exit(failed.length ? 1 : 0);
 }
 
-main().catch((error) => { console.error(`ERROR: ${error.stack ?? error}`); try { const a = appProcess(); if (a) execFileSync('taskkill', ['/PID', String(a.pid), '/T', '/F'], { stdio: 'ignore' }); } catch { /* nothing */ } rmSync(scratch, { recursive: true, force: true }); process.exit(2); });
+main().catch((error) => { console.error(`ERROR: ${error.stack ?? error}`); try { const a = appProcess(); if (a) execFileSync(TASKKILL_EXE, ['/PID', String(a.pid), '/T', '/F'], { stdio: 'ignore' }); } catch { /* nothing */ } rmSync(scratch, { recursive: true, force: true }); process.exit(2); });

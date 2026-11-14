@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -74,7 +75,7 @@ async function enableRemoteMode(page) {
 }
 
 function uniqueEmail(label) {
-  return `as-${label}-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+  return `as-${label}-${Date.now()}-${randomUUID()}@example.com`;
 }
 
 async function registerAndLogin(page, email, password) {

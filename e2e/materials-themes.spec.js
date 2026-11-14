@@ -10,6 +10,7 @@ import { VITE_ORIGIN, serverPort } from './support/ports.js';
 import { waitForServerReady } from './support/wait-for-server.js';
 import { signInRegistered } from './support/session.js';
 
+import { generateByPages } from './support/materials-flow.js';
 // Materiais in every theme: the document library (search, order, pager, rows) and the lesson editor's Resumo/Fonte/Revisão tabs have no
 // axe violations and no sideways scroll in any of the app's themes. Real server, fake provider, 30 documents faked at GET /v1/sources.
 
@@ -64,7 +65,7 @@ test('every theme: library and editor tabs have no axe violations and no sideway
   await page.unroute('**/v1/sources');
   await page.setInputFiles('#sources-file-input', { name: 'fisiologia-renal.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf(['Fisiologia renal: filtração glomerular', 'Barreira de filtração e podócitos', 'Clearance de inulina mede a TFG']) });
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
-  await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
+  await generateByPages(page);
   await expect(page.locator('.lesson-editor')).toBeVisible({ timeout: 15000 });
   const tabs = page.locator('.lesson-tabs [role="tab"]');
   for (const tabIndex of [0, 2, 3]) {

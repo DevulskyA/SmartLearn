@@ -8,11 +8,11 @@ import * as users from '../repositories/users.js';
 
 export const RESET_TOKEN_LIFETIME_MS = 30 * 60 * 1000; // 30 minutes
 
-export function generateResetToken() {
+function generateResetToken() {
   return randomBytes(32).toString('base64url');
 }
 
-export function hashResetToken(token) {
+function hashResetToken(token) {
   return createHash('sha256').update(token, 'utf8').digest('hex');
 }
 

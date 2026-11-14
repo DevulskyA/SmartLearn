@@ -8,6 +8,9 @@
 Este plan.md é o ledger MACRO de marcos que alimenta a tasklist visual; execução de tarefa segue a skill `tlc-spec-driven-strict`
 (GOV-2 = opção A, sem segunda governança). Track anterior (Analytics + governança): `tracks/ops-dev-data-and-tasklist/` — DONE.
 A tasklist mostrada ao usuário é uma projeção do plan.md.
+Plano de conclusão a partir do Planban + reconciliação Git (2026-11-14, escrito à mão, não gerado): `tracks/pb-consolidation-20261114/plan.md`.
+Prioridade P1 do dono (Materiais + IA + Versões, 2026-11-14, escrito à mão): `tracks/p1-materiais-ia-versoes-20261114/plan.md`.
+Regra de codificação do track: ver o cabeçalho daquele plan.md.
 
 > PAINEL MESTRE ABAIXO = HISTÓRICO (snapshot de 2026-09-07, T28; reconciliado em 2026-10-04 como arquivo morto, não como estado).
 > Estado atual: Git + `.specs/STATE.md` (Memento) + o track ativo acima. Tracks encerrados: `v1-validation` (VALID-1..7 feitas;

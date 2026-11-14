@@ -97,6 +97,31 @@ export async function purgeAllAccounts() {
   }
 }
 
+function snapshotPath(query) {
+  const search = query.toString();
+  return search ? `/v1/agenda-snapshot?${search}` : '/v1/agenda-snapshot';
+}
+
+async function fetchSnapshotGeneration() {
+  const items = [];
+  let cursor;
+  let revision;
+  let envelope;
+  do {
+    const query = new URLSearchParams();
+    if (cursor !== undefined) { query.set('cursor', String(cursor)); query.set('revision', revision); }
+    envelope = await apiRequest(snapshotPath(query));
+    items.push(...envelope.items);
+    cursor = envelope.nextCursor;
+    revision = envelope.dataRevision;
+  } while (cursor !== null && cursor !== undefined);
+  return { items, envelope };
+}
+
+function isRevisionConflict(err) {
+  return err instanceof ApiError && err.status === 409;
+}
+
 /**
  * Fetches every page of the caller's current agenda-snapshot generation
  * (T39's /v1/agenda-snapshot, cursor-paginated) and only replaces the
@@ -112,19 +137,7 @@ export async function syncSnapshot(accountId) {
 
   for (let attempt = 0; attempt < MAX_REVISION_RETRIES; attempt++) {
     try {
-      const items = [];
-      let cursor;
-      let revision;
-      let envelope;
-      do {
-        const qs = new URLSearchParams();
-        if (cursor !== undefined) { qs.set('cursor', String(cursor)); qs.set('revision', revision); }
-        const path = `/v1/agenda-snapshot${qs.toString() ? `?${qs}` : ''}`;
-        envelope = await apiRequest(path);
-        items.push(...envelope.items);
-        cursor = envelope.nextCursor;
-        revision = envelope.dataRevision;
-      } while (cursor !== null && cursor !== undefined);
+      const { items, envelope } = await fetchSnapshotGeneration();
 
       if (envelope.schemaVersion !== SUPPORTED_SCHEMA_VERSION) {
         return { ok: false, reason: 'UNSUPPORTED_SCHEMA' };
@@ -143,9 +156,9 @@ export async function syncSnapshot(accountId) {
       setLastAccountId(accountId);
       return { ok: true, snapshot };
     } catch (err) {
-      const isRevisionConflict = err instanceof ApiError && err.status === 409;
-      if (isRevisionConflict && attempt < MAX_REVISION_RETRIES - 1) continue; // restart from page one
-      if (err instanceof NetworkError || isRevisionConflict) return { ok: false, reason: 'UNAVAILABLE' };
+      const revisionConflict = isRevisionConflict(err);
+      if (revisionConflict && attempt < MAX_REVISION_RETRIES - 1) continue; // restart from page one
+      if (err instanceof NetworkError || revisionConflict) return { ok: false, reason: 'UNAVAILABLE' };
       return { ok: false, reason: 'ERROR' };
     }
   }

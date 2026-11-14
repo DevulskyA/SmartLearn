@@ -178,7 +178,11 @@ function memoryStorage({ failWrites = false } = {}) {
     data,
     log,
     getItem: async (k) => (data.has(k) ? data.get(k) : null),
-    setItem: async (k, v) => { if (failWrites) throw new Error('QuotaExceededError'); log.push(['set', k]); data.set(k, String(v)); },
+    setItem: async (k, v) => {
+      if (failWrites) throw new Error('QuotaExceededError');
+      log.push(['set', k]);
+      data.set(k, String(v));
+    },
     removeItem: async (k) => { log.push(['remove', k]); data.delete(k); },
   };
 }

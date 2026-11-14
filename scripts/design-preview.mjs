@@ -2,11 +2,13 @@
 //
 // Default: copies ~/SmartLearn-Homologacao-Data (else ~/SmartLearn-DevData) (database + WAL + PDFs) into a temp folder and runs server/src/main.js on the copy, so the
 // owner signs in with their own account and sees their own subjects, lessons, history and PDFs. The original files are only READ
-// (copied); the server, its migrations and every write happen on the copy, and the copy is deleted when the preview stops.
+// (copied); the server, its migrations and every write happen on the copy.
+// The copy is KEPT between restarts (the OS temp folder, SmartLearn-Preview-Copy): the owner stays signed in and keeps what they did in the preview. `--fresh`
+// discards it and copies the original again; a synthetic `--seed` run still uses a throwaway folder deleted on stop.
 // `--seed`: throwaway synthetic data instead (scripts/seed-dev.mjs + 3 demo PDFs); sign in with DEV_ACCOUNT.
 // Vite proxies /v1 to that server and flags the page as the desktop app (REMOTE_MODE + LOCAL_AUTHORITY).
 import { spawn } from 'node:child_process';
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import { homedir, networkInterfaces, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -33,9 +35,19 @@ if (process.argv.includes('--require-real')) {
 }
 const useSeed = process.argv.includes('--seed') || !real;
 const realDir = real?.dir;
-const dataDir = mkdtempSync(join(tmpdir(), 'sl-design-preview-'));
+const KEPT_DIR = join(tmpdir(), 'SmartLearn-Preview-Copy');
+const keepCopy = !useSeed;
+const reuseKept = keepCopy && !process.argv.includes('--fresh') && existsSync(join(KEPT_DIR, 'preview.db'));
+if (keepCopy && !reuseKept && existsSync(KEPT_DIR)) {
+  // --fresh: the previous copy is moved aside with a timestamp, never deleted
+  renameSync(KEPT_DIR, `${KEPT_DIR}.${new Date().toISOString().replace(/[:.]/g, '-')}`);
+}
+const dataDir = keepCopy ? KEPT_DIR : mkdtempSync(join(tmpdir(), 'sl-design-preview-'));
+if (keepCopy) mkdirSync(dataDir, { recursive: true });
 
-if (!useSeed) {
+if (reuseKept) {
+  console.log(`[design-preview] reusing the kept copy ${dataDir} (same session and changes as last time; --fresh copies the original again)`);
+} else if (!useSeed) {
   // read-only on the original: a transactionally consistent snapshot (VACUUM INTO reads one read transaction, WAL included),
   // never a raw file copy of .db/-wal/-shm that could capture a half-written state while the owner's app writes
   const original = new DatabaseSync(join(realDir, `${real.base}.db`), { readOnly: true });
@@ -56,13 +68,18 @@ if (!useSeed) {
   }
   copy.close();
   console.log(`[design-preview] copy of ${realDir} -> ${dataDir} (original untouched); integrity_check=${integrity}; rows=${JSON.stringify(counts)}`);
-  if (integrity !== 'ok') { rmSync(dataDir, { recursive: true, force: true }); throw new Error('the copied database failed integrity_check'); }
+  if (integrity !== 'ok') { renameSync(dataDir, `${dataDir}.failed-${Date.now()}`); throw new Error('the copied database failed integrity_check'); }
 }
 
 const server = spawn(process.execPath, [join(root, 'server/src/main.js')], {
   env: { ...process.env, SMARTLEARN_DB_PATH: join(dataDir, 'preview.db'), SMARTLEARN_SOURCES_DIR: join(dataDir, 'sources'), PORT: String(SERVER_PORT), HOST: '127.0.0.1', NODE_ENV: 'test',
     // no paid or external AI, no key, no consent: generation stays unavailable in the preview
-    SMARTLEARN_AI_PROVIDER: '', SMARTLEARN_AI_CONSENT: 'false', SMARTLEARN_AI_API_KEY: '', SMARTLEARN_AI_API_URL: '', SMARTLEARN_CODEX_COMMAND: 'sl-preview-codex-disabled', SMARTLEARN_ALLOWED_ORIGINS: [ORIGIN, `http://127.0.0.1:${VITE_PORT}`, ...lanOrigins].join(',') },
+    // --real-ai (owner's explicit opt-in): the owner's logged-in Codex CLI generates for real; never on by default
+    ...(process.argv.includes('--real-ai')
+      ? { SMARTLEARN_AI_PROVIDER: 'CODEX', SMARTLEARN_AI_CONSENT: 'true', SMARTLEARN_CODEX_REASONING_EFFORT: process.env.SMARTLEARN_CODEX_REASONING_EFFORT || 'medium', SMARTLEARN_AI_API_KEY: '', SMARTLEARN_AI_API_URL: '' }
+      : { SMARTLEARN_AI_PROVIDER: '', SMARTLEARN_AI_CONSENT: 'false', SMARTLEARN_AI_API_KEY: '', SMARTLEARN_AI_API_URL: '', SMARTLEARN_CODEX_COMMAND: 'sl-preview-codex-disabled' }),
+    SMARTLEARN_JOB_LOG: 'on', // one JSON line per generation event on this process's stdout (the preview log file)
+    SMARTLEARN_ALLOWED_ORIGINS: [ORIGIN, `http://127.0.0.1:${VITE_PORT}`, ...lanOrigins].join(',') },
   stdio: 'inherit',
 });
 await waitForServerReady(API, { label: 'design preview' });
@@ -98,7 +115,7 @@ const vite = spawn(process.execPath, [join(root, 'node_modules/vite/bin/vite.js'
   stdio: 'inherit',
 });
 
-const stop = () => { vite.kill(); server.kill(); setTimeout(() => { try { rmSync(dataDir, { recursive: true, force: true }); } catch { /* temp dir */ } process.exit(0); }, 400); };
+const stop = () => { vite.kill(); server.kill(); setTimeout(() => { if (!keepCopy) { try { rmSync(dataDir, { recursive: true, force: true }); } catch { /* temp dir */ } } process.exit(0); }, 400); };
 process.on('SIGINT', stop);
 process.on('SIGTERM', stop);
 vite.on('exit', stop);

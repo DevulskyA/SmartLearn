@@ -5,6 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, copyFileSync, rmSync } from 'nod
 import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { resolveWindowsPowerShellExecutable } from './system-executables.mjs';
 import { fileURLToPath } from 'node:url';
 
 const launcher = fileURLToPath(new URL('../scripts/launch-homologacao.ps1', import.meta.url));
@@ -25,7 +26,7 @@ function check(dir, dataDir, extraEnv = {}) {
   const env = { ...process.env, SMARTLEARN_HOMOLOGACAO_DATA_DIR: dataDir, ...extraEnv };
   delete env.SMARTLEARN_DEV_DATA_DIR;
   Object.assign(env, extraEnv);
-  const r = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', join(dir, 'launch.ps1'), '-CheckOnly'], { env, encoding: 'utf8' });
+  const r = spawnSync(resolveWindowsPowerShellExecutable(), ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', join(dir, 'launch.ps1'), '-CheckOnly'], { env, encoding: 'utf8' });
   return { status: r.status, out: r.stdout, err: r.stderr };
 }
 const withInstall = (opts, fn) => { const dir = install(opts); try { fn(dir); } finally { rmSync(dir, { recursive: true, force: true }); } };

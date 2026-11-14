@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { resolveGitExecutable } from './system-executables.mjs';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -22,7 +23,7 @@ const pluralGroups = () => {
   }
   return groups;
 };
-const sourceFiles = () => execFileSync('git', ['ls-files', 'src'], { cwd: root, encoding: 'utf8' }).split('\n').filter((f) => f.endsWith('.js') && !f.startsWith('src/i18n/'));
+const sourceFiles = () => execFileSync(resolveGitExecutable(), ['ls-files', 'src'], { cwd: root, encoding: 'utf8' }).split('\n').filter((f) => f.endsWith('.js') && !f.startsWith('src/i18n/'));
 
 test('every plural group has an .other form, and every form of a group carries the same placeholders', () => {
   // {count} is NOT required: a group may only change a word ("página"/"páginas") and be chosen by tn() or by an explicit n === 1 test.
@@ -51,33 +52,51 @@ test('pt-BR plural rule: 0 and 1 are singular ("one"), 2 and more are "other"; e
   }
 });
 
+function translationCallDetails(node) {
+  if (node.type !== 'CallExpression' || node.callee.type !== 'Identifier' || !['t', 'tn'].includes(node.callee.name) || node.arguments[0]?.type !== 'Literal') return null;
+  const plural = node.callee.name === 'tn';
+  const key = node.arguments[0].value;
+  const paramsArg = node.arguments[plural ? 2 : 1];
+  const texts = plural
+    ? Object.keys(ptBR).filter((catalogKey) => catalogKey.startsWith(`${key}.`) && PLURAL_SUFFIX.test(catalogKey)).map((catalogKey) => ptBR[catalogKey])
+    : [ptBR[key]].filter((text) => text !== undefined);
+  // A parameter object built elsewhere or containing a spread cannot be read reliably at the call site.
+  const paramsAreReadable = !(paramsArg && paramsArg.type !== 'ObjectExpression') && !paramsArg?.properties?.some((property) => property.type !== 'Property');
+  if (texts.length === 0 || !paramsAreReadable) return null;
+  return { plural, key, paramsArg, texts };
+}
+
+function inspectTranslationCall(node, file, problems) {
+  const call = translationCallDetails(node);
+  if (!call) return 0;
+  const { plural, key, paramsArg, texts } = call;
+  const declared = new Set(texts.flatMap((text) => [...placeholdersOf(text)]));
+  if (plural) declared.delete('count');
+  const passed = new Set((paramsArg?.properties ?? []).map((property) => property.key.name ?? property.key.value));
+  const at = `${file}:${node.loc.start.line} ${key}`;
+  const localeAsSecondArg = typeof node.arguments[1]?.value === 'string';
+  if (!paramsArg && declared.size > 0 && !localeAsSecondArg) problems.push(`${at}: declares {${[...declared]}} but no parameters are passed`);
+  for (const name of declared) if (paramsArg && !passed.has(name)) problems.push(`${at}: {${name}} is never filled`);
+  for (const name of passed) if (!declared.has(name) && !(plural && name === 'count')) problems.push(`${at}: parameter ${name} is not used by the text`);
+  return 1;
+}
+
+function visitAst(node, visitor) {
+  if (!node || typeof node.type !== 'string') return;
+  visitor(node);
+  for (const key of Object.keys(node)) {
+    const child = node[key];
+    if (Array.isArray(child)) child.forEach((item) => visitAst(item, visitor));
+    else if (child && typeof child === 'object') visitAst(child, visitor);
+  }
+}
+
 test('every call site passes exactly the parameters its catalog text declares ({name} never reaches the screen unfilled)', () => {
   const problems = [];
   let checked = 0;
-  for (const f of sourceFiles()) {
-    const ast = espree.parse(readFileSync(join(root, f), 'utf8').replace(/^﻿/, ''), { ecmaVersion: 'latest', sourceType: 'module', loc: true });
-    (function walk(n) {
-      if (!n || typeof n.type !== 'string') return;
-      if (n.type === 'CallExpression' && n.callee.type === 'Identifier' && (n.callee.name === 't' || n.callee.name === 'tn') && n.arguments[0]?.type === 'Literal') {
-        const plural = n.callee.name === 'tn';
-        const key = n.arguments[0].value;
-        const paramsArg = n.arguments[plural ? 2 : 1];
-        const texts = plural ? Object.keys(ptBR).filter((k) => k.startsWith(`${key}.`) && PLURAL_SUFFIX.test(k)).map((k) => ptBR[k]) : [ptBR[key]].filter((x) => x !== undefined);
-        // a parameter object built elsewhere (a variable, a spread) cannot be read from the call: those calls are not judged here
-        if (texts.length > 0 && !(paramsArg && paramsArg.type !== 'ObjectExpression') && !paramsArg?.properties?.some((p) => p.type !== 'Property')) {
-          checked += 1;
-          const declared = new Set(texts.flatMap((x) => [...placeholdersOf(x)]));
-          if (plural) declared.delete('count');
-          const passed = new Set((paramsArg?.properties ?? []).map((p) => p.key.name ?? p.key.value));
-          const at = `${f}:${n.loc.start.line} ${key}`;
-          const localeAsSecondArg = typeof n.arguments[1]?.value === 'string';
-          if (!paramsArg && declared.size > 0 && !localeAsSecondArg) problems.push(`${at}: declares {${[...declared]}} but no parameters are passed`);
-          for (const name of declared) if (paramsArg && !passed.has(name)) problems.push(`${at}: {${name}} is never filled`);
-          for (const name of passed) if (!declared.has(name) && !(plural && name === 'count')) problems.push(`${at}: parameter ${name} is not used by the text`);
-        }
-      }
-      for (const k of Object.keys(n)) { const c = n[k]; if (Array.isArray(c)) c.forEach(walk); else if (c && typeof c === 'object') walk(c); }
-    })(ast);
+  for (const file of sourceFiles()) {
+    const ast = espree.parse(readFileSync(join(root, file), 'utf8').replace(/^﻿/, ''), { ecmaVersion: 'latest', sourceType: 'module', loc: true });
+    visitAst(ast, (node) => { checked += inspectTranslationCall(node, file, problems); });
   }
   assert.ok(checked > 100, `only ${checked} calls were checked: the scan is not looking at the code`);
   assert.deepEqual(problems, []);

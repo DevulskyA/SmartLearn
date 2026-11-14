@@ -9,6 +9,7 @@ import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.j
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
 import { waitForServerReady } from './support/wait-for-server.js';
 import { signInRegistered } from './support/session.js';
+import { generateByPages } from './support/materials-flow.js';
 
 // Reuse of reviewed content between accounts, through the real UI and a real server with a Codex stand-in that LOGS every call (no network,
 // no credit). Student A shares one material (account switch + the basis for that material), generates, accepts. Student B uploads the same
@@ -101,7 +102,7 @@ async function uploadMaterial(page) {
 async function openDraft(page) {
   const open = page.locator('[data-action="open-source"]').first();
   if (await open.isVisible()) await open.click(); // back on Materiais after a reload: open the material to see its trechos
-  await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
+  await generateByPages(page);
   const editor = page.locator('.lesson-editor');
   await expect(editor).toBeVisible({ timeout: 15000 });
   return editor;

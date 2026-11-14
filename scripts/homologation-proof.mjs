@@ -31,7 +31,12 @@ import { chromium } from '@playwright/test';
 import { failClosedProblems, homologationFileProblems, humanRootsOf, inside, installerArgs, installerEnv, lc, scratchLayout, scratchRootProblems, shortcutProblems, withoutSmartlearnEnv } from './homologation-proof-lib.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const ps = (script, env) => execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(`$ProgressPreference = 'SilentlyContinue'; [Console]::OutputEncoding = [System.Text.Encoding]::UTF8\n${script}\nexit 0`, 'utf16le').toString('base64')], { encoding: 'utf8', maxBuffer: 1 << 24, ...(env ? { env } : {}) }).trim();
+const SYSTEM_ROOT = process.env.SystemRoot ?? 'C:\\Windows';
+const SYSTEM32 = join(SYSTEM_ROOT, 'System32');
+const POWERSHELL_EXE = join(SYSTEM32, 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+const ATTRIB_EXE = join(SYSTEM32, 'attrib.exe');
+const TASKKILL_EXE = join(SYSTEM32, 'taskkill.exe');
+const ps = (script, env) => execFileSync(POWERSHELL_EXE, ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(`$ProgressPreference = 'SilentlyContinue'; [Console]::OutputEncoding = [System.Text.Encoding]::UTF8\n${script}\nexit 0`, 'utf16le').toString('base64')], { encoding: 'utf8', maxBuffer: 1 << 24, ...(env ? { env } : {}) }).trim();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const arg = (name) => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : undefined; };
 const sha256 = (file) => createHash('sha256').update(readFileSync(file)).digest('hex');
@@ -65,15 +70,33 @@ ConvertTo-Json -InputObject @($out) -Depth 3`) || '[]').filter((s) => !OWN_SHORT
 
 function diffSnapshots(before, after) {
   const changes = [];
-  const key = (x) => JSON.stringify(x);
-  const byPath = new Map(after.shortcuts.map((s) => [s.path, s]));
-  for (const s of before.shortcuts) if (key(byPath.get(s.path)) !== key(s)) changes.push(`shortcut changed or removed: ${s.path}`);
-  const byTarget = new Map(after.targets.map((t) => [t.target, t]));
-  for (const t of before.targets) if (key(byTarget.get(t.target)) !== key(t)) changes.push(`shortcut target changed: ${t.target}`);
-  for (const [dir, files] of Object.entries(before.humanData)) {
-    const now = new Map((after.humanData[dir] ?? []).map((f) => [f.file, f]));
-    for (const f of files) { const g = now.get(f.file); if (!g || g.size !== f.size || g.mtimeMs !== f.mtimeMs) changes.push(`human data changed: ${f.file}`); }
-    for (const f of now.keys()) if (!files.some((x) => x.file === f)) changes.push(`human data file appeared: ${f}`);
+  changes.push(...changedShortcuts(before.shortcuts, after.shortcuts));
+  changes.push(...changedTargets(before.targets, after.targets));
+  changes.push(...changedHumanData(before.humanData, after.humanData));
+  return changes;
+}
+
+function changedShortcuts(before, after) {
+  const byPath = new Map(after.map((shortcut) => [shortcut.path, shortcut]));
+  return before.filter((shortcut) => JSON.stringify(byPath.get(shortcut.path)) !== JSON.stringify(shortcut))
+    .map((shortcut) => `shortcut changed or removed: ${shortcut.path}`);
+}
+
+function changedTargets(before, after) {
+  const byTarget = new Map(after.map((target) => [target.target, target]));
+  return before.filter((target) => JSON.stringify(byTarget.get(target.target)) !== JSON.stringify(target))
+    .map((target) => `shortcut target changed: ${target.target}`);
+}
+
+function changedHumanData(before, after) {
+  const changes = [];
+  for (const [dir, files] of Object.entries(before)) {
+    const current = new Map((after[dir] ?? []).map((file) => [file.file, file]));
+    for (const file of files) {
+      const currentFile = current.get(file.file);
+      if (!currentFile || currentFile.size !== file.size || currentFile.mtimeMs !== file.mtimeMs) changes.push(`human data changed: ${file.file}`);
+    }
+    for (const file of current.keys()) if (!files.some((original) => original.file === file)) changes.push(`human data file appeared: ${file}`);
   }
   return changes;
 }
@@ -90,7 +113,17 @@ if (process.argv[2] === 'snapshot') {
 const dest = resolve(arg('--dest') ?? 'C:\\Projetos\\SmartLearn-Homologacao');
 const beforeFile = arg('--before');
 const results = [];
-const check = (name, ok, detail) => { results.push({ name, ok: Boolean(ok), detail: detail ?? null }); console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail === undefined ? '' : ` :: ${typeof detail === 'string' ? detail : JSON.stringify(detail)}`}`); return ok; };
+function formatCheck(name, ok, detail) {
+  const status = ok ? 'PASS' : 'FAIL';
+  if (detail === undefined) return `${status} ${name}`;
+  const renderedDetail = typeof detail === 'string' ? detail : JSON.stringify(detail);
+  return `${status} ${name} :: ${renderedDetail}`;
+}
+const check = (name, ok, detail) => {
+    results.push({ name, ok: Boolean(ok), detail: detail ?? null });
+    console.log(formatCheck(name, ok, detail));
+    return ok;
+  };
 
 const manifest = JSON.parse(readFileSync(join(dest, 'manifest.json'), 'utf8'));
 const realApp = join(dest, 'app');
@@ -114,7 +147,7 @@ if (rootProblems.length) { console.error(`PROOF REFUSED: ${rootProblems.join('; 
 function wipeScratch() {
   if (scratchRootProblems(L.root, humanRoots, protectedPaths).length) throw new Error(`refusing to delete ${L.root}`);
   if (!existsSync(L.root)) return;
-  try { execFileSync('attrib', ['-R', join(L.root, '*'), '/S', '/D'], { stdio: 'ignore' }); } catch { /* nothing read-only */ }
+  try { execFileSync(ATTRIB_EXE, ['-R', join(L.root, '*'), '/S', '/D'], { stdio: 'ignore' }); } catch { /* nothing read-only */ }
   rmSync(L.root, { recursive: true, force: true });
 }
 
@@ -171,7 +204,11 @@ async function openDirect(exePath) {
   const started = startDirect(exePath);
   const until = Date.now() + 60000;
   let app = null;
-  while (Date.now() < until && !(app = appProcess(exePath))) await sleep(500);
+  while (Date.now() < until) {
+    const current = appProcess(exePath);
+    if (current) { app = current; break; }
+    await sleep(500);
+  }
   if (!app) throw new Error('the disposable copy did not start within 60 s (a refusal message box would still show a process)');
   const untilWindow = Date.now() + 30000;
   while (Date.now() < untilWindow && (!app.title || app.handle === '0')) { await sleep(500); app = appProcess(exePath) ?? app; }
@@ -233,14 +270,14 @@ function client(base) {
 
 async function closeGracefully(app, exePath) {
   const children = backendOf(app.pid).map((c) => c.pid);
-  try { execFileSync('taskkill', ['/PID', String(app.pid)], { stdio: 'ignore' }); } catch { /* window may refuse */ }
+  try { execFileSync(TASKKILL_EXE, ['/PID', String(app.pid)], { stdio: 'ignore' }); } catch { /* window may refuse */ }
   const until = Date.now() + 25000;
   while (Date.now() < until && appProcess(exePath)) await sleep(400);
   const how = appProcess(exePath) ? 'forced' : 'graceful';
-  if (how === 'forced') { try { execFileSync('taskkill', ['/PID', String(app.pid), '/T', '/F'], { stdio: 'ignore' }); } catch { /* gone */ } }
+  if (how === 'forced') { try { execFileSync(TASKKILL_EXE, ['/PID', String(app.pid), '/T', '/F'], { stdio: 'ignore' }); } catch { /* gone */ } }
   await sleep(2500);
   const left = children.filter((p) => ps(`Get-Process -Id ${p} -ErrorAction SilentlyContinue | ForEach-Object { $_.Id }`));
-  for (const p of left) { try { execFileSync('taskkill', ['/PID', String(p), '/T', '/F'], { stdio: 'ignore' }); } catch { /* gone */ } }
+  for (const p of left) { try { execFileSync(TASKKILL_EXE, ['/PID', String(p), '/T', '/F'], { stdio: 'ignore' }); } catch { /* gone */ } }
   return { how, backendChildren: children.length, leftoversKilled: left.length };
 }
 
@@ -249,6 +286,35 @@ async function closeGracefully(app, exePath) {
  * Safety net: if the guard were broken the app would fall back to the Oficial/DEV behaviour, so the data variables point into the scratch
  * folder (the guard refuses before reading them, so a correct build never sees them). The probe always ends with the process gone.
  */
+function observeFailClosedApp(exePath, observation) {
+  const app = appProcess(exePath);
+  if (!app) return;
+  observation.polls += 1;
+  const rows = visibleWindows('smartlearn').filter((row) => Number(row.split('|')[0]) === app.pid);
+  for (const row of rows) {
+    const title = row.split('|').find((part) => part.startsWith('title='))?.slice(6) ?? '';
+    if (!observation.windows.includes(title)) observation.windows.push(title);
+    if (/^SmartLearn HOMOLOGACAO - /.test(title)) observation.sawAppWindow = true;
+    if (title === 'SmartLearn Homologacao') observation.messageBox = true;
+  }
+  if (backendOf(app.pid).length) observation.sawBackend = true;
+}
+
+async function closeFailClosedProbe(child, state, observation) {
+  observation.wasAliveAfterWindow = !state.exited;
+  if (!state.exited) {
+    try { execFileSync(TASKKILL_EXE, ['/PID', String(child.pid)], { stdio: 'ignore' }); } catch { /* already gone */ }
+    const closeBy = Date.now() + 10000;
+    while (Date.now() < closeBy && !state.exited) await sleep(300);
+  }
+  observation.stillAliveAfterClose = !state.exited;
+  if (observation.stillAliveAfterClose) {
+    try { execFileSync(TASKKILL_EXE, ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' }); } catch { /* gone */ }
+    await sleep(1500);
+  }
+  observation.exitCode = state.exitCode;
+}
+
 async function probeFailClosed(exePath, dataDir) {
   const env = withoutSmartlearnEnv(process.env, { SMARTLEARN_DB_PATH: join(dataDir, 'smartlearn-homologacao.db'), SMARTLEARN_SOURCES_DIR: join(dataDir, 'sources'), SMARTLEARN_WEBVIEW_DATA_DIR: join(dataDir, 'webview'), SMARTLEARN_AI_PROVIDER: 'FAKE' });
   const child = spawn(exePath, [], { cwd: dirname(dirname(exePath)), env, stdio: 'ignore' });
@@ -258,30 +324,11 @@ async function probeFailClosed(exePath, dataDir) {
   const obs = { sawAppWindow: false, sawBackend: false, messageBox: false, windows: [], polls: 0 };
   const until = Date.now() + 15000;
   while (Date.now() < until && !state.exited) {
-    const app = appProcess(exePath);
-    if (app) {
-      obs.polls += 1;
-      const rows = visibleWindows('smartlearn').filter((r) => Number(r.split('|')[0]) === app.pid);
-      for (const r of rows) {
-        const title = r.split('|').find((p) => p.startsWith('title='))?.slice(6) ?? '';
-        if (!obs.windows.includes(title)) obs.windows.push(title);
-        if (/^SmartLearn HOMOLOGACAO - /.test(title)) obs.sawAppWindow = true;
-        if (title === 'SmartLearn Homologacao') obs.messageBox = true;
-      }
-      if (backendOf(app.pid).length) obs.sawBackend = true;
-    }
+    observeFailClosedApp(exePath, obs);
     await sleep(400);
   }
   // end the probe: close the refusal box like a person would (WM_CLOSE); anything still there afterwards survived its refusal
-  obs.wasAliveAfterWindow = !state.exited;
-  if (!state.exited) {
-    try { execFileSync('taskkill', ['/PID', String(child.pid)], { stdio: 'ignore' }); } catch { /* already gone */ }
-    const closeBy = Date.now() + 10000;
-    while (Date.now() < closeBy && !state.exited) await sleep(300);
-  }
-  obs.stillAliveAfterClose = !state.exited;
-  if (obs.stillAliveAfterClose) { try { execFileSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' }); } catch { /* gone */ } await sleep(1500); }
-  obs.exitCode = state.exitCode;
+  await closeFailClosedProbe(child, state, obs);
   obs.dataCreated = existsSync(dataDir) ? walk(dataDir).map((f) => f.file) : [];
   if (existsSync(dataDir) && !obs.dataCreated.length) obs.dataCreated = [`${dataDir} (folder)`];
   return obs;
@@ -290,7 +337,16 @@ async function probeFailClosed(exePath, dataDir) {
 async function main() {
   const before = beforeFile ? JSON.parse(readFileSync(beforeFile, 'utf8')) : null;
   const realBefore = realInstallFingerprint();
+  let scratchCfg;
+  let scratchManifest;
+  let email;
+  let password;
+  let subjectId;
+  let app;
+  let t0;
+  let dbFile;
 
+  await (async () => {
   // ---- (1) the REAL install, statically: nothing of it is opened ----
   check('shortcut exists', existsSync(shortcutPath), shortcutPath);
   const sc = existsSync(shortcutPath)
@@ -309,13 +365,15 @@ async function main() {
   const defaults = JSON.parse(ps(`& '${join(dest, 'launch.ps1').replace(/'/g, "''")}' -CheckOnly`, withoutSmartlearnEnv(process.env)));
   check('launcher default datastore is its own folder and no human data path is inside or contains it', [defaults.database, defaults.sources, defaults.dataDir].every((p) => !humanRoots.some((h) => inside(p, h) || inside(h, p))), { dataDir: defaults.dataDir });
   check('launcher check (-CheckOnly): exe hash and served content equal the manifest', defaults.exeSha256 === manifest.exeSha256 && defaults.inputsHash === manifest.inputsHash, { exeSha256: defaults.exeSha256.slice(0, 12), content: defaults.inputsHash.slice(0, 12) });
+  })();
 
+  await (async () => {
   // ---- (2) the disposable copies, installed by the real installer ----
   wipeScratch();
   const install = spawnSync(process.execPath, installerArgs({ script: join(ROOT, 'scripts', 'homologation-install.mjs'), exe: sourceExe, dest: L.inst }), { cwd: ROOT, encoding: 'utf8', env: installerEnv(process.env, L.data), timeout: 300000 });
   if (install.status !== 0) throw new Error(`the installer refused the disposable copy: ${install.stdout}${install.stderr}`);
-  const scratchCfg = readJson(join(instApp, 'homologation.json'));
-  const scratchManifest = readJson(join(L.inst, 'manifest.json'));
+  scratchCfg = readJson(join(instApp, 'homologation.json'));
+  scratchManifest = readJson(join(L.inst, 'manifest.json'));
   const scratchProblems = [
     ...(scratchCfg ? homologationFileProblems(scratchCfg, { humanRoots, appDir: instApp, manifest: scratchManifest, readOnly: readOnlyFile(join(instApp, 'homologation.json')) }) : ['scratch homologation.json missing']),
     ...(scratchCfg?.provider !== 'FAKE' || scratchCfg?.consent ? [`provider ${scratchCfg?.provider} consent ${scratchCfg?.consent}: must be FAKE without consent`] : []),
@@ -326,17 +384,18 @@ async function main() {
   check('disposable copy installed by the real installer: own folder, FAKE provider without consent, data in scratch, same exe and content as the source', scratchProblems.length === 0, scratchProblems.length ? scratchProblems : { dest: L.inst, data: L.data });
   // second copy for the fail-closed probe, made BEFORE anything ever ran: same files, minus the isolation file
   cpSync(L.inst, L.instNoFile, { recursive: true });
-  try { execFileSync('attrib', ['-R', join(L.instNoFile, 'app', 'homologation.json')], { stdio: 'ignore' }); } catch { /* not there */ }
+  try { execFileSync(ATTRIB_EXE, ['-R', join(L.instNoFile, 'app', 'homologation.json')], { stdio: 'ignore' }); } catch { /* not there */ }
   rmSync(join(L.instNoFile, 'app', 'homologation.json'), { force: true });
 
-  const email = `prova-${Date.now()}@homologacao.test`;
-  const password = 'a genuinely long test password 1';
-  let subjectId;
+  email = `prova-${Date.now()}@homologacao.test`;
+  password = 'a genuinely long test password 1';
+  })();
 
+  await (async () => {
   // ---- (3) first open, DIRECTLY ----
   const first = await openDirect(instExe);
-  let app = first.app;
-  const t0 = Date.now();
+  app = first.app;
+  t0 = Date.now();
   check('opened DIRECTLY (no launcher, no shortcut, no SMARTLEARN_* in its environment): process path is the disposable exe', lc(instExe) === lc(ps(`(Get-Process -Id ${app.pid}).Path`)) && first.started.smartlearnEnvVars.length === 0, { pid: app.pid, smartlearnEnvVars: first.started.smartlearnEnvVars });
   check('window title names the Homologacao build, as homologation.json says', /^SmartLearn HOMOLOGACAO - v\S+ - \S+$/.test(app.title) && app.title === scratchCfg.windowTitle, app.title);
   const backend = backendOf(app.pid);
@@ -352,7 +411,7 @@ async function main() {
   check('provider is the free FAKE one, from homologation.json alone (no paid call possible)', build.provider === 'FAKE', build.provider);
   const staged = JSON.parse(readFileSync(join(instApp, 'dist-runtime', 'build-info.json'), 'utf8'));
   check('bundled frontend identity = manifest', staged.inputsHash === manifest.inputsHash, staged.inputsHash.slice(0, 12));
-  const dbFile = join(L.data, 'smartlearn-homologacao.db');
+  dbFile = join(L.data, 'smartlearn-homologacao.db');
   check('database created in the scratch data folder named by homologation.json (no env was set), none anywhere human', existsSync(dbFile) && existsSync(join(L.data, 'sources')), dbFile);
   const profileFiles = walk(join(L.data, 'webview')).length;
   check('own WebView2 profile (cookies, storage) lives in the homologation data folder, not in the Oficial/DEV one', profileFiles > 0, { files: profileFiles });
@@ -381,7 +440,9 @@ async function main() {
 
   const closed1 = await closeGracefully(app, instExe);
   check('app closes by itself and leaves no backend behind', closed1.how === 'graceful' && closed1.leftoversKilled === 0, closed1);
+  })();
 
+  await (async () => {
   // ---- second open, DIRECTLY again ----
   app = (await openDirect(instExe)).app;
   const backend2 = backendOf(app.pid);
@@ -410,7 +471,9 @@ async function main() {
   const rows = { users: db.prepare('SELECT COUNT(*) n FROM users').get().n, subjects: db.prepare("SELECT COUNT(*) n FROM subjects WHERE name = 'Farmacologia'").get().n, version: db.prepare('SELECT MAX(version) v FROM schema_migrations').get().v, integrity: db.pragma('integrity_check', { simple: true }) };
   db.close();
   check('the scratch database file holds the data (v41, integrity ok)', rows.users === 1 && rows.subjects === 1 && rows.integrity === 'ok' && rows.version >= 41, rows);
+  })();
 
+  await (async () => {
   // ---- (4) fail closed: manifest.json present, homologation.json absent ----
   const layoutOk = existsSync(join(L.instNoFile, 'manifest.json')) && !existsSync(join(L.instNoFile, 'app', 'homologation.json'));
   const probe = await probeFailClosed(noFileExe, L.dataNoFile);
@@ -431,11 +494,12 @@ async function main() {
   const failed = results.filter((r) => !r.ok);
   console.log(JSON.stringify({ result: failed.length ? 'FAIL' : 'PASS', checks: results.length, failed: failed.map((f) => f.name), seconds: Math.round((Date.now() - t0) / 1000) }));
   process.exit(failed.length ? 1 : 0);
+  })();
 }
 
 function killScratchProcesses() {
   for (const exePath of [instExe, noFileExe]) {
-    try { const a = appProcess(exePath); if (a) execFileSync('taskkill', ['/PID', String(a.pid), '/T', '/F'], { stdio: 'ignore' }); } catch { /* nothing */ }
+    try { const a = appProcess(exePath); if (a) execFileSync(TASKKILL_EXE, ['/PID', String(a.pid), '/T', '/F'], { stdio: 'ignore' }); } catch { /* nothing */ }
   }
 }
 

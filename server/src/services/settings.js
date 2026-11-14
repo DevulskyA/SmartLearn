@@ -9,7 +9,7 @@ export class SettingsError extends Error {
   }
 }
 
-export const DEFAULT_TIMEZONE = 'America/Sao_Paulo';
+const DEFAULT_TIMEZONE = 'America/Sao_Paulo';
 
 /**
  * `uiLocale` / `generationLocale` are what the student chose (null = not chosen yet); the `effective*` fields are what the

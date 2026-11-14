@@ -7,6 +7,7 @@ Não é autoridade — ver regra fundamental em [workflow.md](workflow.md).
 - [product-guidelines.md](product-guidelines.md) — invariantes/decisões (pointer)
 - [tech-stack.md](tech-stack.md) — stack (pointer)
 - [workflow.md](workflow.md) — Conductor + TLC Bridge Contract
+- [Code Style Guides](./code_styleguides/) — Clean Code moderno para código assistido por IA, com referências canônicas e foco em celular/Windows.
 - [tracks.md](tracks.md) — painel principal (status agregado)
 - [tracks/content-quality/](tracks/content-quality/plan.md) — TRACK ATIVO (2026-09-19): conteúdo médico confiável e didático
 - [tracks/ops-dev-data-and-tasklist/](tracks/ops-dev-data-and-tasklist/plan.md) — DONE (2026-09-19): dados de dev duráveis + tasklist + Analytics

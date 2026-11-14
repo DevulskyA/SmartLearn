@@ -48,6 +48,68 @@ function countRows(db, table) {
   return db.prepare(`SELECT COUNT(*) AS n FROM "${table}"`).get().n;
 }
 
+function inspectSnapshot(dbCopy) {
+  const copy = new Database(dbCopy);
+  try {
+    copy.pragma('secure_delete = ON');
+    copy.prepare('DELETE FROM sessions').run();
+    copy.exec('VACUUM');
+    copy.pragma('journal_mode = DELETE');
+    const integrityCheck = copy.pragma('integrity_check', { simple: true });
+    if (integrityCheck !== 'ok') throw new BackupError('INTEGRITY_CHECK_FAILED', `Snapshot corrompido: ${integrityCheck}`);
+    const tableCounts = Object.fromEntries(userTables(copy).map((table) => [table, countRows(copy, table)]));
+    const schemaVersion = copy.prepare('SELECT MAX(version) AS v FROM schema_migrations').get().v;
+    const sources = copy.prepare('SELECT id, user_id, filename, original_name, byte_size, checksum FROM sources ORDER BY id').all();
+    const mediaRows = hasTable(copy, 'visual_assets')
+      ? copy.prepare('SELECT id, user_id, kind, filename, mime, byte_size, sha256, source_id FROM visual_assets ORDER BY id').all()
+      : [];
+    return { integrityCheck, tableCounts, schemaVersion, sources, mediaRows };
+  } finally {
+    copy.close();
+  }
+}
+
+function copySourceFiles(sources, sourcesDir, tmp) {
+  const manifestSources = [];
+  for (const row of sources) {
+    if (!safeFilename(row.filename)) throw new BackupError('SOURCE_CORRUPT', `Fonte ${row.id}: nome de arquivo inválido no banco.`);
+    const livePath = join(sourcesDir, row.filename);
+    if (!existsSync(livePath)) throw new BackupError('SOURCE_MISSING', `Fonte ${row.id} (${row.filename}) não existe no disco.`);
+    const bytes = readFileSync(livePath);
+    if (bytes.length !== row.byte_size || sha256(bytes) !== row.checksum) {
+      throw new BackupError('SOURCE_CORRUPT', `Fonte ${row.id} (${row.filename}) não confere com o checksum registrado.`);
+    }
+    const target = join(tmp, SOURCES_DIR, row.filename);
+    writeFileSync(target, bytes);
+    tryChmod(target);
+    manifestSources.push({ id: row.id, userId: row.user_id, filename: row.filename, originalName: row.original_name, byteSize: row.byte_size, sha256: row.checksum });
+  }
+  const known = new Set(sources.map((source) => source.filename));
+  const orphanSourceFiles = existsSync(sourcesDir) ? readdirSync(sourcesDir).filter((file) => !known.has(file)).sort() : [];
+  return { manifestSources, orphanSourceFiles };
+}
+
+function copyMediaFiles(mediaRows, mediaDir, tmp) {
+  const manifestMedia = [];
+  if (mediaRows.length > 0) mkdirSync(join(tmp, MEDIA_DIR), { recursive: true });
+  for (const row of mediaRows) {
+    if (!safeFilename(row.filename)) throw new BackupError('MEDIA_CORRUPT', `Figura ${row.id}: nome de arquivo inválido no banco.`);
+    const livePath = join(mediaDir, row.filename);
+    if (!existsSync(livePath)) throw new BackupError('MEDIA_MISSING', `Figura ${row.id} (${row.filename}) não existe no disco.`);
+    const bytes = readFileSync(livePath);
+    if (bytes.length !== row.byte_size || sha256(bytes) !== row.sha256) {
+      throw new BackupError('MEDIA_CORRUPT', `Figura ${row.id} (${row.filename}) não confere com o hash registrado.`);
+    }
+    const target = join(tmp, MEDIA_DIR, row.filename);
+    writeFileSync(target, bytes);
+    tryChmod(target);
+    manifestMedia.push({ id: row.id, userId: row.user_id, kind: row.kind, filename: row.filename, mime: row.mime, byteSize: row.byte_size, sha256: row.sha256, sourceId: row.source_id });
+  }
+  const knownMedia = new Set(mediaRows.map((media) => media.filename));
+  const orphanMediaFiles = existsSync(mediaDir) ? readdirSync(mediaDir).filter((file) => !knownMedia.has(file)).sort() : [];
+  return { manifestMedia, orphanMediaFiles };
+}
+
 /**
  * Packages a backup into a NEW directory `destDir` (which must not exist):
  *   database.db   sessions-free consistent snapshot (SQLite backup API)
@@ -68,66 +130,9 @@ export async function createOperationalBackup(db, { sourcesDir, mediaDir = defau
   try {
     const dbCopy = join(tmp, DB_FILE);
     await db.backup(dbCopy);
-
-    const copy = new Database(dbCopy);
-    let sources;
-    let mediaRows;
-    let tableCounts;
-    let schemaVersion;
-    let integrityCheck;
-    try {
-      copy.pragma('secure_delete = ON');
-      copy.prepare('DELETE FROM sessions').run();
-      copy.exec('VACUUM');
-      copy.pragma('journal_mode = DELETE'); // one self-contained file, no -wal/-shm sidecars
-      integrityCheck = copy.pragma('integrity_check', { simple: true });
-      if (integrityCheck !== 'ok') throw new BackupError('INTEGRITY_CHECK_FAILED', `Snapshot corrompido: ${integrityCheck}`);
-      tableCounts = Object.fromEntries(userTables(copy).map((t) => [t, countRows(copy, t)]));
-      schemaVersion = copy.prepare('SELECT MAX(version) AS v FROM schema_migrations').get().v;
-      sources = copy.prepare('SELECT id, user_id, filename, original_name, byte_size, checksum FROM sources ORDER BY id').all();
-      mediaRows = hasTable(copy, 'visual_assets')
-        ? copy.prepare('SELECT id, user_id, kind, filename, mime, byte_size, sha256, source_id FROM visual_assets ORDER BY id').all()
-        : [];
-    } finally {
-      copy.close();
-    }
-
-    const manifestSources = [];
-    for (const row of sources) {
-      if (!safeFilename(row.filename)) throw new BackupError('SOURCE_CORRUPT', `Fonte ${row.id}: nome de arquivo inválido no banco.`);
-      const livePath = join(sourcesDir, row.filename);
-      if (!existsSync(livePath)) throw new BackupError('SOURCE_MISSING', `Fonte ${row.id} (${row.filename}) não existe no disco.`);
-      const bytes = readFileSync(livePath);
-      if (bytes.length !== row.byte_size || sha256(bytes) !== row.checksum) {
-        throw new BackupError('SOURCE_CORRUPT', `Fonte ${row.id} (${row.filename}) não confere com o checksum registrado.`);
-      }
-      const target = join(tmp, SOURCES_DIR, row.filename);
-      writeFileSync(target, bytes);
-      tryChmod(target);
-      manifestSources.push({ id: row.id, userId: row.user_id, filename: row.filename, originalName: row.original_name, byteSize: row.byte_size, sha256: row.checksum });
-    }
-
-    const known = new Set(sources.map((s) => s.filename));
-    const orphanSourceFiles = existsSync(sourcesDir) ? readdirSync(sourcesDir).filter((f) => !known.has(f)).sort() : [];
-
-    // The private images of the summaries: every file the snapshot references, checked against its recorded hash, or the whole backup fails.
-    const manifestMedia = [];
-    if (mediaRows.length > 0) mkdirSync(join(tmp, MEDIA_DIR), { recursive: true });
-    for (const row of mediaRows) {
-      if (!safeFilename(row.filename)) throw new BackupError('MEDIA_CORRUPT', `Figura ${row.id}: nome de arquivo inválido no banco.`);
-      const livePath = join(mediaDir, row.filename);
-      if (!existsSync(livePath)) throw new BackupError('MEDIA_MISSING', `Figura ${row.id} (${row.filename}) não existe no disco.`);
-      const bytes = readFileSync(livePath);
-      if (bytes.length !== row.byte_size || sha256(bytes) !== row.sha256) {
-        throw new BackupError('MEDIA_CORRUPT', `Figura ${row.id} (${row.filename}) não confere com o hash registrado.`);
-      }
-      const target = join(tmp, MEDIA_DIR, row.filename);
-      writeFileSync(target, bytes);
-      tryChmod(target);
-      manifestMedia.push({ id: row.id, userId: row.user_id, kind: row.kind, filename: row.filename, mime: row.mime, byteSize: row.byte_size, sha256: row.sha256, sourceId: row.source_id });
-    }
-    const knownMedia = new Set(mediaRows.map((m) => m.filename));
-    const orphanMediaFiles = existsSync(mediaDir) ? readdirSync(mediaDir).filter((f) => !knownMedia.has(f)).sort() : [];
+    const { integrityCheck, tableCounts, schemaVersion, sources, mediaRows } = inspectSnapshot(dbCopy);
+    const { manifestSources, orphanSourceFiles } = copySourceFiles(sources, sourcesDir, tmp);
+    const { manifestMedia, orphanMediaFiles } = copyMediaFiles(mediaRows, mediaDir, tmp);
 
     const dbBytes = readFileSync(dbCopy);
     tryChmod(dbCopy);
@@ -160,6 +165,87 @@ export async function createOperationalBackup(db, { sourcesDir, mediaDir = defau
   }
 }
 
+function readOperationalManifest(backupDir) {
+  const manifestPath = join(backupDir, MANIFEST_FILE);
+  if (!existsSync(manifestPath)) return { problems: [problem('MANIFEST_MISSING', manifestPath)] };
+  let manifest;
+  try {
+    manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  } catch {
+    return { problems: [problem('MANIFEST_INVALID', 'manifest.json não é JSON válido')] };
+  }
+  if (manifest?.manifestVersion !== OPERATIONAL_MANIFEST_VERSION || !manifest.database || !Array.isArray(manifest.sources)) {
+    return { problems: [problem('MANIFEST_INVALID', 'estrutura ou versão do manifest inesperada')] };
+  }
+  return { manifest };
+}
+
+function inspectBackupDatabase(backupDir, manifest, problems) {
+  const dbPath = join(backupDir, manifest.database.file ?? DB_FILE);
+  let dbRows = null;
+  let mediaDbRows = null;
+  if (!existsSync(dbPath)) {
+    problems.push(problem('DATABASE_MISSING', dbPath));
+    return { dbRows, mediaDbRows };
+  }
+  const bytes = readFileSync(dbPath);
+  if (bytes.length !== manifest.database.bytes || sha256(bytes) !== manifest.database.sha256) {
+    problems.push(problem('DATABASE_CORRUPT', 'tamanho/sha256 do banco não confere com o manifest'));
+    return { dbRows, mediaDbRows };
+  }
+
+  let db;
+  try {
+    db = new Database(dbPath, { readonly: true, fileMustExist: true });
+    const integrity = db.pragma('integrity_check', { simple: true });
+    if (integrity !== 'ok') problems.push(problem('DATABASE_CORRUPT', integrity));
+    for (const [table, expected] of Object.entries(manifest.database.tableCounts ?? {})) {
+      const actual = countRows(db, table);
+      if (actual !== expected) problems.push(problem('DATABASE_CONTENT_MISMATCH', `${table}: manifest ${expected}, banco ${actual}`));
+    }
+    if (countRows(db, 'sessions') > 0) problems.push(problem('SESSIONS_PRESENT', 'o pacote não pode conter sessões'));
+    dbRows = db.prepare('SELECT id, filename, checksum FROM sources ORDER BY id').all();
+    mediaDbRows = hasTable(db, 'visual_assets') ? db.prepare('SELECT id, user_id, filename, sha256 FROM visual_assets ORDER BY id').all() : [];
+  } catch (err) {
+    problems.push(problem('DATABASE_CORRUPT', err.message));
+  } finally {
+    db?.close();
+  }
+  return { dbRows, mediaDbRows };
+}
+
+function compareManifestSources(manifest, dbRows, problems) {
+  if (!dbRows) return;
+  const listed = manifest.sources.map((source) => `${source.id}:${source.filename}:${source.sha256}`).sort().join('|');
+  const inDb = dbRows.map((source) => `${source.id}:${source.filename}:${source.checksum}`).sort().join('|');
+  if (listed !== inDb) problems.push(problem('MANIFEST_DB_MISMATCH', 'as fontes do manifest não coincidem com as do banco'));
+}
+
+function compareManifestMedia(manifestMedia, mediaDbRows, problems) {
+  if (!mediaDbRows) return;
+  const listed = manifestMedia.map((media) => `${media.id}:${media.userId}:${media.filename}:${media.sha256}`).sort().join('|');
+  const inDb = mediaDbRows.map((media) => `${media.id}:${media.user_id}:${media.filename}:${media.sha256}`).sort().join('|');
+  if (listed !== inDb) problems.push(problem('MEDIA_DB_MISMATCH', 'as figuras do manifest não coincidem com as do banco (id, dono, arquivo ou hash)'));
+}
+
+function verifyListedFiles(backupDir, directory, entries, codes) {
+  const problems = [];
+  const listedFiles = new Set();
+  const filesPath = join(backupDir, directory);
+  for (const entry of entries) {
+    if (!safeFilename(entry.filename)) { problems.push(problem(codes.corrupt, `nome inválido: ${entry.filename}`)); continue; }
+    listedFiles.add(entry.filename);
+    const path = join(filesPath, entry.filename);
+    if (!existsSync(path)) { problems.push(problem(codes.missing, entry.filename)); continue; }
+    const bytes = readFileSync(path);
+    if (bytes.length !== entry.byteSize || sha256(bytes) !== entry.sha256) problems.push(problem(codes.corrupt, entry.filename));
+  }
+  if (existsSync(filesPath)) {
+    for (const file of readdirSync(filesPath)) if (!listedFiles.has(file)) problems.push(problem(codes.unlisted, file));
+  }
+  return problems;
+}
+
 /**
  * Non-destructive check of a package. Returns the list of problems (empty = intact):
  * MANIFEST_MISSING|MANIFEST_INVALID|DATABASE_MISSING|DATABASE_CORRUPT|DATABASE_CONTENT_MISMATCH|
@@ -167,90 +253,51 @@ export async function createOperationalBackup(db, { sourcesDir, mediaDir = defau
  */
 export function verifyOperationalBackup(backupDir) {
   const problems = [];
-  const manifestPath = join(backupDir, MANIFEST_FILE);
-  if (!existsSync(manifestPath)) return [problem('MANIFEST_MISSING', manifestPath)];
-  let manifest;
-  try {
-    manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
-  } catch {
-    return [problem('MANIFEST_INVALID', 'manifest.json não é JSON válido')];
-  }
-  if (manifest?.manifestVersion !== OPERATIONAL_MANIFEST_VERSION || !manifest.database || !Array.isArray(manifest.sources)) {
-    return [problem('MANIFEST_INVALID', 'estrutura ou versão do manifest inesperada')];
-  }
-
-  const dbPath = join(backupDir, manifest.database.file ?? DB_FILE);
-  let dbRows = null;
-  let mediaDbRows = null;
-  if (!existsSync(dbPath)) {
-    problems.push(problem('DATABASE_MISSING', dbPath));
-  } else {
-    const bytes = readFileSync(dbPath);
-    if (bytes.length !== manifest.database.bytes || sha256(bytes) !== manifest.database.sha256) {
-      problems.push(problem('DATABASE_CORRUPT', 'tamanho/sha256 do banco não confere com o manifest'));
-    } else {
-      let db;
-      try {
-        db = new Database(dbPath, { readonly: true, fileMustExist: true });
-        const integrity = db.pragma('integrity_check', { simple: true });
-        if (integrity !== 'ok') problems.push(problem('DATABASE_CORRUPT', integrity));
-        for (const [table, expected] of Object.entries(manifest.database.tableCounts ?? {})) {
-          const actual = countRows(db, table);
-          if (actual !== expected) problems.push(problem('DATABASE_CONTENT_MISMATCH', `${table}: manifest ${expected}, banco ${actual}`));
-        }
-        if (countRows(db, 'sessions') > 0) problems.push(problem('SESSIONS_PRESENT', 'o pacote não pode conter sessões'));
-        dbRows = db.prepare('SELECT id, filename, checksum FROM sources ORDER BY id').all();
-        mediaDbRows = hasTable(db, 'visual_assets') ? db.prepare('SELECT id, user_id, filename, sha256 FROM visual_assets ORDER BY id').all() : [];
-      } catch (err) {
-        problems.push(problem('DATABASE_CORRUPT', err.message));
-      } finally {
-        db?.close();
-      }
-    }
-  }
-
-  if (dbRows) {
-    const listed = manifest.sources.map((s) => `${s.id}:${s.filename}:${s.sha256}`).sort().join('|');
-    const inDb = dbRows.map((s) => `${s.id}:${s.filename}:${s.checksum}`).sort().join('|');
-    if (listed !== inDb) problems.push(problem('MANIFEST_DB_MISMATCH', 'as fontes do manifest não coincidem com as do banco'));
-  }
-
-  const sourcesPath = join(backupDir, SOURCES_DIR);
-  const listedFiles = new Set();
-  for (const s of manifest.sources) {
-    if (!safeFilename(s.filename)) { problems.push(problem('SOURCE_CORRUPT', `nome inválido: ${s.filename}`)); continue; }
-    listedFiles.add(s.filename);
-    const p = join(sourcesPath, s.filename);
-    if (!existsSync(p)) { problems.push(problem('SOURCE_MISSING', s.filename)); continue; }
-    const bytes = readFileSync(p);
-    if (bytes.length !== s.byteSize || sha256(bytes) !== s.sha256) problems.push(problem('SOURCE_CORRUPT', s.filename));
-  }
-  if (existsSync(sourcesPath)) {
-    for (const f of readdirSync(sourcesPath)) if (!listedFiles.has(f)) problems.push(problem('SOURCE_UNLISTED', f));
-  }
-
+  const { manifest, problems: manifestProblems } = readOperationalManifest(backupDir);
+  if (!manifest) return manifestProblems;
+  const { dbRows, mediaDbRows } = inspectBackupDatabase(backupDir, manifest, problems);
+  compareManifestSources(manifest, dbRows, problems);
+  problems.push(...verifyListedFiles(backupDir, SOURCES_DIR, manifest.sources, {
+    corrupt: 'SOURCE_CORRUPT', missing: 'SOURCE_MISSING', unlisted: 'SOURCE_UNLISTED',
+  }));
   // Private images (absent in packages made before migration 038: then the list is empty and nothing changes).
   const media = Array.isArray(manifest.media) ? manifest.media : [];
-  if (mediaDbRows) {
-    // the manifest must list exactly the assets of the database, with the same owner, file and hash: a file is never trusted on its own
-    const listed = media.map((m) => `${m.id}:${m.userId}:${m.filename}:${m.sha256}`).sort().join('|');
-    const inDb = mediaDbRows.map((m) => `${m.id}:${m.user_id}:${m.filename}:${m.sha256}`).sort().join('|');
-    if (listed !== inDb) problems.push(problem('MEDIA_DB_MISMATCH', 'as figuras do manifest não coincidem com as do banco (id, dono, arquivo ou hash)'));
-  }
-  const mediaPath = join(backupDir, MEDIA_DIR);
-  const listedMedia = new Set();
-  for (const m of media) {
-    if (!safeFilename(m.filename)) { problems.push(problem('MEDIA_CORRUPT', `nome inválido: ${m.filename}`)); continue; }
-    listedMedia.add(m.filename);
-    const p = join(mediaPath, m.filename);
-    if (!existsSync(p)) { problems.push(problem('MEDIA_MISSING', m.filename)); continue; }
-    const bytes = readFileSync(p);
-    if (bytes.length !== m.byteSize || sha256(bytes) !== m.sha256) problems.push(problem('MEDIA_CORRUPT', m.filename));
-  }
-  if (existsSync(mediaPath)) {
-    for (const f of readdirSync(mediaPath)) if (!listedMedia.has(f)) problems.push(problem('MEDIA_UNLISTED', f));
-  }
+  compareManifestMedia(media, mediaDbRows, problems);
+  problems.push(...verifyListedFiles(backupDir, MEDIA_DIR, media, {
+    corrupt: 'MEDIA_CORRUPT', missing: 'MEDIA_MISSING', unlisted: 'MEDIA_UNLISTED',
+  }));
   return problems;
+}
+
+function copyAndVerifyRestore(backupDir, targetDir, manifest, created) {
+  mkdirSync(join(targetDir, SOURCES_DIR), { recursive: true });
+  const dbPath = join(targetDir, 'smartlearn.db');
+  writeFileSync(dbPath, readFileSync(join(backupDir, manifest.database.file)));
+  created.push(dbPath);
+  for (const source of manifest.sources) {
+    const path = join(targetDir, SOURCES_DIR, source.filename);
+    writeFileSync(path, readFileSync(join(backupDir, SOURCES_DIR, source.filename)));
+    created.push(path);
+  }
+  const media = Array.isArray(manifest.media) ? manifest.media : [];
+  if (media.length > 0) mkdirSync(join(targetDir, MEDIA_DIR), { recursive: true });
+  for (const asset of media) {
+    const path = join(targetDir, MEDIA_DIR, asset.filename);
+    writeFileSync(path, readFileSync(join(backupDir, MEDIA_DIR, asset.filename)));
+    created.push(path);
+  }
+  if (sha256(readFileSync(dbPath)) !== manifest.database.sha256) throw new BackupError('RESTORE_COPY_MISMATCH', 'Cópia do banco restaurada não confere.');
+  for (const source of manifest.sources) {
+    if (sha256(readFileSync(join(targetDir, SOURCES_DIR, source.filename))) !== source.sha256) {
+      throw new BackupError('RESTORE_COPY_MISMATCH', `Cópia da fonte ${source.filename} não confere.`);
+    }
+  }
+  for (const asset of media) {
+    if (sha256(readFileSync(join(targetDir, MEDIA_DIR, asset.filename))) !== asset.sha256) {
+      throw new BackupError('RESTORE_COPY_MISMATCH', `Cópia da figura ${asset.filename} não confere.`);
+    }
+  }
+  return { dbPath, sourcesDir: join(targetDir, SOURCES_DIR), mediaDir: join(targetDir, MEDIA_DIR), manifest };
 }
 
 /**
@@ -272,34 +319,78 @@ export async function restoreOperationalBackup(backupDir, targetDir) {
   const manifest = JSON.parse(readFileSync(join(backupDir, MANIFEST_FILE), 'utf8'));
   const created = [];
   try {
-    mkdirSync(join(targetDir, SOURCES_DIR), { recursive: true });
-    const dbPath = join(targetDir, 'smartlearn.db');
-    writeFileSync(dbPath, readFileSync(join(backupDir, manifest.database.file)));
-    created.push(dbPath);
-    for (const s of manifest.sources) {
-      const p = join(targetDir, SOURCES_DIR, s.filename);
-      writeFileSync(p, readFileSync(join(backupDir, SOURCES_DIR, s.filename)));
-      created.push(p);
-    }
-    const media = Array.isArray(manifest.media) ? manifest.media : [];
-    if (media.length > 0) mkdirSync(join(targetDir, MEDIA_DIR), { recursive: true });
-    for (const m of media) {
-      const p = join(targetDir, MEDIA_DIR, m.filename);
-      writeFileSync(p, readFileSync(join(backupDir, MEDIA_DIR, m.filename)));
-      created.push(p);
-    }
-    if (sha256(readFileSync(dbPath)) !== manifest.database.sha256) throw new BackupError('RESTORE_COPY_MISMATCH', 'Cópia do banco restaurada não confere.');
-    for (const s of manifest.sources) {
-      if (sha256(readFileSync(join(targetDir, SOURCES_DIR, s.filename))) !== s.sha256) throw new BackupError('RESTORE_COPY_MISMATCH', `Cópia da fonte ${s.filename} não confere.`);
-    }
-    for (const m of media) {
-      if (sha256(readFileSync(join(targetDir, MEDIA_DIR, m.filename))) !== m.sha256) throw new BackupError('RESTORE_COPY_MISMATCH', `Cópia da figura ${m.filename} não confere.`);
-    }
-    return { dbPath, sourcesDir: join(targetDir, SOURCES_DIR), mediaDir: join(targetDir, MEDIA_DIR), manifest };
+    return copyAndVerifyRestore(backupDir, targetDir, manifest, created);
   } catch (err) {
     for (const p of created) rmSync(p, { force: true });
     if (err instanceof BackupError) throw err;
     throw new BackupError('RESTORE_FAILED', `Falha ao restaurar: ${err.message}`);
+  }
+}
+
+function inspectRehearsalDatabase(db, problems, report) {
+  const integrity = db.pragma('integrity_check', { simple: true });
+  if (integrity !== 'ok') problems.push(problem('DATABASE_CORRUPT', integrity));
+  for (const table of ['learning_units', 'exercises', 'exercise_versions', 'learning_evidence', 'sources', 'exercise_source_citations']) {
+    report.counts[table] = countRows(db, table);
+  }
+  const noVersion = db.prepare(`
+    SELECT COUNT(*) AS n FROM exercises e
+    WHERE NOT EXISTS (SELECT 1 FROM exercise_versions v WHERE v.user_id = e.user_id AND v.exercise_id = e.id)
+  `).get().n;
+  if (noVersion > 0) problems.push(problem('EXERCISE_WITHOUT_VERSION', `${noVersion} exercício(s) sem versão`));
+}
+
+function inspectRehearsalSources(db, restored, problems, report) {
+  const sourceById = new Map();
+  for (const source of db.prepare('SELECT id, user_id, filename, checksum, byte_size FROM sources').all()) {
+    sourceById.set(`${source.user_id}:${source.id}`, source);
+    report.sourcesChecked += 1;
+    const path = join(restored.sourcesDir, source.filename);
+    if (!existsSync(path)) { problems.push(problem('SOURCE_MISSING', source.filename)); continue; }
+    const bytes = readFileSync(path);
+    if (statSync(path).size !== source.byte_size || sha256(bytes) !== source.checksum) problems.push(problem('SOURCE_CORRUPT', source.filename));
+  }
+  return sourceById;
+}
+
+function checkRehearsalFigureRefs(userId, text, where, assetById, report, problems) {
+  for (const id of listFigureRefs(text)) {
+    report.figureRefsChecked += 1;
+    if (!assetById.has(`${userId}:${id}`)) problems.push(problem('FIGURE_REF_UNRESOLVED', `${where}: [[fig:${id.slice(0, 8)}…]]`));
+  }
+}
+
+function inspectRehearsalMedia(db, restored, sourceById, problems, report) {
+  report.mediaChecked = 0;
+  report.figureRefsChecked = 0;
+  if (!hasTable(db, 'visual_assets')) return;
+
+  const assetById = new Map();
+  for (const asset of db.prepare('SELECT id, user_id, filename, sha256, byte_size, kind, source_id FROM visual_assets').all()) {
+    assetById.set(`${asset.user_id}:${asset.id}`, asset);
+    report.mediaChecked += 1;
+    const path = join(restored.mediaDir, asset.filename);
+    if (!existsSync(path)) { problems.push(problem('MEDIA_MISSING', asset.filename)); continue; }
+    const bytes = readFileSync(path);
+    if (statSync(path).size !== asset.byte_size || sha256(bytes) !== asset.sha256) problems.push(problem('MEDIA_CORRUPT', asset.filename));
+    if (asset.kind === 'PDF_CROP' && !sourceById.has(`${asset.user_id}:${asset.source_id}`)) problems.push(problem('MEDIA_SOURCE_MISSING', `figura ${asset.id}`));
+  }
+  for (const unit of db.prepare('SELECT id, user_id, summary_body FROM learning_units WHERE summary_body IS NOT NULL').all()) {
+    checkRehearsalFigureRefs(unit.user_id, unit.summary_body, `aula ${unit.id}`, assetById, report, problems);
+  }
+  for (const draft of db.prepare("SELECT id, user_id, draft_json FROM generated_drafts WHERE status = 'DRAFT'").all()) {
+    try { checkRehearsalFigureRefs(draft.user_id, JSON.parse(draft.draft_json).summary, `rascunho ${draft.id}`, assetById, report, problems); } catch { /* unreadable drafts are outside this reference check */ }
+  }
+}
+
+function inspectRehearsalCitations(db, sourceById, problems, report) {
+  const pageExists = db.prepare('SELECT 1 FROM source_pages WHERE user_id = ? AND source_id = ? AND page_index = ?');
+  for (const citation of db.prepare('SELECT id, user_id, source_id, page_index FROM exercise_source_citations').all()) {
+    report.citationsChecked += 1;
+    if (!sourceById.has(`${citation.user_id}:${citation.source_id}`)) problems.push(problem('CITATION_SOURCE_MISSING', `citação ${citation.id}`));
+    else if (!pageExists.get(citation.user_id, citation.source_id, citation.page_index)) {
+      problems.push(problem('CITATION_PAGE_MISSING', `citação ${citation.id}: fonte ${citation.source_id} página ${citation.page_index}`));
+    }
   }
 }
 
@@ -322,61 +413,10 @@ export async function rehearseRestore(backupDir, { keep = false } = {}) {
     } catch (err) {
       problems.push(problem('MIGRATION_INCOMPATIBLE', err.message));
     }
-    const integrity = db.pragma('integrity_check', { simple: true });
-    if (integrity !== 'ok') problems.push(problem('DATABASE_CORRUPT', integrity));
-
-    for (const table of ['learning_units', 'exercises', 'exercise_versions', 'learning_evidence', 'sources', 'exercise_source_citations']) {
-      report.counts[table] = countRows(db, table);
-    }
-    const noVersion = db.prepare(`
-      SELECT COUNT(*) AS n FROM exercises e
-      WHERE NOT EXISTS (SELECT 1 FROM exercise_versions v WHERE v.user_id = e.user_id AND v.exercise_id = e.id)
-    `).get().n;
-    if (noVersion > 0) problems.push(problem('EXERCISE_WITHOUT_VERSION', `${noVersion} exercício(s) sem versão`));
-
-    const sourceById = new Map();
-    for (const s of db.prepare('SELECT id, user_id, filename, checksum, byte_size FROM sources').all()) {
-      sourceById.set(`${s.user_id}:${s.id}`, s);
-      report.sourcesChecked += 1;
-      const p = join(restored.sourcesDir, s.filename);
-      if (!existsSync(p)) { problems.push(problem('SOURCE_MISSING', s.filename)); continue; }
-      const bytes = readFileSync(p);
-      if (statSync(p).size !== s.byte_size || sha256(bytes) !== s.checksum) problems.push(problem('SOURCE_CORRUPT', s.filename));
-    }
-
-    // Private images: every record has its file with the right hash, and every [[fig:UUID]] in a lesson or an open draft resolves to a
-    // figure of the SAME owner (a crop also to its source). A summary pointing at nothing is reported, never silently accepted.
-    report.mediaChecked = 0;
-    report.figureRefsChecked = 0;
-    if (hasTable(db, 'visual_assets')) {
-      const assetById = new Map();
-      for (const a of db.prepare('SELECT id, user_id, filename, sha256, byte_size, kind, source_id FROM visual_assets').all()) {
-        assetById.set(`${a.user_id}:${a.id}`, a);
-        report.mediaChecked += 1;
-        const p = join(restored.mediaDir, a.filename);
-        if (!existsSync(p)) { problems.push(problem('MEDIA_MISSING', a.filename)); continue; }
-        const bytes = readFileSync(p);
-        if (statSync(p).size !== a.byte_size || sha256(bytes) !== a.sha256) problems.push(problem('MEDIA_CORRUPT', a.filename));
-        if (a.kind === 'PDF_CROP' && !sourceById.has(`${a.user_id}:${a.source_id}`)) problems.push(problem('MEDIA_SOURCE_MISSING', `figura ${a.id}`));
-      }
-      const checkRefs = (userId, text, where) => {
-        for (const id of listFigureRefs(text)) {
-          report.figureRefsChecked += 1;
-          if (!assetById.has(`${userId}:${id}`)) problems.push(problem('FIGURE_REF_UNRESOLVED', `${where}: [[fig:${id.slice(0, 8)}…]]`));
-        }
-      };
-      for (const u of db.prepare('SELECT id, user_id, summary_body FROM learning_units WHERE summary_body IS NOT NULL').all()) checkRefs(u.user_id, u.summary_body, `aula ${u.id}`);
-      for (const d of db.prepare("SELECT id, user_id, draft_json FROM generated_drafts WHERE status = 'DRAFT'").all()) {
-        try { checkRefs(d.user_id, JSON.parse(d.draft_json).summary, `rascunho ${d.id}`); } catch { /* an unreadable draft is not this check's finding */ }
-      }
-    }
-
-    const pageExists = db.prepare('SELECT 1 FROM source_pages WHERE user_id = ? AND source_id = ? AND page_index = ?');
-    for (const c of db.prepare('SELECT id, user_id, source_id, page_index FROM exercise_source_citations').all()) {
-      report.citationsChecked += 1;
-      if (!sourceById.has(`${c.user_id}:${c.source_id}`)) problems.push(problem('CITATION_SOURCE_MISSING', `citação ${c.id}`));
-      else if (!pageExists.get(c.user_id, c.source_id, c.page_index)) problems.push(problem('CITATION_PAGE_MISSING', `citação ${c.id}: fonte ${c.source_id} página ${c.page_index}`));
-    }
+    inspectRehearsalDatabase(db, problems, report);
+    const sourceById = inspectRehearsalSources(db, restored, problems, report);
+    inspectRehearsalMedia(db, restored, sourceById, problems, report);
+    inspectRehearsalCitations(db, sourceById, problems, report);
   } catch (err) {
     if (err.problems) problems.push(...err.problems);
     else problems.push(problem(err.code ?? 'REHEARSAL_FAILED', err.message));

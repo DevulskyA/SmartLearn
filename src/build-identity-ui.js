@@ -11,7 +11,7 @@ const copyMessage = document.querySelector("#copy-diagnostics-message");
 const API_BASE = (typeof window !== "undefined" && window.__SMARTLEARN_API_BASE__) || "";
 
 /** The identity embedded in THIS bundle at build time (undefined outside a Vite build, e.g. in plain Node tests). */
-export function embeddedIdentity() {
+function embeddedIdentity() {
   return typeof __APP_IDENTITY__ !== "undefined" ? __APP_IDENTITY__ : null;
 }
 

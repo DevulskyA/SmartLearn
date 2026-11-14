@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { test, expect } from '@playwright/test';
 import { answerConfirm, answerConfirmIfAsked } from './support/confirm.js';
 import { spawn } from 'node:child_process';
@@ -12,6 +13,7 @@ import { signInRegistered } from './support/session.js';
 import AxeBuilder from '@axe-core/playwright';
 import { startEditingSummary } from './support/summary-editing.js';
 
+import { generateByPages, openDraftInProgress } from './support/materials-flow.js';
 // The visual editor of the Resumo Mestre (Tiptap / ProseMirror) inside the lesson editor's Resumo tab. The textarea stays the source of
 // truth: what is proven here is that the visual path opens, edits, saves, reloads and reopens the SAME text, that an untouched summary is
 // never rewritten, and that nothing foreign (HTML, links, remote requests) gets in.
@@ -43,6 +45,31 @@ test.afterAll(async () => {
 });
 
 const outside = [];
+async function expectNoExternalRequest(page, timeout) {
+  const observed = await page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return url.protocol.startsWith('http') && !['localhost', '127.0.0.1'].includes(url.hostname);
+  }, { timeout }).then(
+    () => true,
+    (error) => {
+      if (error?.name === 'TimeoutError') return false;
+      throw error;
+    },
+  );
+  expect(observed).toBe(false);
+}
+
+async function expectNoPageError(page, timeout) {
+  const observed = await page.waitForEvent('pageerror', { timeout }).then(
+    () => true,
+    (error) => {
+      if (error?.name === 'TimeoutError') return false;
+      throw error;
+    },
+  );
+  expect(observed).toBe(false);
+}
+
 test.beforeEach(async ({ page }) => {
   outside.length = 0;
   page.on('request', (req) => { const u = new URL(req.url()); if (u.protocol.startsWith('http') && !['localhost', '127.0.0.1'].includes(u.hostname)) outside.push(req.url()); });
@@ -51,7 +78,7 @@ test.beforeEach(async ({ page }) => {
     window.__SMARTLEARN_REMOTE_MODE__ = true;
     window.__SMARTLEARN_LOCAL_AUTHORITY__ = true;
   }, API_BASE);
-  await signInRegistered(page, { email: `visual-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`, password: 'a genuinely long test password 1' });
+  await signInRegistered(page, { email: `visual-${Date.now()}-${randomUUID()}@example.com`, password: 'a genuinely long test password 1' });
 });
 
 async function openDraft(page) {
@@ -59,7 +86,7 @@ async function openDraft(page) {
   await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
   await page.setInputFiles('#sources-file-input', { name: 'aula.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf(['Fisiologia renal: filtração glomerular', 'Barreira de filtração e podócitos', 'Clearance de inulina mede a TFG']) });
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
-  await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
+  await generateByPages(page);
   const editor = page.locator('.lesson-editor');
   await expect(editor).toBeVisible({ timeout: 10000 });
   await startEditingSummary(page);
@@ -73,7 +100,7 @@ async function reopenDraft(page, editor) {
   await page.locator('[data-screen="materials"]').click();
   await page.locator('#sources-existing-list .source-existing-item', { hasText: 'aula.pdf' }).locator('[data-action="open-source"]').click();
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 15000 });
-  await page.locator('.source-proposal-item').first().locator('[data-action="open-draft"]').click();
+  await openDraftInProgress(page);
   await expect(editor).toBeVisible({ timeout: 10000 });
   await startEditingSummary(page);
 }
@@ -308,7 +335,7 @@ test('hostile content cannot get in: pasted HTML keeps only its text, no link, i
   await expect(surface(editor).locator('a, img, script, iframe, [onerror], [onmouseover]')).toHaveCount(0);
   expect(await page.evaluate(() => window.__pwned)).toBeUndefined();
   await expect(input).not.toHaveValue(/evil\.example|<script|onerror|onmouseover/);
-  await page.waitForTimeout(400);
+  await expectNoExternalRequest(page, 400);
   expect(outside).toEqual([]);
 
   // text that merely looks like Markdown or HTML is typed as text and comes back as the same text
@@ -430,10 +457,17 @@ test('after the text changed elsewhere the editor starts a fresh history (undo c
   await input.fill('Totalmente novo.\n\nOutro.');
   await visualButton(editor).click();
   await expect(surface(editor).locator('p').first()).toHaveText('Totalmente novo.');
-  await surface(editor).click();
+  // A probe keystroke makes the history observable: undo first removes it (the fresh history is live), and a second undo must not
+  // bring back the old text. Keystrokes are handled in order, so the final probe cannot pass before the second undo was applied.
+  await surface(editor).locator('p', { hasText: 'Outro.' }).click();
+  await page.keyboard.press('End');
+  await page.keyboard.type('?');
+  await expect(input).toHaveValue('Totalmente novo.\n\nOutro.?');
   await page.keyboard.press('Control+z');
-  await page.waitForTimeout(500);
-  await expect(input).toHaveValue('Totalmente novo.\n\nOutro.'); // nothing of the previous text came back
+  await expect(input).toHaveValue('Totalmente novo.\n\nOutro.');
+  await page.keyboard.press('Control+z');
+  await page.keyboard.type('.');
+  await expect(input).toHaveValue('Totalmente novo.\n\nOutro..'); // nothing of the previous text came back
   await expect(surface(editor).locator('p').first()).toHaveText('Totalmente novo.');
 
   // a file dropped on the text: no navigation; an image opens the details dialog, anything else is refused with a message
@@ -586,8 +620,8 @@ test('leaving the lesson with the visual editor open ends it cleanly: no script 
   await editor.locator('[data-action="lesson-back"]').click(); // an unsaved change may ask first (the way out saves it when it can)
   await answerConfirmIfAsked(page, true);
   await expect(page.locator('.lesson-editor')).toHaveCount(0);
-  await page.waitForTimeout(700); // longer than the editor's own write-back delay
-  expect(await page.locator('.summary-visual-content').count()).toBe(0);
+  await expectNoPageError(page, 700); // longer than the editor's own write-back delay
+  await expect(page.locator('.summary-visual-content')).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 

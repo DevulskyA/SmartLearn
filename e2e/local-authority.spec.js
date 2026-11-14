@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { test, expect } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -77,7 +78,7 @@ async function enableRemoteMode(page, { localAuthority = false, apiBase = API_BA
 }
 
 function uniqueEmail(label) {
-  return `la-${label}-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+  return `la-${label}-${Date.now()}-${randomUUID()}@example.com`;
 }
 
 async function registerAndLogin(page, email, password) {

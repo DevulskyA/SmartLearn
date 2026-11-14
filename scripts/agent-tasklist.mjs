@@ -21,20 +21,41 @@ export function parseCoordFile(text) {
   const out = {};
   let last = null;
   for (const raw of text.replace(/\r\n/g, '\n').split('\n')) {
-    const m = raw.match(/^([A-Z][A-Z0-9_]*)(?:\s*\([^)]*\))?\s*[=:]\s*(.*)$/);
-    if (m && !raw.startsWith(' ')) { last = m[1]; out[last] = m[2].trim(); continue; }
+    const entry = parseCoordEntry(raw);
+    if (entry) { last = entry.key; out[last] = entry.value; continue; }
     if (last && raw.trim()) out[last] = `${out[last]} ${raw.trim()}`.trim();
   }
   return out;
 }
 
+function parseCoordEntry(raw) {
+  const key = /^([A-Z][A-Z0-9_]*)/.exec(raw)?.[1];
+  if (!key || raw.startsWith(' ')) return null;
+  let index = skipWhitespace(raw, key.length);
+  if (raw[index] === '(') {
+    const close = raw.indexOf(')', index + 1);
+    if (close === -1) return null;
+    index = close + 1;
+  }
+  index = skipWhitespace(raw, index);
+  if (raw[index] !== '=' && raw[index] !== ':') return null;
+  index = skipWhitespace(raw, index + 1);
+  return { key, value: raw.slice(index).trim() };
+}
+
+function skipWhitespace(text, index) {
+  while (index < text.length && /\s/.test(text[index])) index += 1;
+  return index;
+}
+
 const STATUS_TO_STATE = { RUNNING: '>', TESTING: '>', COMMITTING: '>', DONE: '✓', BLOCKED: '!' };
+const CLI_STATE_LABEL = { '>': 'executando', '-': 'pausado', '!': 'bloqueado', '✓': 'parado (fatia concluída)' };
 
 /** The CLI agent publishes a status file, not a plan: derive its current card and its declared NEXT. */
 export function cliLane(coord) {
   const status = (coord.STATUS ?? '').split(/\s/)[0];
   // "STATUS=DONE" means "this slice is done"; a lane whose ACTIVE_TASK says PAUSED is stopped, not finished.
-  const paused = /^PAUSED(?![A-Za-z])/i.test(coord.ACTIVE_TASK ?? '');
+  const paused = /^PAUSED(?![a-z])/i.test(coord.ACTIVE_TASK ?? '');
   const state = paused ? '-' : (STATUS_TO_STATE[status] ?? ' ');
   const fields = {};
   if (coord.GOAL) fields.SPRINT_GOAL = coord.GOAL;
@@ -54,14 +75,16 @@ export function cliLane(coord) {
 /** GUI plan tasks as the checklist; the CLI agent is one plain line under it. */
 export function renderAgentBoard({ gui, cli, testsHtml = '', validationLine = '' }) {
   const c = cli.tasks[0];
-  const cliState = c.state === '>' ? 'executando' : c.state === '-' ? 'pausado' : c.state === '!' ? 'bloqueado' : c.state === '✓' ? 'parado (fatia concluída)' : 'sem tarefa';
+  const cliState = CLI_STATE_LABEL[c.state] ?? 'sem tarefa';
   const cliLine = `CLI (outro agente): ${cliState} — ${String(c.title).slice(0, 110)}`;
   return renderChecklistHtml({ tasks: gui.tasks, view: gui.view ?? null, extraLines: [cliLine], testsHtml, validationLine });
 }
 
 function gitOut(cwd, args) {
-  try { return execFileSync('git', args, { cwd, encoding: 'utf8' }).trim(); } catch { return ''; }
+  try { return execFileSync(GIT_EXECUTABLE, args, { cwd, encoding: 'utf8' }).trim(); } catch { return ''; }
 }
+
+const GIT_EXECUTABLE = process.platform === 'win32' ? 'C:\\Program Files\\Git\\cmd\\git.exe' : '/usr/bin/git';
 
 /**
  * The Conductor's "ACTIVE TRACK" paragraph, derived from plan.md so it can never disagree with it. Written
@@ -87,7 +110,7 @@ export function syncActiveTrack(tracksMd, block) {
 /** Every worktree of this repo that has a conductor/ folder (git worktree list). */
 export function worktreeDirs(root) {
   try {
-    const listing = execFileSync('git', ['worktree', 'list', '--porcelain'], { cwd: root, encoding: 'utf8' });
+    const listing = execFileSync(GIT_EXECUTABLE, ['worktree', 'list', '--porcelain'], { cwd: root, encoding: 'utf8' });
     return listing.split('\n').filter((l) => l.startsWith('worktree ')).map((l) => l.slice(9).trim())
       .filter((wt) => existsSync(join(wt, 'conductor')));
   } catch { return []; }

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -37,7 +38,7 @@ function makeUser(db, email) {
 }
 
 function firstTask(db, userId, studyDate = '2020-01-01') {
-  const { unit } = learningUnits.create(db, userId, { newSubjectName: `Subj-${Math.random()}`, title: 'Aula', studyDate });
+  const { unit } = learningUnits.create(db, userId, { newSubjectName: `Subj-${randomUUID()}`, title: 'Aula', studyDate });
   const task = db.prepare('SELECT id FROM review_tasks WHERE user_id = ? AND unit_id = ? ORDER BY offset_days LIMIT 1').get(userId, unit.id);
   return { unit, task };
 }

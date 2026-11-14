@@ -1,4 +1,5 @@
 import { test, expect, request as pwRequest } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -38,7 +39,7 @@ test.beforeEach(async ({ page }) => {
     window.__SMARTLEARN_API_BASE__ = base;
     window.__SMARTLEARN_REMOTE_MODE__ = true;
   }, API_BASE);
-  const email = `evidencefail-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+  const email = `evidencefail-${Date.now()}-${randomUUID()}@example.com`;
   const password = 'a genuinely long test password 1';
   creds = { email, password };
   await page.goto('/');
@@ -66,6 +67,36 @@ async function apiCall(page, path, body) {
     return res.json();
   }, { base: API_BASE, path, body });
 }
+
+async function revealStudyQuestion(page) {
+  const started = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return response.request().method() === 'POST' && /\/v1\/exercises\/\d+\/attempts$/.test(url.pathname) && response.ok();
+  });
+  await page.locator('#study-now-reveal-btn').click();
+  await started;
+}
+
+async function judgeStudyQuestion(page, selector) {
+  const previousProgress = await page.locator('#study-now-progress').textContent();
+  await page.locator(selector).click();
+  await expect(async () => {
+    const progress = await page.locator('#study-now-progress').textContent();
+    const resultVisible = await page.locator('#study-now-result-card').isVisible();
+    expect(progress !== previousProgress || resultVisible).toBe(true);
+  }).toPass({ timeout: 8000 });
+}
+
+async function judgeInlineReviewItem(page, selector) {
+  const submitted = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return response.request().method() === 'POST' && /\/v1\/attempts\/\d+\/submit$/.test(url.pathname);
+  });
+  const button = page.locator(selector).first();
+  await button.click();
+  await expect.poll(() => button.evaluate((element) => element.closest('.review-exercise-item')?.dataset.exerciseAnswered)).toBe('true');
+  await submitted;
+}
 const evidenceRows = (page, unitId) => page.evaluate(async ({ base, unitId }) => (await (await fetch(`${base}/v1/learning-evidence?unitId=${unitId}`, { credentials: 'include' })).json()).evidence, { base: API_BASE, unitId });
 const isEvidencePost = (route) => route.request().method() === 'POST' && /\/v1\/learning-evidence$/.test(new URL(route.request().url()).pathname);
 
@@ -79,11 +110,10 @@ async function studyOnce(page, title, beforeResult) {
   await row.locator('.plan-expand-btn').click();
   await row.locator('[data-action="plan-study-now"]').click();
   await expect(page.locator('#study-now-progress')).toHaveText('Questão 1 de 1');
-  await page.locator('#study-now-reveal-btn').click();
+  await revealStudyQuestion(page);
   await expect(page.locator('#study-now-judgment')).toBeVisible();
-  await page.waitForTimeout(400); // the attempt is started on the server when the answer is revealed
   await beforeResult();
-  await page.locator('#study-now-correct-btn').click();
+  await judgeStudyQuestion(page, '#study-now-correct-btn');
   await expect(page.locator('#study-now-result-card')).toBeVisible({ timeout: 8000 });
   return unit;
 }
@@ -97,14 +127,14 @@ test('T-F13-01: when the evidence request fails the result says so, and sending 
   await expect(page.locator('#study-now-evidence-note')).toBeVisible();
   await expect(page.locator('#study-now-evidence-note')).toContainText('ainda não entrou nas suas estatísticas');
   await expect(page.locator('#study-now-evidence-retry-btn')).toBeVisible();
-  expect((await evidenceRows(page, unit.id)).length).toBe(0);
+  expect(await evidenceRows(page, unit.id)).toHaveLength(0);
 
   await page.unroute('**/v1/learning-evidence');
   await page.locator('#study-now-evidence-retry-btn').click();
   await expect(page.locator('#study-now-evidence-note')).toHaveText('Resultado registrado nas suas estatísticas.');
   await expect(page.locator('#study-now-evidence-retry-btn')).toBeHidden();
   const rows = await evidenceRows(page, unit.id);
-  expect(rows.length).toBe(1);
+  expect(rows).toHaveLength(1);
   expect(rows[0].questionsCount).toBe(1);
   expect(rows[0].correctCount).toBe(1);
 });
@@ -118,11 +148,11 @@ test('T-F13-01: if the server received the evidence but the reply was lost, send
     });
   });
   await expect(page.locator('#study-now-evidence-retry-btn')).toBeVisible();
-  expect((await evidenceRows(page, unit.id)).length).toBe(1); // the server DID record it
+  expect(await evidenceRows(page, unit.id)).toHaveLength(1); // the server DID record it
   await page.locator('#study-now-evidence-retry-btn').click();
   await expect(page.locator('#study-now-evidence-note')).toHaveText('Resultado registrado nas suas estatísticas.');
   await expect(page.locator('#study-now-evidence-retry-btn')).toBeHidden();
-  expect((await evidenceRows(page, unit.id)).length).toBe(1);
+  expect(await evidenceRows(page, unit.id)).toHaveLength(1);
 });
 
 test('T-F13-01: a first pass whose evidence is recorded shows no warning', async ({ page }) => {
@@ -149,15 +179,14 @@ test('T-F13-02: a review is answered one question at a time and closes once, wit
   await page.locator('#today-focus-review-btn').click();
   await expect(page.locator('#study-now-progress')).toHaveText('Revisão: questão 1 de 3');
   for (const judge of ['#study-now-correct-btn', '#study-now-correct-btn', '#study-now-incorrect-btn']) {
-    await page.locator('#study-now-reveal-btn').click();
-    await page.locator(judge).click();
-    await page.waitForTimeout(300);
+    await revealStudyQuestion(page);
+    await judgeStudyQuestion(page, judge);
   }
   await expect(page.locator('#study-now-result-title')).toHaveText('Resultado da revisão', { timeout: 8000 });
   await expect(page.locator('#study-now-result-text')).toContainText('2/3 corretas na revisão');
   await expect(page.locator('#study-now-retest-btn')).toBeVisible(); // the wrong one can be redone
   const rows = await evidenceRows(page, unit.id);
-  expect(rows.length).toBe(1);
+  expect(rows).toHaveLength(1);
   expect(rows[0].questionsCount).toBe(3);
   expect(rows[0].correctCount).toBe(2);
   await page.locator('#study-now-done-btn').click();
@@ -169,18 +198,16 @@ test('T-F13-02: answers already given inside the Hoje row are kept: the focused 
   const unit = await reviewDueToday(page, 'Aula revisao b');
   await page.locator('.review-row [data-action="toggle-row"]').first().click();
   await page.locator('.review-exercise-item [data-action="reveal-answer"]').first().click();
-  await page.locator('.review-exercise-item [data-action="exercise-acertei"]').first().click();
-  await page.waitForTimeout(500);
+  await judgeInlineReviewItem(page, '.review-exercise-item [data-action="exercise-acertei"]');
   await page.locator('#today-focus-review-btn').click();
   await expect(page.locator('#study-now-progress')).toHaveText('Revisão: questão 1 de 2'); // one of three was already answered
   for (const judge of ['#study-now-incorrect-btn', '#study-now-correct-btn']) {
-    await page.locator('#study-now-reveal-btn').click();
-    await page.locator(judge).click();
-    await page.waitForTimeout(300);
+    await revealStudyQuestion(page);
+    await judgeStudyQuestion(page, judge);
   }
   await expect(page.locator('#study-now-result-text')).toContainText('2/3 corretas na revisão', { timeout: 8000 }); // 1 inline + 1 right + 1 wrong
   const rows = await evidenceRows(page, unit.id);
-  expect(rows.length).toBe(1);
+  expect(rows).toHaveLength(1);
   expect(rows[0].questionsCount).toBe(3);
   expect(rows[0].correctCount).toBe(2);
 });
@@ -189,8 +216,7 @@ test('T-F13-02: with nothing left to answer the focused review is not offered', 
   await reviewDueToday(page, 'Aula revisao c', 1);
   await page.locator('.review-row [data-action="toggle-row"]').first().click();
   await page.locator('.review-exercise-item [data-action="reveal-answer"]').first().click();
-  await page.locator('.review-exercise-item [data-action="exercise-acertei"]').first().click();
-  await page.waitForTimeout(500);
+  await judgeInlineReviewItem(page, '.review-exercise-item [data-action="exercise-acertei"]');
   await page.locator('[data-screen="plan"]').click();
   await page.locator('[data-screen="today"]').click();
   await expect(page.locator('#today-focus-review-btn')).toBeHidden({ timeout: 8000 });
@@ -200,14 +226,12 @@ test('T-F13-03: the final screen lists every wrong answer of the review, those g
   await reviewDueToday(page, 'Aula revisao d');
   await page.locator('.review-row [data-action="toggle-row"]').first().click();
   await page.locator('.review-exercise-item [data-action="reveal-answer"]').first().click();
-  await page.locator('.review-exercise-item [data-action="exercise-errei"]').first().click(); // wrong inside the row
-  await page.waitForTimeout(500);
+  await judgeInlineReviewItem(page, '.review-exercise-item [data-action="exercise-errei"]'); // wrong inside the row
   await page.locator('#today-focus-review-btn').click();
   await expect(page.locator('#study-now-progress')).toHaveText('Revisão: questão 1 de 2');
   for (const judge of ['#study-now-incorrect-btn', '#study-now-correct-btn']) { // one more wrong, one right
-    await page.locator('#study-now-reveal-btn').click();
-    await page.locator(judge).click();
-    await page.waitForTimeout(300);
+    await revealStudyQuestion(page);
+    await judgeStudyQuestion(page, judge);
   }
   await expect(page.locator('#study-now-result-text')).toContainText('1/3 corretas na revisão', { timeout: 8000 });
   await expect(page.locator('#study-now-errors-list li')).toHaveCount(2); // the one from the row and the one from this screen
@@ -263,7 +287,7 @@ test('H-T04: leaving the result with evidence unsent does not lose it', async ({
     await page.route('**/v1/learning-evidence', (route) => (isEvidencePost(route) ? route.abort() : route.continue()));
   });
   await expect(page.locator('#study-now-evidence-retry-btn')).toBeVisible();
-  expect((await evidenceRows(page, unit.id)).length).toBe(0);
+  expect(await evidenceRows(page, unit.id)).toHaveLength(0);
 
   await page.unroute('**/v1/learning-evidence'); // the connection is back by the time the student leaves
   await page.locator('#study-now-done-btn').click();
@@ -308,7 +332,7 @@ test('LOSS-1: evidence that failed BEFORE the write survives leaving and studyin
   offline = false; // the connection is back; the student starts another lesson (this is what used to wipe the pending evidence of A)
   const b = await studyOnce(page, 'Aula perda b', async () => {});
   await expect(async () => { expect((await evidenceRows(page, a.id)).length, 'the first block was recorded after the connection came back').toBe(1); }).toPass({ timeout: 8000 });
-  expect((await evidenceRows(page, b.id)).length).toBe(1);
+  expect(await evidenceRows(page, b.id)).toHaveLength(1);
   const keysA = keysFor(sent, a.id);
   expect(keysA.length, 'A was sent more than once').toBeGreaterThan(1);
   expect(new Set(keysA).size, 'every resend of A carries the same operationKey').toBe(1);
@@ -335,7 +359,7 @@ test('LOSS-2: evidence recorded by the server whose REPLY was lost is not duplic
   const b = await studyOnce(page, 'Aula perda d', async () => {});
   await expect(async () => { expect(keysFor(sent, a.id).length, 'A was sent again after the lost reply').toBeGreaterThan(1); }).toPass({ timeout: 8000 });
   expect((await evidenceRows(page, a.id)).length, 'no duplicate row').toBe(1);
-  expect((await evidenceRows(page, b.id)).length).toBe(1);
+  expect(await evidenceRows(page, b.id)).toHaveLength(1);
   expect(new Set(keysFor(sent, a.id)).size).toBe(1);
 });
 
@@ -364,12 +388,12 @@ test('LOSS-3: a late reply of an earlier send does not clear the pending evidenc
   const unitB = await studyOnce(page, 'Aula perda f', async () => {});
   await expect(page.locator('#study-now-evidence-retry-btn')).toBeVisible(); // B failed
   releaseA(); // A's slow send now succeeds and answers
-  await expect(async () => { expect((await evidenceRows(page, unitA.id)).length).toBe(1); }).toPass({ timeout: 8000 });
+  await expect(async () => { expect(await evidenceRows(page, unitA.id)).toHaveLength(1); }).toPass({ timeout: 8000 });
   await expect(page.locator('#study-now-evidence-retry-btn'), "A's late reply must not hide the retry of B").toBeVisible();
   bOffline = false;
   await page.locator('#study-now-evidence-retry-btn').click();
   await expect(async () => { expect((await evidenceRows(page, unitB.id)).length, 'B was recorded by the retry').toBe(1); }).toPass({ timeout: 8000 });
-  expect((await evidenceRows(page, unitA.id)).length).toBe(1);
+  expect(await evidenceRows(page, unitA.id)).toHaveLength(1);
   expect(aAttempts).toBeGreaterThan(0);
 });
 
@@ -395,11 +419,11 @@ test('LOSS-4: pending evidence is never sent under another account, and is sent 
   const sentBeforeSecondStudy = sent.length;
   offline = false;
   const b = await studyOnce(page, 'Aula perda h', async () => {});
-  expect((await evidenceRows(page, b.id)).length).toBe(1);
+  expect(await evidenceRows(page, b.id)).toHaveLength(1);
   expect(keysFor(sent.slice(sentBeforeSecondStudy), a.id), "the first student's evidence was sent under the second account").toEqual([]);
   // the first student comes back: their pending evidence is sent without studying again
   await loginAs(page, first);
-  await expect(async () => { expect((await evidenceRows(page, a.id)).length).toBe(1); }).toPass({ timeout: 8000 });
+  await expect(async () => { expect(await evidenceRows(page, a.id)).toHaveLength(1); }).toPass({ timeout: 8000 });
 });
 
 
@@ -441,8 +465,8 @@ test('EVIDENCE-RECOVERY: a new block preserves a failed result without blocking 
   await expect(page.locator('#study-now-evidence-retry-btn')).toBeHidden();
   const originalRows = await evidenceRows(page, unit.id);
   const otherRows = await evidenceRows(page, other.id);
-  expect(originalRows.length).toBe(1);
-  expect(otherRows.length).toBe(1);
+  expect(originalRows).toHaveLength(1);
+  expect(otherRows).toHaveLength(1);
   expect(originalRows[0].correctCount).toBe(1);
   expect(otherRows[0].correctCount).toBe(0);
 });
@@ -480,7 +504,7 @@ test('EVIDENCE-RECOVERY: reload retains a failed result and a lost reply replays
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
   await expect.poll(() => page.evaluate(() => Object.keys(localStorage).filter((key) => key.startsWith('smartlearn.pending-study-evidence.')).length)).toBe(0);
   expect(replayed).toEqual([original, original]);
-  expect((await evidenceRows(page, unit.id)).length).toBe(1);
+  expect(await evidenceRows(page, unit.id)).toHaveLength(1);
 });
 
 // A review concluded through the experimental panel carries the stage it practised (expectedReviewTaskId). When the server already holds a
@@ -501,9 +525,8 @@ test('REJECTED-1: a review result the server can no longer apply is shown as suc
   });
   await panel.locator('li', { hasText: 'Aula rejeitada a' }).getByRole('button', { name: 'Fazer a revisão' }).click();
   for (const judge of ['#study-now-correct-btn', '#study-now-correct-btn', '#study-now-correct-btn']) {
-    await page.locator('#study-now-reveal-btn').click();
-    await page.locator(judge).click();
-    await page.waitForTimeout(300);
+    await revealStudyQuestion(page);
+    await judgeStudyQuestion(page, judge);
   }
   await expect(page.locator('#study-now-evidence-retry-btn')).toBeVisible({ timeout: 8000 });
   expect(attempts.length).toBeGreaterThan(0);
@@ -537,9 +560,8 @@ test('REJECTED-2: a review result whose reply was lost after the server recorded
   });
   await panel.locator('li', { hasText: 'Aula rejeitada b' }).getByRole('button', { name: 'Fazer a revisão' }).click();
   for (const judge of ['#study-now-correct-btn', '#study-now-incorrect-btn', '#study-now-correct-btn']) {
-    await page.locator('#study-now-reveal-btn').click();
-    await page.locator(judge).click();
-    await page.waitForTimeout(300);
+    await revealStudyQuestion(page);
+    await judgeStudyQuestion(page, judge);
   }
   await expect(page.locator('#study-now-evidence-retry-btn')).toBeVisible({ timeout: 8000 });
   expect((await evidenceRows(page, unit.id)).length, 'the server DID record it').toBe(1);

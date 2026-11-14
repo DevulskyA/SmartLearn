@@ -75,26 +75,15 @@ export default {
   'materials.lessonQuestions.failed': 'Não foi possível abrir as perguntas desta aula.',
   'materials.action.openDraft': 'Revisar resumo',
   'materials.action.generate': 'Gerar resumo com IA',
-  'materials.proposal.fallbackTitle': 'Trecho',
-  'materials.proposal.titleLabel': 'Título do trecho, {range}',
-  'materials.proposal.saveTitle': 'Salvar título',
-  'materials.proposal.titleSaved': 'Título salvo',
-  'materials.proposal.saveFailed': 'Não foi possível salvar o título.',
-  'materials.proposal.showExcerpt': 'Ver trecho da fonte',
   'materials.range.use': 'Usar estas páginas',
-  'materials.proposal.hideExcerpt': 'Ocultar trecho da fonte',
   'materials.proposal.lessonCreated': 'Aula já criada a partir deste trecho.',
   'materials.proposal.stalledHint': 'Sem sinal do serviço de IA há algum tempo. Isso nem sempre é problema; a geração continua.',
 
   // Document index
-  'materials.index.summary.one': 'Explorar os conteúdos do documento ({count})',
-  'materials.index.summary.other': 'Explorar os conteúdos do documento ({count})',
-  'materials.index.summary.initial': 'Explorar os conteúdos do documento',
-  'materials.editorial.summary': 'Páginas editoriais ({count}) — não geram conteúdo',
-  'materials.editorial.summary.initial': 'Páginas editoriais',
 
   // Topic search
   'materials.topic.rangeChars': '{range} · {chars} caracteres',
+  'materials.topic.minutes': 'Cerca de {minutes} min de aula (estimativa: o livro não tem horas).',
   'materials.topic.tooShort': 'Digite ao menos duas letras do assunto.',
   'materials.topic.searching': 'Procurando no documento…',
   'materials.topic.searchFailed': 'Não foi possível buscar o assunto.',

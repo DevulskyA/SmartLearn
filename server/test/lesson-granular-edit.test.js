@@ -115,7 +115,7 @@ test('deleting a question keeps the other ids stable and never reuses the remove
     let after = drafts.deleteQuestion(db, userId, draftId, q2.id);
     assert.deepEqual(after.questions.map((q) => q.id), [q1.id, q3.id]);
     assert.throws(() => drafts.reviseQuestion(db, userId, draftId, q2.id, { answer: 'x' }), (e) => e.code === 'NOT_FOUND');
-    after = drafts.deleteQuestion(db, userId, draftId, q3.id);
+    drafts.deleteQuestion(db, userId, draftId, q3.id);
     assert.throws(() => drafts.deleteQuestion(db, userId, draftId, q1.id), (e) => e.code === 'INVALID_STATE');
   } finally { cleanup(); }
 });

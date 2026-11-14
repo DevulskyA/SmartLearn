@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { test, expect } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -36,7 +37,7 @@ test.beforeEach(async ({ page }) => {
     window.__SMARTLEARN_API_BASE__ = base;
     window.__SMARTLEARN_REMOTE_MODE__ = true;
     }, API_BASE);
-  const email = `kbd-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+  const email = `kbd-${Date.now()}-${randomUUID()}@example.com`;
   const password = 'a genuinely long test password 1';
   await page.goto('/');
   await page.waitForLoadState('networkidle');

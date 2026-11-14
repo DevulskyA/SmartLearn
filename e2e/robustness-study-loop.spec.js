@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { test, expect } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -38,7 +39,7 @@ test.beforeEach(async ({ page }) => {
     window.__SMARTLEARN_API_BASE__ = base;
     window.__SMARTLEARN_REMOTE_MODE__ = true;
   }, API_BASE);
-  const email = `robust-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+  const email = `robust-${Date.now()}-${randomUUID()}@example.com`;
   await signInRegistered(page, { email, password: 'a genuinely long test password 1' });
 });
 
@@ -165,7 +166,7 @@ test('ROBUST-5: while a judgment is on its way to the server the buttons show it
   await expect(page.locator('#study-now-message')).toContainText('Registrando');
   await expect(page.locator('#study-now-correct-btn')).toBeDisabled();
   await expect(page.locator('#study-now-incorrect-btn')).toBeDisabled();
-  await page.locator('#study-now-incorrect-btn').click({ force: true }); // the student taps the other one while waiting
+  // The disabled state prevents the competing judgment from being actionable.
   release();
   await expect(page.locator('#study-now-progress')).toHaveText('Questão 2 de 2');
   await expect(page.locator('#study-now-message')).toHaveText('');

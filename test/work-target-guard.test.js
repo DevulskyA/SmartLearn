@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync, mkdirSync, copyFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
+import { resolveGitExecutable } from './system-executables.mjs';
 import { fileURLToPath } from 'node:url';
 import { evaluate, branchAllowed } from '../scripts/work-target-guard.mjs';
 
@@ -12,11 +13,11 @@ const ALLOWED = ['claude/smartlearn-v1-complete', 'candidate/*'];
 
 function repo(branch, { detach = false } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'sl-guard-'));
-  execFileSync('git', ['init', '-q', '-b', branch], { cwd: root });
+  execFileSync(resolveGitExecutable(), ['init', '-q', '-b', branch], { cwd: root });
   mkdirSync(join(root, 'scripts'));
   for (const f of ['work-target-guard.mjs', 'work-branches.json']) copyFileSync(join(scripts, f), join(root, 'scripts', f));
-  execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'x'], { cwd: root });
-  if (detach) execFileSync('git', ['checkout', '-q', '--detach'], { cwd: root });
+  execFileSync(resolveGitExecutable(), ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'x'], { cwd: root });
+  if (detach) execFileSync(resolveGitExecutable(), ['checkout', '-q', '--detach'], { cwd: root });
   return root;
 }
 function run(cwd, scriptRoot, vars = {}) {

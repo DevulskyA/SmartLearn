@@ -87,7 +87,9 @@ test('T12: real client IP (not a spoofable header) is what actually gates the pe
       // regardless of X-Forwarded-For when trustProxy is false — confirm
       // Fastify's own request.ip resolution, not our rate limiter, is what
       // provides this guarantee.
+      // eslint-disable-next-line sonarjs/no-hardcoded-ip -- distinct in-process spoofed client IPs are the test vectors.
       const res1 = await app.inject({ method: 'GET', url: '/v1/auth/me', headers: { 'x-forwarded-for': '1.2.3.4' } });
+      // eslint-disable-next-line sonarjs/no-hardcoded-ip -- distinct in-process spoofed client IPs are the test vectors.
       const res2 = await app.inject({ method: 'GET', url: '/v1/auth/me', headers: { 'x-forwarded-for': '5.6.7.8' } });
       // Both are 401 (no session either way) — this test's real assertion is
       // that request.ip below is identical, proving the header is ignored.

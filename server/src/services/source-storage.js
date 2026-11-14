@@ -183,7 +183,9 @@ export function readVerifiedFile(db, userId, id, sourcesDir) {
   let bytes;
   try {
     bytes = readFileSync(join(sourcesDir, row.filename));
-  } catch {
+  } catch (err) {
+    // Only a file that is really not there is "missing"; a permission or disk fault (EACCES, EIO) is a server error, not the student's doing.
+    if (err?.code !== 'ENOENT' && err?.code !== 'ENOTDIR') throw err;
     throw new SourceError('SOURCE_FILE_MISSING', dm('SOURCE_FILE_MISSING'));
   }
   if (bytes.length !== row.byte_size || sha256Hex(bytes) !== row.checksum) {

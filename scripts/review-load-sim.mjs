@@ -8,6 +8,29 @@ import { REVIEW_DAY_OFFSETS } from '../shared/review-schedule.js';
 
 const OFFSETS = REVIEW_DAY_OFFSETS;
 
+function dueReviews(units, fixed, day, policy) {
+  return policy === 'FIXED16'
+    ? fixed.filter((t) => t.doneOn === null && t.due <= day).sort((a, b) => a.due - b.due)
+    : units.filter((u) => u.stage < OFFSETS.length && u.due <= day).sort((a, b) => a.due - b.due);
+}
+
+function performReview(item, day, policy) {
+  if (policy === 'FIXED16') {
+    item.doneOn = day;
+    return;
+  }
+  const nextOffset = OFFSETS[item.stage + 1];
+  const gap = nextOffset === undefined ? 0 : nextOffset - OFFSETS[item.stage];
+  item.stage += 1;
+  item.due = day + gap;
+}
+
+function overdueAtEnd(units, fixed, horizon, policy) {
+  return policy === 'FIXED16'
+    ? fixed.filter((t) => t.doneOn === null && t.due < horizon - 7).length
+    : units.filter((u) => u.stage < OFFSETS.length && u.due < horizon - 7).length;
+}
+
 /**
  * @param {object} cfg
  * @param {number[]} cfg.studyDays   day each unit is first studied
@@ -25,9 +48,7 @@ export function simulate({ studyDays, active, capacity, horizon, policy }) {
   const out = { peakBacklog: 0, backlogOnReturn: 0, performed: 0, maxDayLoad: 0, overdueOver7AtEnd: 0, falselyDone: 0 };
   let sawGap = false;
   for (let day = 0; day <= horizon; day += 1) {
-    const dueNow = policy === 'FIXED16'
-      ? fixed.filter((t) => t.doneOn === null && t.due <= day).sort((a, b) => a.due - b.due)
-      : units.filter((u) => u.stage < OFFSETS.length && u.due <= day).sort((a, b) => a.due - b.due);
+    const dueNow = dueReviews(units, fixed, day, policy);
     out.peakBacklog = Math.max(out.peakBacklog, dueNow.length);
     if (!active(day)) { sawGap = true; continue; }
     if (sawGap) { out.backlogOnReturn = Math.max(out.backlogOnReturn, dueNow.length); sawGap = false; }
@@ -35,18 +56,10 @@ export function simulate({ studyDays, active, capacity, horizon, policy }) {
     out.maxDayLoad = Math.max(out.maxDayLoad, dueNow.length);
     for (const item of todays) {
       out.performed += 1;
-      if (policy === 'FIXED16') item.doneOn = day;
-      else {
-        const gap = OFFSETS[item.stage + 1] === undefined ? 0 : OFFSETS[item.stage + 1] - OFFSETS[item.stage];
-        item.stage += 1;
-        item.due = day + gap;
-      }
+      performReview(item, day, policy);
     }
   }
-  const end = policy === 'FIXED16'
-    ? fixed.filter((t) => t.doneOn === null && t.due < horizon - 7).length
-    : units.filter((u) => u.stage < OFFSETS.length && u.due < horizon - 7).length;
-  out.overdueOver7AtEnd = end;
+  out.overdueOver7AtEnd = overdueAtEnd(units, fixed, horizon, policy);
   return out;
 }
 

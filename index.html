@@ -1,9 +1,25 @@
 ﻿<!doctype html>
-<html lang="pt-BR">
+<html lang="pt-BR" class="sl-redesign sl-booting">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#f7f7f3" />
+    <!-- Clean F5: the redesign class is static (never added late by a module), the canvas takes the last theme's colour before the first paint,
+         and the body stays hidden only until the theme tokens are applied. A timer releases it if the app script never runs. -->
+    <style>
+      html.sl-booting body { visibility: hidden; }
+      @media (prefers-color-scheme: dark) { html.sl-booting { background: #11131a; color-scheme: dark; } }
+    </style>
+    <script>
+      (function () {
+        var root = document.documentElement;
+        try {
+          var paint = JSON.parse(localStorage.getItem("smartlearn:theme-paint") || "null");
+          if (paint && typeof paint.bg === "string") { root.style.background = paint.bg; root.style.colorScheme = paint.mode === "dark" ? "dark" : "light"; }
+        } catch (e) { /* no cache yet: the media query above covers a dark system */ }
+        setTimeout(function () { root.classList.remove("sl-booting"); }, 20000);
+      })();
+    </script>
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/src/styles.css" />
@@ -30,8 +46,12 @@
     <script type="module">
       import { applyThemePreference, getStoredThemePreference } from "/src/theme.js";
 
-      document.documentElement.classList.add("sl-redesign");
       applyThemePreference(getStoredThemePreference());
+      // Reveal only after BOTH stylesheets are applied: on a slow link the module can run before the CSS arrives, which showed raw HTML.
+      const sheetsReady = [...document.querySelectorAll('link[rel="stylesheet"]')].map((link) => (link.sheet
+        ? Promise.resolve()
+        : new Promise((done) => { link.addEventListener("load", done, { once: true }); link.addEventListener("error", done, { once: true }); })));
+      Promise.all(sheetsReady).then(() => document.documentElement.classList.remove("sl-booting"));
     </script>
     <script type="module" src="/src/app.js"></script>
   </head>
@@ -43,7 +63,7 @@
         <span class="sl-chrome-context" id="chrome-context" data-i18n="screens.chrome.section">Seu espaço de aprendizagem</span>
         <div class="sl-chrome-right">
         <span class="sl-chrome-label" data-i18n="screens.chrome.tagline">Aprender · Revisar · Evoluir</span>
-        <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Alternar tema rápido" title="Alternar tema rápido">
+        <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Alternar tema rápido" title="Alternar tema rápido" data-i18n-aria-label="screens.chrome.themeToggle" data-i18n-title="screens.chrome.themeToggle">
           <svg class="theme-icon-moon" aria-hidden="true" viewBox="0 0 24 24">
             <path d="M20 14.5A8 8 0 0 1 9.5 4a7 7 0 1 0 10.5 10.5Z" />
           </svg>
@@ -256,7 +276,7 @@
               </div>
               <div class="field-group form-grid-wide">
                 <label for="plan-study-summary"><span data-i18n="screens.form.summary">Resumo Mestre</span> <span class="optional-label" data-i18n="screens.form.optional">(opcional)</span></label>
-                <textarea id="plan-study-summary" rows="4" placeholder="Escreva aqui o resumo do conteúdo estudado…" data-i18n-placeholder="screens.form.summaryPlaceholder"></textarea>
+                <textarea id="plan-study-summary" maxlength="200000" rows="4" placeholder="Escreva aqui o resumo do conteúdo estudado…" data-i18n-placeholder="screens.form.summaryPlaceholder"></textarea>
               </div>
             </div>
             <div class="form-actions">
@@ -268,7 +288,7 @@
 
           <div class="sl-plan-toolbar">
             <label class="sl-search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
-              <input type="search" id="plan-search" autocomplete="off" aria-label="Buscar nas aulas" data-i18n-aria-label="screens.plan.search.label" placeholder="Conteúdo, disciplina ou fonte" data-i18n-placeholder="screens.plan.search.placeholder">
+              <input type="search" id="plan-search" maxlength="200" autocomplete="off" aria-label="Buscar nas aulas" data-i18n-aria-label="screens.plan.search.label" placeholder="Conteúdo, disciplina ou fonte" data-i18n-placeholder="screens.plan.search.placeholder">
             </label>
             <span class="sl-list-count" id="plan-count" role="status" aria-live="polite" hidden></span>
             <div class="sl-top-pager" id="plan-top-pager" hidden>
@@ -355,7 +375,7 @@
 
                 <div class="field-group form-grid-wide">
                   <label for="study-summary" data-i18n="screens.form.summary">Resumo Mestre</label>
-                  <textarea id="study-summary" name="studySummary" rows="8" placeholder="Cole ou escreva seu resumo. Você pode editar depois." data-i18n-placeholder="screens.register.summaryPlaceholder"></textarea>
+                  <textarea id="study-summary" maxlength="200000" name="studySummary" rows="8" placeholder="Cole ou escreva seu resumo. Você pode editar depois." data-i18n-placeholder="screens.register.summaryPlaceholder"></textarea>
                 </div>
               </div>
 
@@ -420,7 +440,7 @@
                   <option value="" data-i18n="screens.stats.period.all">Todo o histórico</option>
                 </select>
               </label>
-              <label class="field-group v5-global-search"><span data-i18n="screens.stats.search.label">Buscar</span><input id="stats-global-search" type="search" placeholder="Disciplina, conteúdo ou aula" data-i18n-placeholder="screens.stats.search.placeholder" aria-label="Buscar na análise completa" data-i18n-aria-label="screens.stats.search.aria"><small id="stats-global-search-count" class="v5-search-count" role="status" aria-live="polite"></small></label>
+              <label class="field-group v5-global-search"><span data-i18n="screens.stats.search.label">Buscar</span><input id="stats-global-search" maxlength="200" type="search" placeholder="Disciplina, conteúdo ou aula" data-i18n-placeholder="screens.stats.search.placeholder" aria-label="Buscar na análise completa" data-i18n-aria-label="screens.stats.search.aria"><small id="stats-global-search-count" class="v5-search-count" role="status" aria-live="polite"></small></label>
             </div>
           </header>
 
@@ -477,7 +497,7 @@
             <label class="field-group"><span data-i18n="screens.form.subject">Disciplina</span><select id="stats-filter-subject" aria-label="Filtrar disciplina" data-i18n-aria-label="screens.stats.table.filter.subjectAria"><option value="0" data-i18n="screens.filter.allSubjects">Todas as disciplinas</option></select></label>
             <label class="field-group"><span data-i18n="screens.stats.table.filter.band">Faixa de desempenho</span><select id="stats-filter-band" aria-label="Filtrar faixa de desempenho" data-i18n-aria-label="screens.stats.table.filter.bandAria"><option value="all" data-i18n="screens.stats.table.filter.bandAll">Todas as faixas</option><option value="critical" data-i18n="screens.stats.table.filter.critical">Crítico (&lt;50%)</option><option value="attention" data-i18n="screens.stats.table.filter.attention">Atenção (50–64%)</option><option value="adequate" data-i18n="screens.stats.table.filter.adequate">Adequado (65–79%)</option><option value="strong" data-i18n="screens.stats.table.filter.strong">Forte (80%+)</option><option value="insufficient" data-i18n="screens.stats.table.filter.insufficient">Amostra insuficiente</option></select></label>
             <label class="field-group"><span data-i18n="screens.stats.col.trend">Tendência</span><select id="stats-filter-trend" aria-label="Filtrar tendência" data-i18n-aria-label="screens.stats.table.filter.trendAria"><option value="all" data-i18n="screens.stats.table.filter.trendAll">Todas</option><option value="DECLINING" data-i18n="screens.stats.table.filter.declining">Em queda</option><option value="IMPROVING" data-i18n="screens.stats.table.filter.improving">Em melhora</option><option value="STABLE" data-i18n="screens.stats.table.filter.stable">Estável</option><option value="INSUFFICIENT" data-i18n="screens.stats.table.filter.insufficientTrend">Sem tendência confiável</option></select></label>
-            <label class="field-group v5-table-search"><span data-i18n="screens.stats.table.filter.search">Pesquisar resultados</span><input type="search" id="stats-table-search" aria-label="Pesquisar todas as disciplinas, conteúdos e aulas" data-i18n-aria-label="screens.stats.table.filter.searchAria" placeholder="Buscar por nome ou data…" data-i18n-placeholder="screens.stats.table.filter.searchPlaceholder"></label>
+            <label class="field-group v5-table-search"><span data-i18n="screens.stats.table.filter.search">Pesquisar resultados</span><input type="search" id="stats-table-search" maxlength="200" aria-label="Pesquisar todas as disciplinas, conteúdos e aulas" data-i18n-aria-label="screens.stats.table.filter.searchAria" placeholder="Buscar por nome ou data…" data-i18n-placeholder="screens.stats.table.filter.searchPlaceholder"></label>
           </div>
           <p class="v5-scroll-instruction" data-i18n="screens.stats.table.scrollInstruction">Em telas estreitas, deslize a tabela para consultar todas as colunas. A ordenação vale para todos os resultados, inclusive os de outras páginas.</p>
           <div id="stats-body" role="tabpanel" tabindex="0" aria-labelledby="tab-stats-subject"></div>
@@ -498,7 +518,7 @@
 
           <section class="stats-panel sl-history-panel" id="stats-history-panel" aria-labelledby="exercise-notes-title">
             <div class="stats-panel-heading"><div><h2 id="exercise-notes-title" data-i18n="screens.stats.history.title">Histórico de exercícios</h2><p class="stats-panel-note" data-i18n="screens.stats.history.note">Respostas registradas, com data e contexto. Mostra todo o histórico, sem o filtro de período.</p></div><button type="button" class="text-button" id="stats-export" data-i18n="screens.stats.history.export">Exportar CSV</button></div>
-            <div class="sl-history-tools"><label class="field-group"><span data-i18n="screens.stats.history.search">Buscar conteúdo</span><input id="stats-history-search" type="search" placeholder="Aula, tema, disciplina ou data" data-i18n-placeholder="screens.stats.history.searchPlaceholder" aria-label="Buscar no histórico" data-i18n-aria-label="screens.stats.history.searchAria"></label><label class="field-group"><span data-i18n="screens.form.subject">Disciplina</span><select id="stats-history-subject" aria-label="Filtrar histórico por disciplina" data-i18n-aria-label="screens.stats.history.subjectAria"><option value="0" data-i18n="screens.filter.allSubjects">Todas as disciplinas</option></select></label></div>
+            <div class="sl-history-tools"><label class="field-group"><span data-i18n="screens.stats.history.search">Buscar conteúdo</span><input id="stats-history-search" maxlength="200" type="search" placeholder="Aula, tema, disciplina ou data" data-i18n-placeholder="screens.stats.history.searchPlaceholder" aria-label="Buscar no histórico" data-i18n-aria-label="screens.stats.history.searchAria"></label><label class="field-group"><span data-i18n="screens.form.subject">Disciplina</span><select id="stats-history-subject" aria-label="Filtrar histórico por disciplina" data-i18n-aria-label="screens.stats.history.subjectAria"><option value="0" data-i18n="screens.filter.allSubjects">Todas as disciplinas</option></select></label></div>
             <div class="table-scroll"><table class="stats-table" id="stats-history-table"><thead><tr><th scope="col" data-history-key="date" aria-sort="none"><button type="button" class="th-sort-btn" data-history-sort="date" aria-label="Ordenar histórico por data" data-i18n-aria-label="screens.stats.history.col.dateAria"><span data-i18n="screens.stats.history.col.date">Data</span> <span class="sl-sort-glyph" aria-hidden="true">↓</span></button></th><th scope="col" data-history-key="subjectName" aria-sort="none"><button type="button" class="th-sort-btn" data-history-sort="subjectName" aria-label="Ordenar histórico por disciplina" data-i18n-aria-label="screens.stats.history.col.subjectAria"><span data-i18n="screens.stats.history.col.subject">Disciplina</span> <span class="sl-sort-glyph" aria-hidden="true">↕</span></button></th><th scope="col" data-history-key="title" aria-sort="none"><button type="button" class="th-sort-btn" data-history-sort="title" aria-label="Ordenar histórico por conteúdo" data-i18n-aria-label="screens.stats.history.col.contentAria"><span data-i18n="screens.stats.history.col.content">Conteúdo</span> <span class="sl-sort-glyph" aria-hidden="true">↕</span></button></th><th scope="col" data-history-key="questions" aria-sort="none"><button type="button" class="th-sort-btn" data-history-sort="questions" aria-label="Ordenar histórico por questões" data-i18n-aria-label="screens.stats.history.col.questionsAria"><span data-i18n="screens.stats.history.col.questions">Questões</span> <span class="sl-sort-glyph" aria-hidden="true">↕</span></button></th><th scope="col" data-history-key="correct" aria-sort="none"><button type="button" class="th-sort-btn" data-history-sort="correct" aria-label="Ordenar histórico por acertos" data-i18n-aria-label="screens.stats.history.col.correctAria"><span data-i18n="screens.stats.history.col.correct">Acertos</span> <span class="sl-sort-glyph" aria-hidden="true">↕</span></button></th><th scope="col" data-history-key="accuracy" aria-sort="none"><button type="button" class="th-sort-btn" data-history-sort="accuracy" aria-label="Ordenar histórico por resultado" data-i18n-aria-label="screens.stats.history.col.resultAria"><span data-i18n="screens.stats.history.col.result">Resultado</span> <span class="sl-sort-glyph" aria-hidden="true">↕</span></button></th></tr></thead><tbody id="exercise-notes-body"></tbody></table></div>
             <p class="panel-empty" id="exercise-notes-empty" data-i18n="screens.stats.exercises.empty">Registre exercícios concluídos para ver a lista.</p>
             <div class="sl-sticky-bottom"><span class="sl-caption" id="evidence-count" role="status" aria-live="polite"></span><div class="settings-actions"><button type="button" class="small-button" data-history="prev" data-i18n="screens.stats.history.prev">Anterior</button><button type="button" class="small-button" data-history="next" data-i18n="screens.stats.history.next">Próxima</button></div></div>
@@ -518,10 +538,28 @@
             </div>
             <p class="sl-caption sl-mt" data-i18n="screens.settings.appearance.caption">Suas escolhas ficam salvas neste dispositivo. O tema Sistema acompanha a aparência do Windows.</p>
           </section>
-          <section class="settings-card" id="generation-language-card" aria-labelledby="generation-language-title" hidden>
+          <section class="settings-card" id="ui-language-card" aria-labelledby="ui-language-title">
+  <div class="section-heading">
+    <h2 id="ui-language-title" data-i18n="appUiLanguage.title">Idioma da interface</h2>
+    <p data-i18n="appUiLanguage.description">Altera os textos e botões do aplicativo. O idioma do material gerado é configurado separadamente.</p>
+  </div>
+  <div class="form-grid">
+    <label class="field-group" for="ui-language-select">
+      <span data-i18n="appUiLanguage.label">Idioma da interface</span>
+      <select id="ui-language-select" name="uiLocale" aria-describedby="ui-language-message">
+        <option value="pt-BR" data-i18n="appUiLanguage.option.ptBR">Português (Brasil)</option>
+        <option value="en" data-i18n="appUiLanguage.option.en">English</option>
+        <option value="es" data-i18n="appUiLanguage.option.es">Español</option>
+      </select>
+    </label>
+  </div>
+  <button class="secondary-button" id="ui-language-save" type="button" data-i18n="appUiLanguage.save">Salvar idioma da interface</button>
+  <p class="form-message" id="ui-language-message" role="status" aria-live="polite"></p>
+</section>
+<section class="settings-card" id="generation-language-card" aria-labelledby="generation-language-title" hidden>
             <div class="section-heading">
               <h2 id="generation-language-title" data-i18n="screens.settings.language.title">Organização e idioma</h2>
-              <p data-i18n="screens.settings.language.body">Vale só para novos resumos, questões, respostas e explicações, independentemente do idioma do livro. Os botões e textos do aplicativo continuam em português. O conteúdo já salvo não será traduzido automaticamente.</p>
+              <p data-i18n="screens.settings.language.body">Define o idioma de novos resumos, questões, respostas e explicações, independentemente do idioma do livro. O idioma da interface é escolhido separadamente. O conteúdo já salvo não será traduzido automaticamente.</p>
             </div>
             <div class="form-grid">
               <label class="field-group" for="generation-language-select">
@@ -562,7 +600,7 @@
               <button class="secondary-button" id="export-backup" type="button" data-i18n="screens.settings.backup.export">Exportar backup</button>
               <button class="secondary-button file-button" id="choose-backup-file" type="button" data-i18n="screens.settings.backup.import">Restaurar backup</button>
               <input class="visually-hidden" id="import-backup" type="file" accept=".json,application/json" tabindex="-1" aria-hidden="true" />
-              <p class="backup-date" id="last-backup-label">Nenhum backup exportado.</p>
+              <p class="backup-date" id="last-backup-label" data-i18n="appBackup.none">Nenhum backup exportado.</p>
             </div>
             <p class="form-message" id="backup-message" role="status" aria-live="polite"></p>
           </section>
@@ -646,21 +684,25 @@
           <section class="settings-card" id="sources-card" aria-labelledby="sources-title">
             <div class="sl-library-heading">
               <div class="section-heading">
-                <h2 id="sources-title" data-i18n="screens.materials.sources.title">Um novo ponto de partida.</h2>
-                <p data-i18n="screens.materials.sources.body">Adicione um PDF ou continue com um material da sua biblioteca. Seus resumos e suas edições continuam salvos.</p>
+                <h2 id="sources-title" data-i18n="screens.materials.sources.title">Adicionar material</h2>
+                <p data-i18n="screens.materials.sources.body">Passo a passo: 1. Toque em “Adicionar PDF” e escolha o arquivo (o título vem do nome dele). 2. Abra o material na biblioteca logo abaixo. 3. Escolha as páginas ou busque a seção pelo título.</p>
               </div>
               <div class="settings-actions">
-                <button class="secondary-button file-button" id="sources-choose-file" type="button" data-i18n="screens.materials.sources.choose">+ Adicionar PDF</button>
+                <button class="primary-button file-button" id="sources-choose-file" type="button" data-i18n="screens.materials.sources.choose">+ Adicionar PDF</button>
                 <input class="visually-hidden" id="sources-file-input" type="file" accept=".pdf,application/pdf" tabindex="-1" aria-hidden="true" />
               </div>
             </div>
+            <div class="sources-open-bar" id="sources-open-bar" hidden>
+              <button class="text-button" id="sources-back" type="button" data-i18n="screens.materials.back">← Voltar à biblioteca</button>
+              <strong id="sources-open-title"></strong>
+            </div>
             <div class="sources-existing" id="sources-existing" hidden>
-              <h3 class="sources-subheading" id="sources-existing-title" data-i18n="screens.materials.existing.title">Sua biblioteca</h3>
+              <h3 class="sources-subheading" id="sources-existing-title" data-i18n="screens.materials.existing.title">Buscar materiais</h3>
               <p class="field-hint" data-i18n="screens.materials.existing.hint">Abra um material para escolher as páginas ou retomar um resumo preparado. O SmartLearn guarda uma cópia de cada PDF dentro do próprio app.</p>
               <div class="sl-library-tools" id="library-tools" aria-label="Encontrar materiais" data-i18n-aria-label="screens.materials.library.toolsLabel" hidden>
                 <label class="field-group" for="library-search">
                   <span data-i18n="screens.materials.library.search">Buscar na biblioteca</span>
-                  <input id="library-search" type="search" autocomplete="off" placeholder="Título do PDF ou documento" data-i18n-placeholder="screens.materials.library.searchPlaceholder" />
+                  <input id="library-search" maxlength="200" type="search" autocomplete="off" placeholder="Título do PDF ou documento" data-i18n-placeholder="screens.materials.library.searchPlaceholder" />
                 </label>
                 <label class="field-group" for="library-sort">
                   <span data-i18n="screens.materials.library.sort">Organizar</span>
@@ -690,6 +732,8 @@
               </div>
             </div>
             <p class="form-message" id="sources-message" role="status" aria-live="polite"></p>
+            <!-- The running generation sits right under the document's title, above everything that starts one: it is what the student is waiting for, so it never opens below the fold. -->
+            <div class="sources-generation" id="sources-generation" role="group" aria-label="Geração em andamento" data-i18n-aria-label="screens.materials.generation.label" hidden></div>
             <div id="sources-proposals-panel" hidden>
               <p id="sources-coverage-note" class="form-message" role="note" hidden></p>
               <div class="sources-drafts" id="sources-drafts" hidden>
@@ -712,22 +756,13 @@
                 <p class="sources-or" aria-hidden="true" data-i18n="screens.materials.or">ou</p>
                 <p class="sources-choice-label" id="sources-search-label" data-i18n="screens.materials.topic.byTitle">Localizar pelo título da seção</p>
                 <form class="sources-topic-form" id="sources-topic-form" role="search" aria-labelledby="sources-search-label">
-                  <input class="sources-topic-input" id="sources-topic-input" type="search" autocomplete="off" placeholder="Ex.: filtração glomerular" data-i18n-placeholder="screens.materials.topic.placeholder" aria-label="Título da seção a buscar" data-i18n-aria-label="screens.materials.topic.label" aria-describedby="sources-topic-hint" />
+                  <input class="sources-topic-input" id="sources-topic-input" maxlength="200" type="search" autocomplete="off" placeholder="Ex.: filtração glomerular" data-i18n-placeholder="screens.materials.topic.placeholder" aria-label="Título da seção a buscar" data-i18n-aria-label="screens.materials.topic.label" aria-describedby="sources-topic-hint" />
                   <button class="secondary-button" type="submit" data-i18n="screens.materials.topic.search">Buscar</button>
                 </form>
                 <p class="lesson-hint" id="sources-topic-hint" data-i18n="screens.materials.topic.hint">O resultado aponta para o trecho exato. Só o texto dessa seção — com as páginas que você vê — será enviado à IA.</p>
                 <ul class="sources-topic-results" id="sources-topic-results"></ul>
               </div>
-              <details class="sources-index" id="sources-index">
-                <summary id="sources-index-summary">Explorar os conteúdos do documento</summary>
-                <ul id="sources-proposals-list" class="sources-proposals-list"></ul>
-              </details>
-              <details class="sources-index" id="sources-editorial" hidden>
-                <summary id="sources-editorial-summary">Páginas editoriais</summary>
-                <ul id="sources-editorial-list" class="sources-proposals-list"></ul>
-              </details>
             </div>
-            <div class="sources-generation" id="sources-generation" role="group" aria-label="Geração em andamento" data-i18n-aria-label="screens.materials.generation.label" hidden></div>
           </section>
           <section class="settings-card lesson-view" id="sources-editor-view" aria-label="Aula em edição" data-i18n-aria-label="screens.materials.editor.label" hidden></section>
         </section>
@@ -772,7 +807,7 @@
             <p class="form-message" id="exam-final-note" role="status" aria-live="polite" hidden></p>
             <div class="settings-actions">
               <button class="primary-button" id="exam-finalize-btn" type="button" hidden data-i18n="screens.exam.finalize">Concluir e registrar o resultado</button>
-              <button class="primary-button" id="exam-retest-btn" type="button" hidden>Refazer erros</button>
+              <button class="primary-button" id="exam-retest-btn" type="button" hidden data-i18n="appExam.retestErrors">Refazer erros</button>
               <button class="secondary-button" id="exam-back-btn" type="button" data-i18n="screens.exam.backToPlan">Voltar para o Plano</button>
               <button class="secondary-button" id="exam-today-btn" type="button" data-i18n="screens.exam.toToday">Ir para Hoje</button>
             </div>
@@ -797,7 +832,7 @@
 
           <section class="settings-card" id="study-now-practice-card" aria-labelledby="study-now-practice-title">
             <div class="sl-progress-meta">
-              <h2 id="study-now-practice-title">Praticar</h2>
+              <h2 id="study-now-practice-title" data-i18n="appStudyNow.practiceTitle">Praticar</h2>
               <span id="study-now-progress"></span>
             </div>
             <div class="sl-session-progress" aria-hidden="true"><span id="study-now-progress-bar"></span></div>
@@ -811,7 +846,7 @@
             <div id="study-now-question-area">
               <p id="study-now-question-text"></p>
               <p id="study-now-hint-text" class="study-now-hint" hidden></p>
-              <button class="secondary-button" id="study-now-reveal-btn" type="button" aria-describedby="study-now-progress study-now-question-text">Ver resposta</button>
+              <button class="secondary-button" id="study-now-reveal-btn" type="button" aria-describedby="study-now-progress study-now-question-text" data-i18n="appStudyNow.reveal">Ver resposta</button>
               <p id="study-now-answer-text" hidden></p>
               <p id="study-now-explanation-text" class="study-now-explanation" hidden></p>
               <div id="study-now-judgment" class="exercise-judgment" hidden>
@@ -825,7 +860,7 @@
 
           <section class="settings-card study-result" id="study-now-result-card" aria-labelledby="study-now-result-title" hidden>
             <div class="section-heading compact-heading">
-              <h2 id="study-now-result-title" tabindex="-1">Resultado</h2>
+              <h2 id="study-now-result-title" tabindex="-1" data-i18n="appStudyNow.result">Resultado</h2>
             </div>
             <p id="study-now-result-text" class="study-result-score"></p>
             <p id="study-now-result-note" class="study-result-note" hidden></p>
@@ -833,7 +868,7 @@
             <p id="study-now-next-review-text" class="study-result-next"></p>
             <div class="settings-actions study-result-actions">
               <button class="primary-button" id="study-now-evidence-retry-btn" type="button" hidden data-i18n="appStudyNow.evidenceRetry">Registrar resultado de novo</button>
-              <button class="primary-button" id="study-now-retest-btn" type="button" hidden>Refazer erros</button>
+              <button class="primary-button" id="study-now-retest-btn" type="button" hidden data-i18n="appStudyNow.retestErrors">Refazer erros</button>
               <button class="secondary-button" id="study-now-bank-btn" type="button" hidden aria-describedby="study-now-bank-hint"></button>
               <button class="secondary-button" id="study-now-done-btn" type="button" data-i18n="screens.studyNow.done">Voltar para Hoje</button>
             </div>
@@ -863,12 +898,12 @@
               <h2 id="account-login-title" data-i18n="screens.account.login">Entrar</h2>
               <div class="field-group">
                 <label for="account-login-email" data-i18n="screens.account.email">E-mail</label>
-                <input id="account-login-email" name="email" type="email" required autocomplete="email">
+                <input id="account-login-email" maxlength="320" name="email" type="email" required autocomplete="email">
               </div>
               <div class="field-group">
                 <label for="account-login-password" data-i18n="screens.account.password">Senha</label>
                 <div class="password-field">
-                  <input id="account-login-password" name="password" type="password" required autocomplete="current-password">
+                  <input id="account-login-password" maxlength="1024" name="password" type="password" required autocomplete="current-password">
                   <button class="password-toggle" type="button" aria-pressed="false" aria-controls="account-login-password" data-i18n-aria-label="screens.account.showPassword" aria-label="Mostrar senha">
                     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path class="eye-open" d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle class="eye-open" cx="12" cy="12" r="3"/><path class="eye-off" d="M3 3l18 18M10.6 5.1A10.7 10.7 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4M6.3 6.3C3.7 8 2 12 2 12s3.6 7 10 7c1.7 0 3.2-.4 4.5-1M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>
                   </button>
@@ -885,12 +920,12 @@
               <h2 id="account-register-title" data-i18n="screens.account.register">Criar conta</h2>
               <div class="field-group">
                 <label for="account-register-email" data-i18n="screens.account.email">E-mail</label>
-                <input id="account-register-email" name="email" type="email" required autocomplete="email">
+                <input id="account-register-email" maxlength="320" name="email" type="email" required autocomplete="email">
               </div>
               <div class="field-group">
                 <label for="account-register-password" data-i18n="screens.account.password">Senha</label>
                 <div class="password-field">
-                  <input id="account-register-password" name="password" type="password" required autocomplete="new-password" minlength="8">
+                  <input id="account-register-password" maxlength="1024" name="password" type="password" required autocomplete="new-password" minlength="8">
                   <button class="password-toggle" type="button" aria-pressed="false" aria-controls="account-register-password" data-i18n-aria-label="screens.account.showPassword" aria-label="Mostrar senha">
                     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path class="eye-open" d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle class="eye-open" cx="12" cy="12" r="3"/><path class="eye-off" d="M3 3l18 18M10.6 5.1A10.7 10.7 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4M6.3 6.3C3.7 8 2 12 2 12s3.6 7 10 7c1.7 0 3.2-.4 4.5-1M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>
                   </button>
@@ -923,7 +958,7 @@
               <div class="field-group">
                 <label for="account-current-password" data-i18n="screens.account.currentPassword">Senha atual</label>
                 <div class="password-field">
-                  <input id="account-current-password" name="currentPassword" type="password" required autocomplete="current-password">
+                  <input id="account-current-password" maxlength="1024" name="currentPassword" type="password" required autocomplete="current-password">
                   <button class="password-toggle" type="button" aria-pressed="false" aria-controls="account-current-password" data-i18n-aria-label="screens.account.showPassword" aria-label="Mostrar senha">
                     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path class="eye-open" d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle class="eye-open" cx="12" cy="12" r="3"/><path class="eye-off" d="M3 3l18 18M10.6 5.1A10.7 10.7 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4M6.3 6.3C3.7 8 2 12 2 12s3.6 7 10 7c1.7 0 3.2-.4 4.5-1M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>
                   </button>
@@ -932,7 +967,7 @@
               <div class="field-group">
                 <label for="account-new-password" data-i18n="screens.account.newPassword">Nova senha</label>
                 <div class="password-field">
-                  <input id="account-new-password" name="newPassword" type="password" required autocomplete="new-password" minlength="8" aria-describedby="account-new-password-hint">
+                  <input id="account-new-password" maxlength="1024" name="newPassword" type="password" required autocomplete="new-password" minlength="8" aria-describedby="account-new-password-hint">
                   <button class="password-toggle" type="button" aria-pressed="false" aria-controls="account-new-password" data-i18n-aria-label="screens.account.showPassword" aria-label="Mostrar senha">
                     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path class="eye-open" d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle class="eye-open" cx="12" cy="12" r="3"/><path class="eye-off" d="M3 3l18 18M10.6 5.1A10.7 10.7 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4M6.3 6.3C3.7 8 2 12 2 12s3.6 7 10 7c1.7 0 3.2-.4 4.5-1M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>
                   </button>

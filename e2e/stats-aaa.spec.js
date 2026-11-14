@@ -57,9 +57,10 @@ test('header, table and distribution reconcile for every period, and a shorter p
   await openStats(page);
   const totals = {};
   for (const period of ['last-30', 'last-90', 'last-365', '']) {
+    const previousQuestions = await page.locator('#metric-questions').textContent();
     await page.locator('#stats-unit-filter-period').evaluate((el, v) => { el.value = v; el.dispatchEvent(new Event('change', { bubbles: true })); }, period);
     await expect(page.locator('#subject-kpi-list tr[data-v5-row]').first()).toBeVisible();
-    await page.waitForTimeout(250);
+    await expect.poll(() => page.locator('#metric-questions').textContent()).not.toBe(previousQuestions);
     const all = await readAll(page);
     const tableQuestions = all.rows.reduce((s, r) => s + num(r.questions), 0);
     expect(all.headerQuestions, `header questions = table sum (${period || 'any'})`).toBe(tableQuestions);
@@ -99,7 +100,7 @@ test('trend shows percentage points or says the sample is insufficient, and name
   const texts = await page.locator('#subject-kpi-list .v5-trend').allTextContents();
   expect(texts.length).toBeGreaterThan(3);
   for (const text of texts) expect(text.trim()).toMatch(/^([+-]\d+ p\.p\.|Estável|Sem dados)$/);
-  expect(await page.locator('#subject-kpi-list .v5-trend[title]').count()).toBe(texts.length);
+  await expect(page.locator('#subject-kpi-list .v5-trend[title]')).toHaveCount(texts.length);
 });
 
 test('no layout surprises: no page overflow at 800/1280/1920, the table scrolls inside its own region, focus is visible', async ({ page }) => {

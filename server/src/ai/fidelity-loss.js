@@ -15,6 +15,27 @@ const words = (s) => strip(s).match(/[\p{L}\p{N}]+(?:[.,]\p{N}+)?/gu) ?? [];
 const stem = (w) => (w.length > 5 ? w.slice(0, 5) : w);
 const contentStems = (s) => new Set(words(s).filter((w) => w.length > 2 && !STOPWORDS.has(w) && !/^\d/.test(w)).map(stem));
 
+// Function words that belong to ONE language, to tell whether the source and the summary are written in the same one. Words shared by
+// Portuguese and Spanish ("de", "que") are left out on purpose.
+const LANGUAGE_MARKERS = {
+  en: ['the', 'of', 'and', 'is', 'are', 'that', 'with', 'this', 'which', 'from', 'by', 'be', 'it', 'as', 'for', 'was', 'were', 'has', 'have', 'or', 'an', 'in', 'to', 'at'],
+  pt: ['não', 'uma', 'dos', 'das', 'são', 'é', 'pelo', 'pela', 'também', 'os', 'ao', 'mais', 'do', 'da', 'um', 'com', 'na', 'em', 'ela', 'ele', 'ou'],
+  es: ['los', 'las', 'una', 'del', 'y', 'es', 'son', 'también', 'pero', 'más'],
+};
+const MARKER_SETS = Object.fromEntries(Object.entries(LANGUAGE_MARKERS).map(([lang, list]) => [lang, new Set(list.map((w) => w.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()))]));
+
+/** Dominant language of a text by marker words, or null when the evidence is thin (fewer than 3 markers, or no clear lead over the runner-up). */
+function dominantLanguage(text) {
+  const counts = { en: 0, pt: 0, es: 0 };
+  for (const w of words(text)) for (const lang of Object.keys(counts)) if (MARKER_SETS[lang].has(w)) counts[lang] += 1;
+  const [[lang, n], [, second]] = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  return n >= 3 && n >= second * 1.5 ? lang : null;
+}
+
+// A figure caption or a chart's labels are not statements a summary should repeat: skip them (their numbers are axis values and figure ids).
+const FIGURE_SENTENCE = /\b(fig(ura|ure)?\.?|tabela|table|quadro|box)\s*\d/i;
+const isFigureMaterial = (sentence) => FIGURE_SENTENCE.test(sentence) || (sentence.match(/·/g) ?? []).length >= 3;
+
 function sentences(text) {
   return String(text).replace(/^#{1,6}\s.*$/gm, ' ').split(/(?<=[.!?;])\s+|\n+/).map((s) => s.trim()).filter((s) => s.length > 12);
 }
@@ -54,10 +75,16 @@ function closestSummarySentence(stems, summarySentences, minOverlap) {
  * checked = source sentences that carry at least one flagged term AND have a summary sentence on the same idea.
  */
 export function measureFidelityLoss(sourceText, summary, { minOverlap = 0.5 } = {}) {
+  // Another language than the source: the words cannot match, so every negation and qualifier would look lost. Not judged (the model audit
+  // still checks it); `skipped` says why, so the screen does not read "nothing found" as "nothing lost".
+  const sourceLanguage = dominantLanguage(sourceText);
+  const summaryLanguage = dominantLanguage(summary);
+  if (sourceLanguage && summaryLanguage && sourceLanguage !== summaryLanguage) return { checked: 0, lost: [], skipped: 'LANGUAGE_MISMATCH' };
   const summarySentences = sentences(summary).map((text) => ({ text, stems: contentStems(text), terms: new Set(flaggedIn(text).map((f) => f.term)) }));
   const lost = [];
   let checked = 0;
   for (const sourceSentence of sentences(sourceText)) {
+    if (isFigureMaterial(sourceSentence)) continue;
     const flagged = flaggedIn(sourceSentence);
     if (flagged.length === 0) continue;
     const stems = contentStems(sourceSentence);

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { spawn } from 'node:child_process';
@@ -58,7 +59,7 @@ async function openMaterials(page, sources) {
   await page.route('**/v1/sources', (route) => (route.request().method() === 'GET'
     ? route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ sources }) })
     : route.continue()));
-  await signInRegistered(page, { email: `library-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`, password: 'a genuinely long test password 1' });
+  await signInRegistered(page, { email: `library-${Date.now()}-${randomUUID()}@example.com`, password: 'a genuinely long test password 1' });
   await page.locator('[data-screen="materials"]').click();
   await expect(page.locator('#sources-existing')).toBeVisible({ timeout: 5000 });
 }
@@ -104,6 +105,13 @@ test('search ignores accents and case, counts before paging and goes back to pag
   await expect(page.locator('.source-existing-item').first()).toContainText('Anatomia 1.pdf');
 });
 
+test('F5 straight on Materiais (nobody clicks the nav button) still lists the library', async ({ page }) => {
+  await openMaterials(page, fakeSources(3));
+  await page.reload();
+  await expect(page.locator('#screen-materials')).toBeVisible({ timeout: 10000 });
+  await expect(page.locator('.source-existing-item')).toHaveCount(3, { timeout: 10000 });
+});
+
 test('with few documents the search and order controls are there (approved V6 design), the list is complete and there is no pager', async ({ page }) => {
   await openMaterials(page, fakeSources(3));
   await expect(page.locator('.source-existing-item')).toHaveCount(3);
@@ -116,4 +124,16 @@ test('library tools and rows have no axe violations', async ({ page }) => {
   await openMaterials(page, fakeSources(30));
   const results = await new AxeBuilder({ page }).include('#sources-existing').analyze();
   expect(results.violations.map((v) => `${v.id}: ${v.nodes.length}`)).toEqual([]);
+});
+
+test('clicking the NAME of a document opens it once, like its button; the name adds no tab stop', async ({ page }) => {
+  const opened = [];
+  await page.route('**/v1/sources/1/proposals*', (route) => { opened.push(route.request().url()); return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ proposals: [] }) }); });
+  await openMaterials(page, fakeSources(3));
+  const row = page.locator('.source-existing-item').first();
+  await row.locator('.source-existing-name').click();
+  await expect.poll(() => opened.length).toBe(1);
+  // the name is not focusable: one control per action for keyboard and screen readers
+  await expect(row.locator('.source-existing-name')).not.toHaveAttribute('tabindex', /.*/);
+  await expect(row.locator('[data-action="open-source"]')).toHaveCount(1);
 });

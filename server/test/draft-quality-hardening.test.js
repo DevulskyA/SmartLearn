@@ -166,7 +166,9 @@ test('generation prompt: a condition the question names must survive in the answ
 
 test('generation prompt: do not copy whole sentences, but keep the exact terms, definitions and values that fidelity requires', () => {
   assert.match(generation, /do not copy (whole|long) (sentences|passages)/i);
-  assert.match(generation, /exact (medical )?terms?[^\n]*(values|numbers)[^\n]*(fidelity|verbatim)|(fidelity|verbatim)[^\n]*exact (medical )?terms?/i);
+  const termsBeforeFidelity = /exact (medical )?terms?[^\n]*(values|numbers)[^\n]*(fidelity|verbatim)/i;
+  const fidelityBeforeTerms = /(fidelity|verbatim)[^\n]*exact (medical )?terms?/i;
+  assert.ok(termsBeforeFidelity.test(generation) || fidelityBeforeTerms.test(generation));
 });
 
 test('audit prompt: the independent auditor is told to look for qualifier loss, circular explanations and hint leakage', () => {

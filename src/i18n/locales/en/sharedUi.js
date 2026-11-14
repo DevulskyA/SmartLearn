@@ -51,6 +51,7 @@ export default Object.freeze({
   "summary.visual.cannotWrite": "This edit cannot be faithfully represented in the summary text. The saved text is still the last valid version. Adjust this section or use Text mode.",
   "summary.visual.cannotSave": "There is a visual edit that could not be recorded faithfully, so nothing was saved. Adjust the snippet or use Text mode.",
   "summary.math.invalid": "Invalid formula",
+  "summary.outline.title": "Summary contents",
   "summary.math.edit": "Edit formula",
   "summary.math.fix": "Fix",
   "summary.math.dialog.insert": "Insert formula",

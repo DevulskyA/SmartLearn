@@ -3,11 +3,19 @@ export function normalizeEmail(email) {
   return email.trim().toLowerCase();
 }
 
-const EMAIL_SHAPE_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+function hasEmailShape(value) {
+  const at = value.indexOf('@');
+  if (at <= 0 || value.indexOf('@', at + 1) !== -1 || /\s/.test(value)) return false;
+
+  const domain = value.slice(at + 1);
+  const interiorDot = domain.indexOf('.', 1);
+  return interiorDot !== -1 && interiorDot < domain.length - 1;
+}
+
 export function validateEmailShape(email) {
   if (typeof email !== 'string') return 'O e-mail deve ser uma string.';
   const trimmed = email.trim();
   if (!trimmed) return 'Informe o e-mail.';
-  if (!EMAIL_SHAPE_RE.test(trimmed)) return 'Informe um e-mail válido.';
+  if (!hasEmailShape(trimmed)) return 'Informe um e-mail válido.';
   return null;
 }

@@ -15,12 +15,17 @@ const roundHalf = (h) => Math.round(h * 2) / 2;
 
 // A line continues the previous heading line (rather than being a new heading) when the previous one cannot be complete
 // (it ends in a connector or a comma), the next one starts in lowercase, or both are written in capitals.
-const CONNECTOR_END = /(?:^|\s)(?:de|del|la|las|el|los|y|e|o|en|con|por|para|a|of|the|and|in|on|for|to)$|,$/iu;
+const CONNECTORS = new Set(['de', 'del', 'la', 'las', 'el', 'los', 'y', 'e', 'o', 'en', 'con', 'por', 'para', 'a', 'of', 'the', 'and', 'in', 'on', 'for', 'to']);
+const endsWithConnector = (text) => {
+  const trimmed = text.trim();
+  const lastWord = trimmed.split(/\s+/u).at(-1).toLowerCase();
+  return trimmed.endsWith(',') || CONNECTORS.has(lastWord);
+};
 const isCaps = (s) => {
   const letters = s.replace(/[^\p{L}]/gu, '');
   return letters.length >= 3 && letters === letters.toUpperCase() && letters !== letters.toLowerCase();
 };
-const continuesHeading = (previous, next) => CONNECTOR_END.test(previous) || /^\p{Ll}/u.test(next) || (isCaps(previous) && isCaps(next));
+const continuesHeading = (previous, next) => endsWithConnector(previous) || /^\p{Ll}/u.test(next) || (isCaps(previous) && isCaps(next));
 
 // Words a book prints as stand-alone one-word lines all over its pages (an icon-font glyph such as "Tto") are markers,
 // not part of any title.
@@ -42,6 +47,25 @@ function bodyHeight(lines) {
   const weight = new Map();
   for (const l of lines) weight.set(roundHalf(l.height), (weight.get(roundHalf(l.height)) ?? 0) + l.text.length);
   return [...weight].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 0;
+}
+
+function collectRawHeadings(pages, isHeadingLine, withoutMarkers) {
+  const raw = [];
+  for (const page of pages) {
+    let open = null;
+    for (const line of page.lines) {
+      if (line.text.trim().length === 0) continue;
+      if (!isHeadingLine(line)) {
+        open = null;
+        continue;
+      }
+      const size = roundHalf(line.height);
+      const title = withoutMarkers(cleanTitle(line.text));
+      if (open && open.size === size && continuesHeading(open.title, title)) open.title = `${open.title} ${title}`;
+      else { open = { size, title, pageIndex: page.pageIndex }; raw.push(open); }
+    }
+  }
+  return raw;
 }
 
 /**
@@ -66,21 +90,7 @@ export function detectHeadings(pages) {
   };
 
   // consecutive heading lines of the same size on one page are one heading that wraps
-  const raw = [];
-  for (const page of pages) {
-    let open = null;
-    for (const line of page.lines) {
-      if (line.text.trim().length === 0) continue;
-      if (isHeadingLine(line)) {
-        const size = roundHalf(line.height);
-        const title = withoutMarkers(cleanTitle(line.text));
-        if (open && open.size === size && continuesHeading(open.title, title)) open.title = `${open.title} ${title}`;
-        else { open = { size, title, pageIndex: page.pageIndex }; raw.push(open); }
-      } else {
-        open = null;
-      }
-    }
-  }
+  const raw = collectRawHeadings(pages, isHeadingLine, withoutMarkers);
   if (raw.length < MIN_HEADINGS) return [];
 
   const sizes = [...new Set(raw.map((h) => h.size))].sort((a, b) => b - a);

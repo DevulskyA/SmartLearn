@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -46,7 +47,7 @@ test.afterAll(async () => {
 });
 
 async function registerAndLogin(page) {
-  const email = `mig-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+  const email = `mig-${Date.now()}-${randomUUID()}@example.com`;
   const password = 'a genuinely long test password 1';
   await page.addInitScript((base) => {
     window.__SMARTLEARN_API_BASE__ = base;
@@ -97,8 +98,8 @@ test('a fresh test user migrates a representative fixture end-to-end and the res
   }, API_BASE);
   expect(exported.subjects.some((s) => s.name === 'Farmacologia')).toBe(true);
   expect(exported.learningUnits.some((u) => u.title === 'Farmacocinetica')).toBe(true);
-  expect(exported.exercises.length).toBe(1);
-  expect(exported.learningEvidence.length).toBe(1);
+  expect(exported.exercises).toHaveLength(1);
+  expect(exported.learningEvidence).toHaveLength(1);
 
   const afterBytes = readFileSync(FIXTURE_PATH, 'utf8');
   expect(afterBytes).toBe(beforeBytes);
@@ -116,8 +117,8 @@ test('recovery rehearsal: cancelling a preview changes nothing, and the account 
   await expect(page.locator('#migration-message')).toContainText('cancelada', { timeout: 5000 });
 
   const exportedAfterCancel = await page.evaluate(async (base) => (await fetch(`${base}/v1/export`, { credentials: 'include' })).json(), API_BASE);
-  expect(exportedAfterCancel.subjects.length).toBe(0);
-  expect(exportedAfterCancel.learningUnits.length).toBe(0);
+  expect(exportedAfterCancel.subjects).toHaveLength(0);
+  expect(exportedAfterCancel.learningUnits).toHaveLength(0);
 
   // The same account can still complete a real migration afterward — a
   // cancelled attempt leaves no residue that would block a later one.
@@ -147,5 +148,5 @@ test('recovery rehearsal: a name conflict blocks confirm and commits nothing', a
   await expect(page.locator('#migration-confirm-btn')).toBeDisabled();
 
   const exported = await page.evaluate(async (base) => (await fetch(`${base}/v1/export`, { credentials: 'include' })).json(), API_BASE);
-  expect(exported.subjects.length).toBe(1); // only the first, real commit — the blocked second attempt added nothing
+  expect(exported.subjects).toHaveLength(1); // only the first, real commit — the blocked second attempt added nothing
 });

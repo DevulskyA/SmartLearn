@@ -55,7 +55,7 @@ function itemDto(row) {
  * insert, complete, reopen — while staying identical across two reads of
  * an unchanged set.
  */
-export function computeDataRevision(rows) {
+function computeDataRevision(rows) {
   const hash = createHash('sha256');
   for (const row of rows) hash.update(`${row.id}:${row.due_date};`);
   return hash.digest('hex');

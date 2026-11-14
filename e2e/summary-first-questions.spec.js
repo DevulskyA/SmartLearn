@@ -9,6 +9,7 @@ import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.j
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
 import { waitForServerReady } from './support/wait-for-server.js';
 import { signInRegistered } from './support/session.js';
+import { generateByPages } from './support/materials-flow.js';
 
 // Summary first, questions later, through the real UI: the Resumo Mestre arrives alone (Codex stand-in, no network, no credit), the student
 // asks for the questions, they join the SAME draft for review, and only the accepted draft becomes a lesson.
@@ -89,7 +90,7 @@ test('summary first: the questions are asked for later, join the same draft, and
   await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
   await page.setInputFiles('#sources-file-input', { name: 'farmaco.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf(['Farmacocinética: absorção e distribuição']) });
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
-  await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
+  await generateByPages(page);
   const editor = page.locator('.lesson-editor');
   await expect(editor).toBeVisible({ timeout: 10000 });
 

@@ -17,9 +17,10 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 
+// eslint-disable-next-line sonarjs/no-hardcoded-passwords -- Public fixture credential: the scanner must find this exact seed-dev.mjs literal in staged artifacts.
 export const FIXTURE_PASSWORD = 'SmartLearn-dev-2026-local-only'; // same literal as scripts/seed-dev.mjs DEV_ACCOUNT.password
 export const DEV_DATA_DIRNAME = 'SmartLearn-DevData';
-export const DEV_ENV_VARS = [
+const DEV_ENV_VARS = [
   'SMARTLEARN_DEV_PERSISTENT_SESSION',
   'SMARTLEARN_DEV_DATA_DIR',
   'SMARTLEARN_AI_CONSENT',
@@ -28,7 +29,7 @@ export const DEV_ENV_VARS = [
 ];
 
 // Reviewed first-party modules that may NAME the variables (to read them / explain a refusal). Anything else is a finding.
-export const READ_ONLY_VAR_MODULES = new Set([
+const READ_ONLY_VAR_MODULES = new Set([
   'server-runtime/src/config.js',
   'server-runtime/src/main.js',
   'server-runtime/src/production-config.js',
@@ -38,7 +39,7 @@ export const READ_ONLY_VAR_MODULES = new Set([
 ]);
 // Reviewed: dev-datastore.js ships only because main.js imports its lock/identity helpers; it names the DEV data directory as
 // the DEFAULT it compares against, it never creates or selects it for the packaged app.
-export const DEV_DATA_PATH_MODULES = new Set(['server-runtime/src/dev-datastore.js']);
+const DEV_DATA_PATH_MODULES = new Set(['server-runtime/src/dev-datastore.js']);
 
 // The exact backend environment the Tauri shell may set (lib.rs local_backend_env). Adding a key is a reviewed change.
 export const ALLOWED_BACKEND_ENV_KEYS = ['HOST', 'PORT', 'SMARTLEARN_DB_PATH', 'SMARTLEARN_SOURCES_DIR', 'SMARTLEARN_STATIC_DIR', 'SMARTLEARN_ALLOWED_ORIGINS', 'SMARTLEARN_AI_PROVIDER'];
@@ -82,6 +83,80 @@ export function backendEnvKeys(libRsText) {
   return [...body.matchAll(/"([A-Z][A-Z0-9_]*)"\.to_string\(\)\s*,/g)].map((m) => m[1]);
 }
 
+function hasDefinition(text, variable) {
+  return definitionPatterns(variable).some((pattern) => pattern.test(text));
+}
+
+function inspectFirstPartyText(text, rel, add) {
+  for (const variable of DEV_ENV_VARS) {
+    if (!text.includes(variable)) continue;
+    if (hasDefinition(text, variable)) add('DEV_VAR_DEFINED', rel, `${variable} is defined by shipped code`);
+    if (!READ_ONLY_VAR_MODULES.has(rel)) add('DEV_VAR_NAMED', rel, `${variable} is named outside the reviewed read-only modules`);
+  }
+}
+
+function inspectStagedFile(abs, rel, isFirstParty, add) {
+  const buf = readFileSync(abs);
+  if (buf.includes(FIXTURE_PASSWORD)) add('FIXTURE_PASSWORD', rel, 'the DEV fixture password ships');
+  if (buf.includes(DEV_DATA_DIRNAME) && !DEV_DATA_PATH_MODULES.has(rel)) add('DEV_DATA_PATH', rel, `${DEV_DATA_DIRNAME} is named outside its reviewed module`);
+  const name = rel.split('/').pop();
+  const ext = name.includes('.') ? `.${name.split('.').pop().toLowerCase()}` : '';
+  if (/^\.env(\.|$)/i.test(name) && !rel.includes('/node_modules/')) add('DOTENV_FILE', rel, 'an environment file ships');
+  if (TEXT_EXT.has(ext) && isFirstParty) inspectFirstPartyText(buf.toString('utf8'), rel, add);
+}
+
+function inspectTauriConfig(tauriConfPath, add) {
+  if (!tauriConfPath) return;
+  const text = readFileSync(tauriConfPath, 'utf8');
+  if (text.includes(FIXTURE_PASSWORD)) add('FIXTURE_PASSWORD', 'tauri.conf.json', 'the DEV fixture password is in the Tauri config');
+  for (const variable of DEV_ENV_VARS) if (text.includes(variable)) add('DEV_VAR_DEFINED', 'tauri.conf.json', `${variable} appears in the Tauri config`);
+  if (text.includes(DEV_DATA_DIRNAME)) add('DEV_DATA_PATH', 'tauri.conf.json', 'the DEV data directory is in the Tauri config');
+}
+
+function homologationRegion(text) {
+  const start = text.indexOf('fn parse_homologation');
+  const length = start < 0 ? -1 : text.slice(start).search(/\r?\n\}\r?\n/);
+  const end = length < 0 ? -1 : start + length;
+  return {
+    body: end < 0 ? '' : text.slice(start, end),
+    shell: end < 0 ? text : text.slice(0, start) + text.slice(end),
+  };
+}
+
+function inspectBackendEnvDefinitions(shell, add) {
+  for (const variable of DEV_ENV_VARS) {
+    // The desktop shell deliberately selects the real provider for the packaged app.
+    if (variable === 'SMARTLEARN_AI_PROVIDER') continue;
+    const escaped = escapeRe(variable);
+    if (new RegExp(`\\.env\\(\\s*"${escaped}"`).test(shell) || new RegExp(`"${escaped}"\\.to_string\\(\\)\\s*,`).test(shell)) {
+      add('DEV_VAR_DEFINED', 'lib.rs', `${variable} is set by the native shell`);
+    }
+  }
+}
+
+function inspectBackendShell(libRsPath, add) {
+  if (!libRsPath) return;
+  const text = readFileSync(libRsPath, 'utf8');
+  if (text.includes(FIXTURE_PASSWORD)) add('FIXTURE_PASSWORD', 'lib.rs', 'the DEV fixture password is in the native shell');
+  const keys = backendEnvKeys(text);
+  if (!keys) add('BACKEND_ENV_UNPARSEABLE', 'lib.rs', 'local_backend_env was not found/parsed: the inspection would prove nothing');
+  else {
+    for (const key of keys) if (!ALLOWED_BACKEND_ENV_KEYS.includes(key)) add('BACKEND_ENV_KEY', 'lib.rs', `${key} is set for the packaged backend but is not in the reviewed list`);
+    if (keys.includes('NODE_ENV')) add('BACKEND_ENV_KEY', 'lib.rs', 'NODE_ENV is set by the shell; the existing decision is loopback HTTP without Secure cookies');
+  }
+
+  // The shell may only ever pass the DEV pin through (with_data_overrides), never invent a DEV variable.
+  // One reviewed exception: parse_homologation turns an INSTALLED app\homologation.json into variables (Homologacao, isolated candidate); it may
+  // define the provider and the CODEX-only consent, no other DEV/AI variable. Everything outside that function is held to the rule above.
+  const { body, shell } = homologationRegion(text);
+  for (const variable of DEV_ENV_VARS) {
+    if (variable !== 'SMARTLEARN_AI_PROVIDER' && variable !== 'SMARTLEARN_AI_CONSENT' && body.includes(`"${variable}"`)) {
+      add('DEV_VAR_DEFINED', 'lib.rs', `${variable} is set by the homologation parser, which is reviewed only for the provider and the CODEX consent`);
+    }
+  }
+  inspectBackendEnvDefinitions(shell, add);
+}
+
 /**
  * @param {{resourcesDir: string, tauriConfPath?: string, libRsPath?: string}} opts
  * @returns {{kind: string, file: string, detail: string}[]} empty = clean
@@ -95,58 +170,13 @@ export function inspectPackage({ resourcesDir, tauriConfPath, libRsPath }) {
     add('NOT_STAGED', base, 'server-runtime/src is empty: nothing was staged, the inspection would prove nothing');
   }
 
-  const scan = (abs, rel, isFirstParty) => {
-    const buf = readFileSync(abs);
-    if (buf.includes(FIXTURE_PASSWORD)) add('FIXTURE_PASSWORD', rel, 'the DEV fixture password ships');
-    if (buf.includes(DEV_DATA_DIRNAME) && !DEV_DATA_PATH_MODULES.has(rel)) add('DEV_DATA_PATH', rel, `${DEV_DATA_DIRNAME} is named outside its reviewed module`);
-    const name = rel.split('/').pop();
-    const ext = name.includes('.') ? `.${name.split('.').pop().toLowerCase()}` : '';
-    if (/^\.env(\.|$)/i.test(name) && !rel.includes('/node_modules/')) add('DOTENV_FILE', rel, 'an environment file ships');
-    if (!TEXT_EXT.has(ext) || !isFirstParty) return;
-    const text = buf.toString('utf8');
-    for (const v of DEV_ENV_VARS) {
-      if (!text.includes(v)) continue;
-      for (const re of definitionPatterns(v)) if (re.test(text)) { add('DEV_VAR_DEFINED', rel, `${v} is defined by shipped code`); break; }
-      if (!READ_ONLY_VAR_MODULES.has(rel)) add('DEV_VAR_NAMED', rel, `${v} is named outside the reviewed read-only modules`);
-    }
-  };
-
   for (const abs of files) {
     const rel = relative(base, abs).split(sep).join('/');
-    scan(abs, rel, FIRST_PARTY_PREFIXES.some((p) => rel.startsWith(p)));
+    inspectStagedFile(abs, rel, FIRST_PARTY_PREFIXES.some((p) => rel.startsWith(p)), add);
   }
 
-  if (tauriConfPath) {
-    const text = readFileSync(tauriConfPath, 'utf8');
-    if (text.includes(FIXTURE_PASSWORD)) add('FIXTURE_PASSWORD', 'tauri.conf.json', 'the DEV fixture password is in the Tauri config');
-    for (const v of DEV_ENV_VARS) if (text.includes(v)) add('DEV_VAR_DEFINED', 'tauri.conf.json', `${v} appears in the Tauri config`);
-    if (text.includes(DEV_DATA_DIRNAME)) add('DEV_DATA_PATH', 'tauri.conf.json', 'the DEV data directory is in the Tauri config');
-  }
-  if (libRsPath) {
-    const text = readFileSync(libRsPath, 'utf8');
-    if (text.includes(FIXTURE_PASSWORD)) add('FIXTURE_PASSWORD', 'lib.rs', 'the DEV fixture password is in the native shell');
-    const keys = backendEnvKeys(text);
-    if (!keys) add('BACKEND_ENV_UNPARSEABLE', 'lib.rs', 'local_backend_env was not found/parsed: the inspection would prove nothing');
-    else {
-      for (const k of keys) if (!ALLOWED_BACKEND_ENV_KEYS.includes(k)) add('BACKEND_ENV_KEY', 'lib.rs', `${k} is set for the packaged backend but is not in the reviewed list`);
-      if (keys.includes('NODE_ENV')) add('BACKEND_ENV_KEY', 'lib.rs', 'NODE_ENV is set by the shell; the existing decision is loopback HTTP without Secure cookies');
-    }
-    // The shell may only ever pass the DEV pin through (with_data_overrides), never invent a DEV variable.
-    // One reviewed exception: parse_homologation turns an INSTALLED app\homologation.json into variables (Homologacao, isolated candidate); it may
-    // define the provider and the CODEX-only consent, no other DEV/AI variable. Everything outside that function is held to the rule above.
-    const parserStart = text.indexOf('fn parse_homologation');
-    const parserLength = parserStart < 0 ? -1 : text.slice(parserStart).search(/\r?\n\}\r?\n/);
-    const parserEnd = parserLength < 0 ? -1 : parserStart + parserLength;
-    const parserBody = parserEnd < 0 ? '' : text.slice(parserStart, parserEnd);
-    const shell = parserEnd < 0 ? text : text.slice(0, parserStart) + text.slice(parserEnd);
-    for (const v of DEV_ENV_VARS) if (v !== 'SMARTLEARN_AI_PROVIDER' && v !== 'SMARTLEARN_AI_CONSENT' && parserBody.includes(`"${v}"`)) add('DEV_VAR_DEFINED', 'lib.rs', `${v} is set by the homologation parser, which is reviewed only for the provider and the CODEX consent`);
-    for (const v of DEV_ENV_VARS) {
-      // The desktop shell deliberately selects the real provider for the
-      // packaged app. Consent and credentials remain separate settings.
-      if (v === 'SMARTLEARN_AI_PROVIDER') continue;
-      if (new RegExp(`\\.env\\(\\s*"${escapeRe(v)}"`).test(shell) || new RegExp(`"${escapeRe(v)}"\\.to_string\\(\\)\\s*,`).test(shell)) add('DEV_VAR_DEFINED', 'lib.rs', `${v} is set by the native shell`);
-    }
-  }
+  inspectTauriConfig(tauriConfPath, add);
+  inspectBackendShell(libRsPath, add);
   return findings;
 }
 

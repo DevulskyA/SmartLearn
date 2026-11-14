@@ -25,8 +25,8 @@ export function registerSubjectRoutes(app, db) {
         type: 'object',
         required: ['name'],
         properties: {
-          name: { type: 'string' },
-          color: { type: 'string' },
+          name: { type: 'string', maxLength: 100 }, // the same 100 the form allows
+          color: { type: 'string', maxLength: 40 },
         },
       },
     },
@@ -42,8 +42,8 @@ export function registerSubjectRoutes(app, db) {
       body: {
         type: 'object',
         properties: {
-          name: { type: 'string' },
-          color: { type: 'string' },
+          name: { type: 'string', maxLength: 100 }, // the same 100 the form allows
+          color: { type: 'string', maxLength: 40 },
           isActive: { type: 'boolean' },
         },
       },

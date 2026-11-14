@@ -20,6 +20,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const defaultCanonicalRoot = resolve(here, '..');
+const POWERSHELL_EXECUTABLE = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
 
 /** The artifact classes. `path` is relative to <worktree>/src-tauri/target; `keep` are children that survive inside it. */
 export const ARTIFACT_CLASSES = [
@@ -31,6 +32,8 @@ export const ARTIFACT_CLASSES = [
 ];
 
 export function listWorktreeRoots(cwd = defaultCanonicalRoot) {
+  // Git for Windows, Homebrew/Xcode and distro packages use different install roots; PATH resolution is intentional here.
+  // eslint-disable-next-line sonarjs/no-os-command-from-path -- no cross-platform fixed Git executable path exists.
   const text = execFileSync('git', ['worktree', 'list', '--porcelain'], { cwd, encoding: 'utf8' });
   return text.split(/\r?\n/).filter((l) => l.startsWith('worktree ')).map((l) => resolve(l.slice('worktree '.length)));
 }
@@ -62,6 +65,26 @@ function hasRunningProcess(path, runningPaths) {
   return runningPaths.some((p) => norm(p).startsWith(prefix));
 }
 
+function candidatePaths(targetDir, cls, isCanonical) {
+  if (cls.appliesTo === 'non-canonical' && isCanonical) return [];
+  const base = join(targetDir, cls.path);
+  if (!existsSync(base)) return [];
+  return cls.keep ? readdirSync(base).filter((name) => !cls.keep.includes(name)).map((name) => join(base, name)) : [base];
+}
+
+function addCandidate(root, path, cls, runningPaths, items, skipped) {
+  try {
+    assertInsideTarget(root, path);
+    if (hasRunningProcess(path, runningPaths)) {
+      skipped.push({ path, reason: 'a running process lives here' });
+      return;
+    }
+    items.push({ class: cls.id, path, bytes: sizeOf(path), why: cls.why, worktree: root });
+  } catch (err) {
+    skipped.push({ path, reason: err.message });
+  }
+}
+
 /**
  * Builds the removal plan. Pure inspection: nothing is deleted here.
  * @param {{ roots: string[], canonicalRoot?: string, runningPaths?: string[] }} o roots = worktree roots (from `git worktree list`)
@@ -76,17 +99,7 @@ export function planSanitize({ roots, canonicalRoot = defaultCanonicalRoot, runn
     const targetDir = join(root, 'src-tauri', 'target');
     if (!existsSync(targetDir)) continue;
     for (const cls of ARTIFACT_CLASSES) {
-      if (cls.appliesTo === 'non-canonical' && isCanonical) continue;
-      const base = join(targetDir, cls.path);
-      if (!existsSync(base)) continue;
-      const entries = cls.keep ? readdirSync(base).filter((n) => !cls.keep.includes(n)).map((n) => join(base, n)) : [base];
-      for (const path of entries) {
-        try {
-          assertInsideTarget(root, path);
-          if (hasRunningProcess(path, runningPaths)) { skipped.push({ path, reason: 'a running process lives here' }); continue; }
-          items.push({ class: cls.id, path, bytes: sizeOf(path), why: cls.why, worktree: root });
-        } catch (err) { skipped.push({ path, reason: err.message }); }
-      }
+      for (const path of candidatePaths(targetDir, cls, isCanonical)) addCandidate(root, path, cls, runningPaths, items, skipped);
     }
   }
   return { items, skipped, recoverableBytes: items.reduce((n, i) => n + i.bytes, 0) };
@@ -110,7 +123,7 @@ export function applySanitize(plan, { roots }) {
 
 function runningSmartLearnPaths() {
   try {
-    const out = execFileSync('powershell', ['-NoProfile', '-Command', "Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path } | ForEach-Object { $_.Path }"], { encoding: 'utf8' });
+    const out = execFileSync(POWERSHELL_EXECUTABLE, ['-NoProfile', '-Command', "Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path } | ForEach-Object { $_.Path }"], { encoding: 'utf8' });
     return out.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   } catch { return []; }
 }

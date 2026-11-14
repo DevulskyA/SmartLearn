@@ -174,33 +174,45 @@ test('empty paragraphs and empty headings have no Markdown form and leave no tra
   assert.equal(docToMarkdown(doc, { lead, tail }), 'um\n\ndois');
 });
 
+const FUZZ_WORDS = ['pressão', 'a_b', '*', '#', '1.', 'x', '~', '`', '[', ']', '&', '\\', 'ABC', '-', '>', '5', 'ml/kg', '(', ')', '=', '|'];
+
+function seededRandom(seed = 7) {
+  return (n) => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed % n; };
+}
+
+function randomInline(rand) {
+  const nodes = [];
+  const markOptions = { 1: ['bold'], 2: ['italic'], 3: ['bold', 'italic'], 4: ['strike'] };
+  for (let i = 0, n = 1 + rand(5); i < n; i++) {
+    const pick = rand(8);
+    const marks = markOptions[pick] ?? [];
+    if (pick === 5) nodes.push({ type: 'mathInline', attrs: { tex: ['x^2', '\\frac{a}{b}', 'H_2O'][rand(3)] } });
+    else if (pick === 6 && nodes.length > 0) nodes.push({ type: i % 2 ? 'softBreak' : 'hardBreak' });
+    else nodes.push(text(`${FUZZ_WORDS[rand(FUZZ_WORDS.length)]}${rand(2) ? ' ' : ''}${FUZZ_WORDS[rand(FUZZ_WORDS.length)]}`, ...marks));
+  }
+  return nodes;
+}
+
+function randomBlock(rand) {
+  const kind = rand(5);
+  if (kind === 0) return { type: 'heading', attrs: { level: 1 + rand(4) }, content: randomInline(rand) };
+  if (kind === 1) return { type: 'bulletList', attrs: { loose: false }, content: [1, 2].map(() => ({ type: 'listItem', content: [para(...randomInline(rand))] })) };
+  if (kind === 2) return { type: 'mathBlock', attrs: { tex: 'a+b' } };
+  return para(...randomInline(rand));
+}
+
+function randomDocument(rand) {
+  const blocks = [];
+  for (let i = 0, n = 1 + rand(4); i < n; i++) blocks.push(randomBlock(rand));
+  return { type: 'doc', content: blocks };
+}
+
 test('deterministic fuzz: random documents of supported blocks are written, read back and compared with no mismatch', () => {
-  let seed = 7;
-  const rand = (n) => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed % n; };
-  const words = ['pressão', 'a_b', '*', '#', '1.', 'x', '~', '`', '[', ']', '&', '\\', 'ABC', '-', '>', '5', 'ml/kg', '(', ')', '=', '|'];
-  const inline = () => {
-    const nodes = [];
-    for (let i = 0, n = 1 + rand(5); i < n; i++) {
-      const pick = rand(8);
-      const marks = pick === 1 ? ['bold'] : pick === 2 ? ['italic'] : pick === 3 ? ['bold', 'italic'] : pick === 4 ? ['strike'] : [];
-      if (pick === 5) nodes.push({ type: 'mathInline', attrs: { tex: ['x^2', '\\frac{a}{b}', 'H_2O'][rand(3)] } });
-      else if (pick === 6 && nodes.length > 0) nodes.push({ type: i % 2 ? 'softBreak' : 'hardBreak' });
-      else nodes.push(text(`${words[rand(words.length)]}${rand(2) ? ' ' : ''}${words[rand(words.length)]}`, ...marks));
-    }
-    return nodes;
-  };
+  const rand = seededRandom();
   let written = 0;
   let refused = 0;
   for (let round = 0; round < 400; round++) {
-    const blocks = [];
-    for (let i = 0, n = 1 + rand(4); i < n; i++) {
-      const k = rand(5);
-      if (k === 0) blocks.push({ type: 'heading', attrs: { level: 1 + rand(4) }, content: inline() });
-      else if (k === 1) blocks.push({ type: 'bulletList', attrs: { loose: false }, content: [1, 2].map(() => ({ type: 'listItem', content: [para(...inline())] })) });
-      else if (k === 2) blocks.push({ type: 'mathBlock', attrs: { tex: 'a+b' } });
-      else blocks.push(para(...inline()));
-    }
-    const result = serializeVerified({ type: 'doc', content: blocks });
+    const result = serializeVerified(randomDocument(rand));
     if (result.error) { refused += 1; continue; }
     written += 1;
     // whatever was accepted must be stable: reading it and writing it again gives the same bytes

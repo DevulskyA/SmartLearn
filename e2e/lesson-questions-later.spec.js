@@ -9,6 +9,7 @@ import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.j
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
 import { waitForServerReady } from './support/wait-for-server.js';
 import { signInRegistered } from './support/session.js';
+import { generateByPages } from './support/materials-flow.js';
 
 // A lesson accepted as a summary only asks for its questions LATER (real UI, Codex stand-in: no network, no credit): the questions are written
 // by a background job into a draft of their own, survive the student leaving the editor, are reviewed, and only then ADDED to the same lesson.
@@ -95,7 +96,7 @@ test('accept the summary without questions, ask for them later: a job writes the
   await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
   await page.setInputFiles('#sources-file-input', { name: 'farmaco.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf(['Farmacocinética: absorção e distribuição']) });
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
-  await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
+  await generateByPages(page);
   const editor = page.locator('.lesson-editor');
   await expect(editor).toBeVisible({ timeout: 10000 });
   await editor.locator('.source-draft-subject-input').fill('Farmacologia E2E');
@@ -109,7 +110,7 @@ test('accept the summary without questions, ask for them later: a job writes the
   
   // 2. later: Materiais offers the questions for the lesson that exists
   await editor.locator('[data-action="lesson-back"]').click();
-  const slot = page.locator('.source-proposal-item').first();
+  const slot = page.locator('#sources-drafts-list .source-draft-item').first();
   await expect(slot).toContainText('Aula já criada');
   const ask = slot.locator('[data-action="lesson-questions"]');
   await expect(ask).toBeVisible();
@@ -136,7 +137,7 @@ test('accept the summary without questions, ask for them later: a job writes the
   expect(['QUEUED', 'CALLING_PROVIDER']).toContain(job.state);
 
   // coming back: Materiais says the questions are being reviewed, and the editor joins the running job instead of asking (or charging) again
-  const reopen = page.locator('.source-proposal-item').first().locator('[data-action="open-draft"]');
+  const reopen = page.locator('#sources-drafts-list .source-draft-item').first().locator('[data-action="open-draft"]');
   await expect(reopen).toBeVisible({ timeout: 5000 });
   await reopen.click();
   const again = page.locator('.lesson-editor');
@@ -158,6 +159,6 @@ test('accept the summary without questions, ask for them later: a job writes the
 
   // 6. Materiais no longer offers the questions: the lesson has them
   await again.locator('[data-action="lesson-back"]').click();
-  await expect(page.locator('.source-proposal-item').first()).toContainText('Aula já criada');
-  await expect(page.locator('.source-proposal-item').first().locator('[data-action="lesson-questions"]')).toHaveCount(0);
+  await expect(page.locator('#sources-drafts-list .source-draft-item').first()).toContainText('Aula já criada');
+  await expect(page.locator('#sources-drafts-list .source-draft-item').first().locator('[data-action="lesson-questions"]')).toHaveCount(0);
 });

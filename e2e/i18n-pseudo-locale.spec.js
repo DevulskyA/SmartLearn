@@ -44,29 +44,45 @@ function untranslatedOf([screenId, studentText]) {
   const root = document.querySelector(screenId);
   if (!root) return { missing: true, found: [] };
   const found = new Set();
-  const isStudent = (s) => studentText.some((x) => s.includes(x));
-  const prose = (s) => /\p{L}{2,}/u.test(s) && !/^[\d\s:/.,\-–·%()]+$/.test(s);
-  const visible = (el) => { const r = el.getBoundingClientRect(); const cs = getComputedStyle(el); return cs.visibility !== 'hidden' && cs.display !== 'none' && (r.width > 0 || r.height > 0); };
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-    const el = n.parentElement;
-    if (!el || ['SCRIPT', 'STYLE', 'OPTION'].includes(el.tagName) || !visible(el)) continue;
-    const s = n.nodeValue.replace(/\s+/g, ' ').trim();
+  const isStudent = (value) => studentText.some((studentValue) => value.includes(studentValue));
+  const prose = (value) => /\p{L}{2,}/u.test(value) && !/^[\d\s:/.,\-–·%()]+$/.test(value);
+  const visible = (element) => {
+    const rect = element.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    return style.visibility !== 'hidden' && style.display !== 'none' && (rect.width > 0 || rect.height > 0);
+  };
+  const isDate = (value) => {
+    const at = value.indexOf('@');
+    const dot = value.lastIndexOf('.');
+    const email = !/\s/.test(value) && at > 0 && dot > at + 1 && dot < value.length - 1;
+    const weekday = ['Monday,', 'Tuesday,', 'Wednesday,', 'Thursday,', 'Friday,', 'Saturday,', 'Sunday,'].some((prefix) => value.startsWith(prefix));
+    const formattedDate = /^[A-Z][a-z]{2} \d{2}, \d{4}$/.test(value);
+    const commit = /^[0-9a-f]{7,40}(\+[a-z]+)?$/.test(value);
+    const channel = value === 'DEV' || value === 'PROD';
+    const buildIdentity = /^SmartLearn (DEV|PROD) · v[0-9.]+ · \S+$/.test(value);
+    const autonym = ['Português (Brasil)', 'Español', 'English'].includes(value);
+    return email || weekday || formattedDate || commit || channel || buildIdentity || autonym;
+  };
+  const inspectTextNode = (node) => {
+    const element = node.parentElement;
+    if (!element || ['SCRIPT', 'STYLE', 'OPTION'].includes(element.tagName) || !visible(element)) return;
+    const value = node.nodeValue.replace(/\s+/g, ' ').trim();
     // Not catalog text, on purpose: a date formatted by the active locale, the commit hash and channel of the build, and the
     // name of each language written in that language, and the signed-in e-mail address (user data, shown on Conta) (autonyms never change with the interface language).
-    const isDate = /^\S+@\S+\.\S+$|^(Mon|Tues|Wednes|Thurs|Fri|Satur|Sun)day,|^[A-Z][a-z]{2} \d{2}, \d{4}$|^[0-9a-f]{7,40}(\+[a-z]+)?$|^(DEV|PROD)$|^SmartLearn (DEV|PROD) · v[0-9.]+ · \S+$|^(Português \(Brasil\)|Español|English)$/.test(s);
-    if (prose(s) && !s.includes('\u27E6') && !isStudent(s) && !isDate) found.add(`text: ${s}`);
-  }
-  for (const el of root.querySelectorAll('[title],[aria-label],[placeholder],[alt]')) {
-    if (!visible(el)) continue;
-    for (const a of ['title', 'aria-label', 'placeholder', 'alt']) {
-      const s = (el.getAttribute(a) ?? '').trim();
-      if (s && prose(s) && !s.includes('\u27E6') && !isStudent(s)) found.add(`${a}: ${s}`);
+    if (prose(value) && !value.includes('\u27E6') && !isStudent(value) && !isDate(value)) found.add('text: ' + value);
+  };
+  const inspectAttributes = (element) => {
+    if (!visible(element)) return;
+    for (const attribute of ['title', 'aria-label', 'placeholder', 'alt']) {
+      const value = (element.getAttribute(attribute) ?? '').trim();
+      if (value && prose(value) && !value.includes('\u27E6') && !isStudent(value)) found.add(attribute + ': ' + value);
     }
-  }
+  };
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) inspectTextNode(node);
+  for (const element of root.querySelectorAll('[title],[aria-label],[placeholder],[alt]')) inspectAttributes(element);
   return { missing: false, found: [...found] };
 }
-
 // The app registers an app-shell service worker (public/service-worker.js) that would answer the module requests itself and
 // bypass the interception below; this test is about where the TEXTS come from, not about offline behavior.
 test.use({ serviceWorkers: 'block' });
@@ -92,9 +108,10 @@ test('pseudo-locale: every visible text of the main screens, and where it comes 
   await row.getByRole('button', { name: 'Adicionar exercício' }).click();
   await expect(row.getByText(STUDENT_TEXT[2])).toBeVisible({ timeout: 5000 });
 
+  await pseudoLocaleSettings(page);
+
   // Boot the app in the marked catalog: the i18n module is served with the pseudo catalog registered and selected as its last
-  // statements, so everything the app draws while starting (theme picker, build identity, selects) already uses it. There is no
-  // language switch in the interface yet; this is how the active locale is chosen for the whole page lifetime.
+  // statements. The real account is set to English first so the startup preference honors the same locale.
   // A NEW page of the same context (same session): a reload would reuse the module already in the browser's memory cache.
   const pseudo = await context.newPage();
   await pseudo.addInitScript((base) => { window.__SMARTLEARN_API_BASE__ = base; window.__SMARTLEARN_REMOTE_MODE__ = true; }, API_BASE);
@@ -137,3 +154,11 @@ test('pseudo-locale: every visible text of the main screens, and where it comes 
   // dates follow the active locale, not a fixed pt-BR (I-R3): the pseudo locale is registered as "en"
   expect(await pseudo.locator('#screen-today').innerText()).toMatch(/October|November|December|January|February|March|April|May|June|July|August|September/);
 });
+
+async function pseudoLocaleSettings(page) {
+  await page.locator('[data-screen="settings"]').click();
+  await expect(page.locator('#ui-language-card')).toBeVisible();
+  await page.locator('#ui-language-select').selectOption('en');
+  await page.locator('#ui-language-save').click();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+}

@@ -28,7 +28,7 @@ function jaccard(a, b) {
 /** Numbers as written, normalised so "0,45", "0.45" and "−35"/"-35" compare equal; years and single digits are ignored (noise). */
 export function numbersIn(text) {
   const out = [];
-  for (const m of String(text ?? '').replace(/[−–]/g, '-').matchAll(/(?<![\w.,])-?\d+(?:[.,]\d+)?(?![\w])/g)) {
+  for (const m of String(text ?? '').replace(/[−–]/g, '-').matchAll(/(?<![\w.,])-?\d+(?:[.,]\d+)?(?!\w)/g)) {
     const norm = m[0].replace(',', '.').replace(/^-/, '');
     const value = Number(norm);
     if (!Number.isFinite(value)) continue;

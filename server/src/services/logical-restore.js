@@ -35,7 +35,7 @@ function currentSchemaVersion(db) {
 }
 
 /** Throws RESTORE_REQUIRES_EMPTY_ACCOUNT, naming what already exists. */
-export function assertEmptyAccount(db, userId) {
+function assertEmptyAccount(db, userId) {
   const present = {};
   for (const table of OWNED_DATA_TABLES) {
     const { n } = db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE user_id = ?`).get(userId);
@@ -105,6 +105,32 @@ export function buildLogicalPreview(db, userId, rawSource) {
   return { normalized: stored, report };
 }
 
+function insertLogicalSet(db, userId, set, rows, idMaps) {
+  const columns = ['user_id', ...set.columns.map((column) => column.name)];
+  const insert = db.prepare(`INSERT INTO ${set.table} (${columns.join(', ')}) VALUES (${columns.map(() => '?').join(', ')})`);
+  // Registered before the loop: learning_events.corrects_event_id references
+  // events of the same set, inserted earlier (the validator guarantees earlier ids).
+  const map = new Map();
+  idMaps[set.key] = map;
+  for (const row of rows) {
+    const values = [userId];
+    for (const column of set.columns) {
+      const value = row[column.name];
+      if (column.ref === null || value === null) {
+        values.push(value);
+        continue;
+      }
+      const mapped = idMaps[column.ref]?.get(value);
+      if (mapped === undefined) {
+        throw new ImportError('IMPORT_INTEGRITY_ERROR', `Referência ausente ao restaurar (${set.key}.${column.name} = ${value}).`);
+      }
+      values.push(mapped);
+    }
+    const result = insert.run(...values);
+    if (set.hasId) map.set(row.id, Number(result.lastInsertRowid));
+  }
+}
+
 /**
  * Writes the normalized export as owned rows. MUST run inside the caller's
  * transaction: any throw rolls the whole restore back. Re-checks emptiness
@@ -117,29 +143,7 @@ export function restoreLogical(db, userId, normalized, now = new Date()) {
   const idMaps = {};
   const inserted = {};
   for (const set of LOGICAL_SETS) {
-    const columns = ['user_id', ...set.columns.map((c) => c.name)];
-    const insert = db.prepare(`INSERT INTO ${set.table} (${columns.join(', ')}) VALUES (${columns.map(() => '?').join(', ')})`);
-    // Registered before the loop: learning_events.corrects_event_id references
-    // events of the same set, inserted earlier (the validator guarantees earlier ids).
-    const map = new Map();
-    idMaps[set.key] = map;
-    for (const row of normalized.sets[set.key]) {
-      const values = [userId];
-      for (const col of set.columns) {
-        const value = row[col.name];
-        if (col.ref === null || value === null) {
-          values.push(value);
-          continue;
-        }
-        const mapped = idMaps[col.ref]?.get(value);
-        if (mapped === undefined) {
-          throw new ImportError('IMPORT_INTEGRITY_ERROR', `Referência ausente ao restaurar (${set.key}.${col.name} = ${value}).`);
-        }
-        values.push(mapped);
-      }
-      const result = insert.run(...values);
-      if (set.hasId) map.set(row.id, Number(result.lastInsertRowid));
-    }
+    insertLogicalSet(db, userId, set, normalized.sets[set.key], idMaps);
     inserted[set.key] = normalized.sets[set.key].length;
   }
 

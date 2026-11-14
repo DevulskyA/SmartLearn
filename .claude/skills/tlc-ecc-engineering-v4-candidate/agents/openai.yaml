@@ -1,0 +1,17 @@
+interface:
+  display_name: TLC + ECC Engineering V4 Candidate
+  short_description: Adaptive outcome engineering with proof-first execution and dynamic
+    rigor.
+  icon_small: assets/icon.svg
+  icon_large: assets/icon.svg
+  default_prompt: Use $tlc-ecc-engineering-v4-candidate to deliver the observable
+    outcome through the smallest safe slice, define proof before confidence, dynamically
+    compose only the orchestration and rigor the task earns, and convert real failures
+    into executable regression knowledge.
+policy:
+  allow_implicit_invocation: true
+  products:
+  - chatgpt
+  - codex
+  - api
+  - atlas

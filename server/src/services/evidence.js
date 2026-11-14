@@ -15,7 +15,7 @@ export class EvidenceError extends Error {
 
 // Earliest day the ledger accepts: anything before is a typo, not study history. The upper bound is "tomorrow"
 // in UTC, because the client sends its LOCAL day and UTC+14 is already a calendar day ahead of the server.
-export const EVIDENCE_DATE_MIN = '2000-01-01';
+const EVIDENCE_DATE_MIN = '2000-01-01';
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
@@ -65,6 +65,59 @@ function toDto(row) {
   };
 }
 
+function validateDirectEvidence({ questionsCount, correctCount, evidenceDate }, now) {
+  const hasQuestions = questionsCount !== undefined && questionsCount !== null;
+  if (hasQuestions && (!Number.isInteger(questionsCount) || questionsCount <= 0)) {
+    throw new EvidenceError('VALIDATION_FAILED', 'questionsCount deve ser um inteiro positivo.', 'questionsCount');
+  }
+  if (hasQuestions && (!Number.isInteger(correctCount) || correctCount < 0 || correctCount > questionsCount)) {
+    throw new EvidenceError('VALIDATION_FAILED', 'correctCount deve ser um inteiro entre 0 e questionsCount.', 'correctCount');
+  }
+  if (!hasQuestions && correctCount !== undefined && correctCount !== null) {
+    throw new EvidenceError('VALIDATION_FAILED', 'correctCount não pode ser informado sem questionsCount.', 'correctCount');
+  }
+  if (!isAcceptableEvidenceDate(evidenceDate, now)) {
+    throw new EvidenceError('VALIDATION_FAILED', EVIDENCE_DATE_MESSAGE, 'evidenceDate');
+  }
+  return hasQuestions;
+}
+
+function verifyAttemptIds(db, userId, unitId, type, ids) {
+  if (ids.length === 0) return;
+  if (type !== 'INITIAL_PRACTICE') {
+    throw new EvidenceError('VALIDATION_FAILED', 'attemptIds só é aceito para type INITIAL_PRACTICE.', 'attemptIds');
+  }
+  if (!ids.every((id) => Number.isInteger(id))) {
+    throw new EvidenceError('VALIDATION_FAILED', 'attemptIds deve conter apenas inteiros.', 'attemptIds');
+  }
+
+  for (const attemptId of ids) {
+    const attempt = db.prepare('SELECT * FROM exercise_attempts WHERE user_id = ? AND id = ?').get(userId, attemptId);
+    if (!attempt) throw new EvidenceError('NOT_FOUND', dm('ATTEMPT_ID_NOT_FOUND', { attemptId }), 'attemptIds');
+    if (attempt.unit_id !== unitId) throw new EvidenceError('VALIDATION_FAILED', dm('ATTEMPT_OTHER_UNIT', { attemptId }), 'attemptIds');
+    if (attempt.status !== 'SUBMITTED') throw new EvidenceError('VALIDATION_FAILED', dm('ATTEMPT_NOT_SUBMITTED', { attemptId }), 'attemptIds');
+    if (attempt.review_task_id != null) throw new EvidenceError('VALIDATION_FAILED', dm('ATTEMPT_IN_REVIEW', { attemptId }), 'attemptIds');
+    if (attempt.evidence_id != null) throw new EvidenceError('VALIDATION_FAILED', dm('ATTEMPT_IN_OTHER_EVIDENCE', { attemptId }), 'attemptIds');
+  }
+}
+
+function persistEvidence(db, { userId, unitId, type, questionsCount, correctCount, evidenceDate, hasQuestions, ids, createdAt, operation, operationKey, payloadHash }) {
+  return db.transaction(() => {
+    const result = db.prepare(`
+      INSERT INTO learning_evidence (user_id, unit_id, review_task_id, type, questions_count, correct_count, evidence_date, created_at)
+      VALUES (?, ?, NULL, ?, ?, ?, ?, ?)
+    `).run(userId, unitId, type, hasQuestions ? questionsCount : null, hasQuestions ? correctCount : null, evidenceDate, createdAt);
+
+    const evidenceId = result.lastInsertRowid;
+    const linkAttempt = db.prepare('UPDATE exercise_attempts SET evidence_id = ? WHERE user_id = ? AND id = ?');
+    for (const attemptId of ids) linkAttempt.run(evidenceId, userId, attemptId);
+
+    const dto = toDto(db.prepare('SELECT * FROM learning_evidence WHERE user_id = ? AND id = ?').get(userId, evidenceId));
+    recordIdempotency(db, { userId, operation, operationKey, payloadHash, result: dto });
+    return dto;
+  })();
+}
+
 /**
  * Direct evidence reporting accepts only INITIAL_PRACTICE and EXTERNAL —
  * REVIEW evidence is a side effect of reviews.complete() alone (design.md:
@@ -86,22 +139,7 @@ export function create(db, userId, { unitId, type, questionsCount, correctCount,
     throw new EvidenceError('VALIDATION_FAILED', 'type deve ser INITIAL_PRACTICE ou EXTERNAL. Evidência REVIEW só é criada ao concluir uma revisão.', 'type');
   }
   if (!findOwnedUnit(db, userId, unitId)) throw new EvidenceError('NOT_FOUND', dm('UNIT_NOT_FOUND'));
-
-  const hasQuestions = questionsCount !== undefined && questionsCount !== null;
-  if (hasQuestions) {
-    if (!Number.isInteger(questionsCount) || questionsCount <= 0) {
-      throw new EvidenceError('VALIDATION_FAILED', 'questionsCount deve ser um inteiro positivo.', 'questionsCount');
-    }
-    if (!Number.isInteger(correctCount) || correctCount < 0 || correctCount > questionsCount) {
-      throw new EvidenceError('VALIDATION_FAILED', 'correctCount deve ser um inteiro entre 0 e questionsCount.', 'correctCount');
-    }
-  } else if (correctCount !== undefined && correctCount !== null) {
-    throw new EvidenceError('VALIDATION_FAILED', 'correctCount não pode ser informado sem questionsCount.', 'correctCount');
-  }
-
-  if (!isAcceptableEvidenceDate(evidenceDate, now)) {
-    throw new EvidenceError('VALIDATION_FAILED', EVIDENCE_DATE_MESSAGE, 'evidenceDate');
-  }
+  const hasQuestions = validateDirectEvidence({ questionsCount, correctCount, evidenceDate }, now);
 
   const ids = Array.isArray(attemptIds) ? [...new Set(attemptIds)] : [];
 
@@ -112,40 +150,10 @@ export function create(db, userId, { unitId, type, questionsCount, correctCount,
   const check = checkIdempotency(db, { userId, operation, operationKey, payload: { unitId, type, questionsCount, correctCount, evidenceDate, attemptIds: [...ids].sort((a, b) => a - b) } });
   if (check.cached) return check.result;
 
-  if (ids.length > 0) {
-    if (type !== 'INITIAL_PRACTICE') {
-      throw new EvidenceError('VALIDATION_FAILED', 'attemptIds só é aceito para type INITIAL_PRACTICE.', 'attemptIds');
-    }
-    if (!ids.every((id) => Number.isInteger(id))) {
-      throw new EvidenceError('VALIDATION_FAILED', 'attemptIds deve conter apenas inteiros.', 'attemptIds');
-    }
-    for (const attemptId of ids) {
-      const attempt = db.prepare('SELECT * FROM exercise_attempts WHERE user_id = ? AND id = ?').get(userId, attemptId);
-      if (!attempt) throw new EvidenceError('NOT_FOUND', dm('ATTEMPT_ID_NOT_FOUND', { attemptId }), 'attemptIds');
-      if (attempt.unit_id !== unitId) throw new EvidenceError('VALIDATION_FAILED', dm('ATTEMPT_OTHER_UNIT', { attemptId }), 'attemptIds');
-      if (attempt.status !== 'SUBMITTED') throw new EvidenceError('VALIDATION_FAILED', dm('ATTEMPT_NOT_SUBMITTED', { attemptId }), 'attemptIds');
-      if (attempt.review_task_id != null) throw new EvidenceError('VALIDATION_FAILED', dm('ATTEMPT_IN_REVIEW', { attemptId }), 'attemptIds');
-      if (attempt.evidence_id != null) throw new EvidenceError('VALIDATION_FAILED', dm('ATTEMPT_IN_OTHER_EVIDENCE', { attemptId }), 'attemptIds');
-    }
-  }
+  verifyAttemptIds(db, userId, unitId, type, ids);
 
   const createdAt = now().toISOString();
-  const run = db.transaction(() => {
-    const result = db.prepare(`
-      INSERT INTO learning_evidence (user_id, unit_id, review_task_id, type, questions_count, correct_count, evidence_date, created_at)
-      VALUES (?, ?, NULL, ?, ?, ?, ?, ?)
-    `).run(userId, unitId, type, hasQuestions ? questionsCount : null, hasQuestions ? correctCount : null, evidenceDate, createdAt);
-
-    const evidenceId = result.lastInsertRowid;
-    const linkAttempt = db.prepare('UPDATE exercise_attempts SET evidence_id = ? WHERE user_id = ? AND id = ?');
-    for (const attemptId of ids) linkAttempt.run(evidenceId, userId, attemptId);
-
-    const dto = toDto(db.prepare('SELECT * FROM learning_evidence WHERE user_id = ? AND id = ?').get(userId, evidenceId));
-    recordIdempotency(db, { userId, operation, operationKey, payloadHash: check.payloadHash, result: dto });
-    return dto;
-  });
-
-  return run();
+  return persistEvidence(db, { userId, unitId, type, questionsCount, correctCount, evidenceDate, hasQuestions, ids, createdAt, operation, operationKey, payloadHash: check.payloadHash });
 }
 
 /**

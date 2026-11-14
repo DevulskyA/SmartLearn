@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -9,6 +10,7 @@ import { VITE_ORIGIN, serverPort } from './support/ports.js';
 import { waitForServerReady } from './support/wait-for-server.js';
 import { signInRegistered } from './support/session.js';
 
+import { generateByPages } from './support/materials-flow.js';
 // Proves the shared select/combobox primitive (src/select-ui.js) live,
 // across representative real consumers, instead of trusting the code
 // alone. Canonical rule under test for an ORDINARY select (WAI-ARIA APG
@@ -352,7 +354,7 @@ test.describe('source-draft-subject-select (Materiais) — the one flagged as "n
       window.__SMARTLEARN_REMOTE_MODE__ = true;
       window.__SMARTLEARN_LOCAL_AUTHORITY__ = true;
     }, API_BASE);
-    const email = `select-ui-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+    const email = `select-ui-${Date.now()}-${randomUUID()}@example.com`;
     const password = 'a genuinely long test password 1';
     await signInRegistered(page, { email: email, password: password });
   });
@@ -367,8 +369,7 @@ test.describe('source-draft-subject-select (Materiais) — the one flagged as "n
       buffer: buildFixturePdf(['Conteudo da primeira materia sobre Nefrologia']),
     });
     await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
-    const firstItem = page.locator('.source-proposal-item').first();
-    await firstItem.locator('[data-action="generate-draft"]').click();
+    await generateByPages(page);
     const firstPanel = page.locator('.lesson-editor');
     await expect(firstPanel).toBeVisible();
     await firstPanel.locator('.source-draft-subject-input').fill('Nefrologia Select UI');
@@ -383,8 +384,7 @@ test.describe('source-draft-subject-select (Materiais) — the one flagged as "n
       buffer: buildFixturePdf(['Conteudo da segunda materia sobre outro assunto']),
     });
     await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
-    const secondItem = page.locator('.source-proposal-item').first();
-    await secondItem.locator('[data-action="generate-draft"]').click();
+    await generateByPages(page);
     const secondPanel = page.locator('.lesson-editor');
     await expect(secondPanel).toBeVisible();
 
@@ -435,6 +435,6 @@ test.describe('source-draft-subject-select (Materiais) — the one flagged as "n
       const res = await fetch(`${base}/v1/subjects`, { credentials: 'include' });
       return res.json();
     }, API_BASE);
-    expect(subjectsAfter.subjects.length).toBe(1); // reused the existing subject, no duplicate created
+    expect(subjectsAfter.subjects).toHaveLength(1); // reused the existing subject, no duplicate created
   });
 });

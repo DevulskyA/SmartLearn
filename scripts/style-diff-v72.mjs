@@ -20,27 +20,44 @@ const PROPS = ['color', 'backgroundColor', 'fontFamily', 'fontSize', 'fontWeight
 // Runs in the page: one record per distinct element kind (tag + classes, or tag inside its parent's class) of the screen.
 const collect = ({ screen, props }) => {
   const ctx = document.createElement('canvas').getContext('2d', { willReadFrequently: true });
-  const rgba = (value) => { if (!/^(rgb|oklch|color|#|hsl)/.test(value)) return value; ctx.clearRect(0, 0, 1, 1); ctx.fillStyle = '#000'; ctx.fillStyle = value; ctx.fillRect(0, 0, 1, 1); const d = ctx.getImageData(0, 0, 1, 1).data; return `rgba(${d[0]},${d[1]},${d[2]},${(d[3] / 255).toFixed(2)})`; };
+  const rgba = (value) => {
+    if (!/^(rgb|oklch|color|#|hsl)/.test(value)) return value;
+    ctx.clearRect(0, 0, 1, 1);
+    ctx.fillStyle = '#000';
+    ctx.fillStyle = value;
+    ctx.fillRect(0, 0, 1, 1);
+    const d = ctx.getImageData(0, 0, 1, 1).data;
+    return `rgba(${d[0]},${d[1]},${d[2]},${(d[3] / 255).toFixed(2)})`;
+  };
   const colourProps = new Set(['color', 'backgroundColor', 'borderTopColor', 'borderLeftColor']);
+  const elementKey = (element) => {
+    const classes = [...element.classList].filter((className) => !/^is-|^js-/.test(className)).sort();
+    for (const attr of ['data-band', 'data-trend', 'data-state', 'data-direction']) {
+      if (element.getAttribute(attr)) classes.push('[' + attr + '=' + element.getAttribute(attr) + ']');
+    }
+    const tag = element.tagName.toLowerCase();
+    const parent = element.parentElement ? [...element.parentElement.classList].sort().join('.') : '';
+    const parentName = parent || element.parentElement?.tagName.toLowerCase();
+    return classes.length ? tag + '.' + classes.join('.') : tag + ' in .' + parentName;
+  };
+  const styleRecord = (element, box, rootBox, style) => {
+    const record = { count: 1, text: (element.innerText || '').trim().replace(/\s+/g, ' ').slice(0, 40), x: Math.round(box.x - rootBox.x), width: Math.round(box.width), height: Math.round(box.height) };
+    for (const prop of props) record[prop] = colourProps.has(prop) ? rgba(style[prop]) : style[prop];
+    record.fontFamily = String(record.fontFamily).split(',')[0].replace(/["']/g, '').trim();
+    return record;
+  };
   const root = document.querySelector(`#screen-${screen}`);
   if (!root) return null;
   const rootBox = root.getBoundingClientRect();
   const records = {};
-  for (const el of root.querySelectorAll('*')) {
-    if (el.closest('svg') && el.tagName.toLowerCase() !== 'svg') continue;
-    const box = el.getBoundingClientRect();
-    const style = getComputedStyle(el);
+  for (const element of root.querySelectorAll('*')) {
+    if (element.closest('svg') && element.tagName.toLowerCase() !== 'svg') continue;
+    const box = element.getBoundingClientRect();
+    const style = getComputedStyle(element);
     if (box.width < 1 || box.height < 1 || style.visibility === 'hidden' || style.display === 'none') continue;
-    const classes = [...el.classList].filter((c) => !/^is-|^js-/.test(c)).sort();
-    for (const attr of ['data-band', 'data-trend', 'data-state', 'data-direction']) if (el.getAttribute(attr)) classes.push(`[${attr}=${el.getAttribute(attr)}]`);
-    const tag = el.tagName.toLowerCase();
-    const parent = el.parentElement ? [...el.parentElement.classList].sort().join('.') : '';
-    const key = classes.length ? `${tag}.${classes.join('.')}` : `${tag} in .${parent || el.parentElement?.tagName.toLowerCase()}`;
+    const key = elementKey(element);
     if (records[key]) { records[key].count += 1; continue; }
-    const rec = { count: 1, text: (el.innerText || '').trim().replace(/\s+/g, ' ').slice(0, 40), x: Math.round(box.x - rootBox.x), width: Math.round(box.width), height: Math.round(box.height) };
-    for (const p of props) rec[p] = colourProps.has(p) ? rgba(style[p]) : style[p];
-    rec.fontFamily = String(rec.fontFamily).split(',')[0].replace(/["']/g, '').trim();
-    records[key] = rec;
+    records[key] = styleRecord(element, box, rootBox, style);
   }
   return records;
 };
@@ -87,10 +104,12 @@ for (const width of args.widths.split(',').map(Number)) {
 }
 await browser.close();
 
+const formatDifferences = (diffs) => Object.entries(diffs).map(([property, value]) => '      ' + property + ': ' + value).join('\n');
+
 for (const [width, r] of Object.entries(report)) {
   console.log(`\n=== ${width}px  missing in app: ${r.missingInApp.length} | extra in app: ${r.extraInApp.length} | kinds with style differences: ${Object.keys(r.different).length}`);
   for (const m of r.missingInApp) console.log(`  MISSING  ${m}`);
   for (const m of r.extraInApp) console.log(`  EXTRA    ${m}`);
-  for (const [key, diffs] of Object.entries(r.different)) console.log(`  DIFF ${key}\n${Object.entries(diffs).map(([p, v]) => `      ${p}: ${v}`).join('\n')}`);
+  for (const [key, diffs] of Object.entries(r.different)) console.log(`  DIFF ${key}\n${formatDifferences(diffs)}`);
 }
 if (args.out) writeFileSync(args.out, JSON.stringify(report, null, 2));

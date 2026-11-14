@@ -138,18 +138,17 @@ test('end to end with the real deterministic audit: an invented value in the sum
     const userId = makeUser(db);
     const draft = await draftWithFindings(db, userId, sourcesDir, []);
     // the reviewer (or the model) leaves a dose the source never states
-    const bad = drafts.reviseSummary(db, userId, draft.id, { summary: 'A pagina de fisiologia descreve a dose de 987 mg por dia.', expectedVersion: draft.summaryVersion });
+    drafts.reviseSummary(db, userId, draft.id, { summary: 'A pagina de fisiologia descreve a dose de 987 mg por dia.', expectedVersion: draft.summaryVersion });
     const audited = drafts.reauditDraft(db, userId, draft.id).draft;
     assert.ok(audited.audit.findings.some((f) => f.issue === 'SUMMARY_UNSUPPORTED_VALUE' && f.severity === 'HIGH'));
     assert.throws(() => acceptDraft(db, userId, draft.id, { ...ACCEPT, expectedRevision: audited.revision }), (err) => err.code === 'FINDINGS_UNRESOLVED');
     assert.equal(unitCount(db), 0);
 
-    const fixed = drafts.reviseSummary(db, userId, draft.id, { summary: 'A pagina de fisiologia descreve o tema da aula.', expectedVersion: audited.summaryVersion });
+    drafts.reviseSummary(db, userId, draft.id, { summary: 'A pagina de fisiologia descreve o tema da aula.', expectedVersion: audited.summaryVersion });
     const clean = drafts.reauditDraft(db, userId, draft.id).draft;
     assert.ok(!clean.audit.findings.some((f) => f.severity === 'HIGH' && f.entityType === 'SUMMARY' && f.issue === 'SUMMARY_UNSUPPORTED_VALUE'));
     assert.equal(clean.acceptanceBlockers.summary, 0);
     assert.ok(acceptDraft(db, userId, draft.id, { ...ACCEPT, expectedRevision: clean.revision }).unit.id);
-    void bad; void fixed;
   } finally { cleanup(); }
 });
 

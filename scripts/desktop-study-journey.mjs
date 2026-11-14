@@ -24,11 +24,15 @@ import { startEditingSummary } from '../e2e/support/summary-editing.js';
 import { measure, compare, describe } from './journey-baseline.mjs';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
+const systemRoot = process.env.SystemRoot ?? 'C:\\Windows';
+const POWERSHELL_EXECUTABLE = join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+const TASKKILL_EXECUTABLE = join(systemRoot, 'System32', 'taskkill.exe');
 const targetDir = process.env.CARGO_TARGET_DIR ? resolve(process.env.CARGO_TARGET_DIR) : join(root, 'src-tauri', 'target');
 const exe = resolve(process.env.SL_JOURNEY_EXE ?? join(targetDir, 'debug', 'smartlearn.exe'));
+// eslint-disable-next-line sonarjs/no-os-command-from-path -- Git has no portable fixed executable path; normal installed Git on PATH is required here.
 const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
 const head = git('rev-parse', '--short', 'HEAD');
-const identity = JSON.parse(execFileSync('node', ['scripts/build-identity.mjs'], { cwd: root, encoding: 'utf8', env: { ...process.env, SMARTLEARN_BUILD_MODE: 'DEV' } }));
+const identity = JSON.parse(execFileSync(process.execPath, ['scripts/build-identity.mjs'], { cwd: root, encoding: 'utf8', env: { ...process.env, SMARTLEARN_BUILD_MODE: 'DEV' } }));
 const expectedTitle = `SmartLearn DEV - v${identity.version} - ${head}`;
 // CODEX (default) is the real, PAID model. FAKE is the deterministic offline provider: no model is called, so it proves every step of the journey
 // except the quality of a real model's draft (that stays a human, authorised run).
@@ -42,8 +46,12 @@ const freePort = () => new Promise((ok, fail) => {
   s.on('error', fail);
 });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const ps = (command) => execFileSync('powershell', ['-NoProfile', '-Command', `${command}; exit 0`], { encoding: 'utf8' }).trim();
+const ps = (command) => execFileSync(POWERSHELL_EXECUTABLE, ['-NoProfile', '-Command', `${command}; exit 0`], { encoding: 'utf8' }).trim();
 const squash = (text) => String(text ?? '').replace(/\s+/g, ' ').trim();
+const withoutQuery = (url) => {
+  const query = url.indexOf('?');
+  return query === -1 ? url : url.slice(0, query);
+};
 
 if (!existsSync(exe)) throw new Error(`debug executable missing: ${exe} (run cargo build in src-tauri)`);
 const runningSame = ps(`Get-Process -Name smartlearn -ErrorAction SilentlyContinue | ForEach-Object { $_.Path }`).split(/\r?\n/).map((p) => p.trim().toLowerCase()).filter(Boolean);
@@ -122,7 +130,7 @@ function placeWindowOnSmallDisplay(pid) {
   if (process.env.SL_JOURNEY_NO_MOVE) return Promise.resolve({ moved: false, reason: 'SL_JOURNEY_NO_MOVE' });
   return new Promise((done) => {
     let out = '';
-    const child = spawn('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(root, 'scripts', 'move-window-to-small-display.ps1'), '-ProcessId', String(pid)], { stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true });
+    const child = spawn(POWERSHELL_EXECUTABLE, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(root, 'scripts', 'move-window-to-small-display.ps1'), '-ProcessId', String(pid)], { stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true });
     child.stdout.on('data', (chunk) => { out += chunk; });
     child.on('error', (error) => done({ moved: false, reason: String(error.message) }));
     child.on('close', () => { try { done(JSON.parse(out.trim().split('\n').pop())); } catch { done({ moved: false, reason: `unreadable: ${out.slice(0, 120)}` }); } });
@@ -133,8 +141,95 @@ function placeWindowOnSmallDisplay(pid) {
 function windowRect(pid, set = null) {
   const args = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(root, 'scripts', 'window-rect.ps1'), '-ProcessId', String(pid)];
   if (set) args.push('-X', String(set.x), '-Y', String(set.y), '-W', String(set.w), '-H', String(set.h));
-  const line = execFileSync('powershell', args, { encoding: 'utf8' }).trim().split('\n').pop();
+  const line = execFileSync(POWERSHELL_EXECUTABLE, args, { encoding: 'utf8' }).trim().split('\n').pop();
   return JSON.parse(line).rect;
+}
+
+async function waitForCdpEndpoint() {
+  const startedAt = Date.now();
+  let lastNote = startedAt;
+  while (true) {
+    try {
+      if ((await fetch(`http://127.0.0.1:${cdpPort}/json/version`)).ok) return;
+    } catch { /* not yet */ }
+    if (app.exitCode !== null) throw new Error(`${exe} exited early (${app.exitCode})`);
+    const waited = Date.now() - startedAt;
+    if (waited > 30000) throw new Error(`CDP endpoint did not come up in 30 s: pid ${app.pid} still running, port ${cdpPort}, exe ${exe}. Check that this is the Tauri exe and that WebView2 accepted --remote-debugging-port.`);
+    if (Date.now() - lastNote >= 10000) {
+      lastNote = Date.now();
+      console.error(`[journey] waiting for CDP on ${cdpPort} (${Math.round(waited / 1000)} s, pid ${app.pid} alive)`);
+    }
+    await sleep(300);
+  }
+}
+
+async function findDesktopPage() {
+  for (let attempt = 0; attempt < 150; attempt += 1) {
+    const found = browser.contexts().flatMap((context) => context.pages()).find((candidate) => /^http:\/\/127\.0\.0\.1:\d+\//.test(candidate.url()));
+    if (found) return found;
+    await sleep(300);
+  }
+  throw new Error('the Desktop window page was not found over CDP');
+}
+
+async function requestProcessStop(pid, { tree = false, force = false } = {}) {
+  const args = ['/PID', String(pid)];
+  if (tree) args.push('/T');
+  if (force) args.push('/F');
+  try { execFileSync(TASKKILL_EXECUTABLE, args, { stdio: 'ignore' }); } catch { /* already gone or close refused */ }
+}
+
+async function waitForAppExit(timeoutMs) {
+  const until = Date.now() + timeoutMs;
+  while (app.exitCode === null && Date.now() < until) await sleep(300);
+  return app.exitCode === null;
+}
+
+async function readRecoveryCopy(page, key) {
+  return page.evaluate(async (lookupKey) => {
+    const openRequest = indexedDB.open('smartlearn-recovery', 1);
+    const database = await new Promise((resolve) => {
+      openRequest.onupgradeneeded = () => openRequest.result.createObjectStore('drafts');
+      openRequest.onerror = () => resolve(null);
+      openRequest.onsuccess = () => resolve(openRequest.result);
+    });
+    if (!database) return null;
+    const request = database.transaction('drafts', 'readonly').objectStore('drafts').get(lookupKey);
+    const value = await new Promise((resolve) => {
+      request.onsuccess = () => resolve(request.result ?? null);
+      request.onerror = () => resolve(null);
+    });
+    database.close();
+    return value;
+  }, key);
+}
+
+async function recoveryKeys(page) {
+  return page.evaluate(async () => {
+    const openRequest = indexedDB.open('smartlearn-recovery', 1);
+    const database = await new Promise((resolve) => {
+      openRequest.onerror = () => resolve(null);
+      openRequest.onsuccess = () => resolve(openRequest.result);
+    });
+    if (!database) return 'open error';
+    const request = database.transaction('drafts', 'readonly').objectStore('drafts').getAllKeys();
+    const keys = await new Promise((resolve) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => resolve('error');
+    });
+    database.close();
+    return keys;
+  });
+}
+
+async function inspectRecoveryState(page) {
+  const state = await page.evaluate(async () => ({
+    origin: location.origin,
+    databases: (await indexedDB.databases?.())?.map((database) => database.name) ?? [],
+    localStorageKeys: Object.keys(localStorage),
+    cookies: document.cookie.length,
+  }));
+  return { ...state, recoveryKeys: await recoveryKeys(page) };
 }
 
 async function launch({ place = true } = {}) {
@@ -145,32 +240,16 @@ async function launch({ place = true } = {}) {
   const env = { ...baseEnv, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${cdpPort}${offline}` };
   app = spawn(exe, [], { env, stdio: 'ignore', windowsHide: false });
   const placement = place ? placeWindowOnSmallDisplay(app.pid) : Promise.resolve({ moved: false, reason: 'window restore check: the app must place itself' });
-  // A real start answers on the CDP port within seconds. Past 30 s the instrument is wrong (wrong exe, no WebView2 flag, a dialog), so fail
-  // with what is known instead of waiting 90 s, and say once every 10 s that it is still waiting and why that may be.
-  const startedAt = Date.now();
-  let lastNote = startedAt;
-  for (;;) {
-    try { if ((await fetch(`http://127.0.0.1:${cdpPort}/json/version`)).ok) break; } catch { /* not yet */ }
-    if (app.exitCode !== null) throw new Error(`${exe} exited early (${app.exitCode})`);
-    const waited = Date.now() - startedAt;
-    if (waited > 30000) throw new Error(`CDP endpoint did not come up in 30 s: pid ${app.pid} still running, port ${cdpPort}, exe ${exe}. Check that this is the Tauri exe and that WebView2 accepted --remote-debugging-port.`);
-    if (Date.now() - lastNote >= 10000) { lastNote = Date.now(); console.error(`[journey] waiting for CDP on ${cdpPort} (${Math.round(waited / 1000)} s, pid ${app.pid} alive)`); }
-    await sleep(300);
-  }
+  await waitForCdpEndpoint();
   browser = await chromium.connectOverCDP(`http://127.0.0.1:${cdpPort}`);
-  page = undefined;
-  for (let i = 0; i < 150 && !page; i += 1) {
-    page = browser.contexts().flatMap((c) => c.pages()).find((p) => /^http:\/\/127\.0\.0\.1:\d+\//.test(p.url()));
-    if (!page) await sleep(300);
-  }
-  if (!page) throw new Error('the Desktop window page was not found over CDP');
+  page = await findDesktopPage();
   windowPlacement = await placement;
   closing = false;
   const tag = () => (closing ? '[while closing] ' : '');
   page.on('pageerror', (error) => consoleErrors.push(`${tag()}pageerror: ${error.message}`));
   page.on('console', (msg) => { if (msg.type() === 'error') consoleErrors.push(`${tag()}console.error: ${msg.text()}`); });
   // which requests answer 401: a browser "401 (Unauthorized)" console line names no URL (OBS-J1). Kept apart from consoleErrors.
-  page.on('response', (response) => { if (response.status() === 401) http401.push(`${tag()}${response.request().method()} ${response.url().replace(/\?.*$/, '')}`); });
+  page.on('response', (response) => { if (response.status() === 401) http401.push(`${tag()}${response.request().method()} ${withoutQuery(response.url())}`); });
   await page.waitForLoadState('networkidle');
   if (process.env.SL_JOURNEY_NO_INTERNET) {
     const reached = await page.evaluate(() => fetch('https://example.com/', { mode: 'no-cors' }).then(() => true, () => false));
@@ -199,16 +278,15 @@ async function shutdown({ graceful }) {
   browser = undefined;
   let how = 'already gone';
   if (app.exitCode === null) {
-    if (graceful) { try { execFileSync('taskkill', ['/PID', String(pid)], { stdio: 'ignore' }); } catch { /* window may refuse */ } }
-    const until = Date.now() + 20000;
-    while (app.exitCode === null && Date.now() < until) await sleep(300);
-    how = app.exitCode === null ? 'forced after the graceful close did not exit in 20 s' : 'graceful window close, process exited by itself';
-    if (app.exitCode === null) { try { execFileSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore' }); } catch { /* gone */ } }
+    if (graceful) await requestProcessStop(pid);
+    const needsForce = await waitForAppExit(20000);
+    how = needsForce ? 'forced after the graceful close did not exit in 20 s' : 'graceful window close, process exited by itself';
+    if (needsForce) await requestProcessStop(pid, { tree: true, force: true });
   }
   await sleep(2000);
   // only the backend processes this app started
   const leftovers = children.filter((child) => ps(`Get-Process -Id ${child} -ErrorAction SilentlyContinue | ForEach-Object { $_.Id }`));
-  for (const child of leftovers) { try { execFileSync('taskkill', ['/PID', child, '/T', '/F'], { stdio: 'ignore' }); } catch { /* gone */ } }
+  for (const child of leftovers) await requestProcessStop(child, { tree: true, force: true });
   await sleep(1000);
   return { how, backendChildren: children.length, backendLeftoversKilled: leftovers.length };
 }
@@ -419,10 +497,13 @@ try {
 
   await step(5, 'create a lesson draft from controlled data with the real CODEX provider', async () => {
     const generationStartedAt = Date.now();
-    const proposalItem = page.locator('.source-proposal-item').first();
+    await page.locator('#sources-range-start').fill('1');
+    await page.locator('#sources-range-end').fill(String(PAGES.length));
+    await page.locator('#sources-range-form [type="submit"]').click();
+    const proposalItem = page.locator('#sources-drafts-list .source-draft-item').first();
+    await proposalItem.waitFor({ state: 'attached', timeout: 15000 });
     const proposalId = Number(await proposalItem.getAttribute('data-proposal-id'));
     expect(Number.isInteger(proposalId) && proposalId > 0, `invalid proposal id: ${proposalId}`);
-    await proposalItem.locator('[data-action="generate-draft"]').click();
     const generation = await waitForGenerationJob(proposalId);
     const terminalJob = generation.job;
     expect(terminalJob?.state === 'SUCCEEDED', `CODEX generation job ended in ${JSON.stringify(terminalJob)}`);
@@ -461,7 +542,12 @@ try {
   const answerField = (editor) => {
     const hidden = editor.locator('[data-part="answer-hidden"] [data-action="reveal-answer"]');
     return {
-      async prepare() { if (await hidden.count()) await hidden.click(); return editor.locator('.lesson-qeditor textarea').nth(1); },
+      async prepare() {
+        if (await hidden.count()) {
+          await hidden.click();
+        }
+        return editor.locator('.lesson-qeditor textarea').nth(1);
+      },
       async fill(value) { await (await this.prepare()).fill(value); },
       async inputValue() { return (await this.prepare()).inputValue(); },
     };
@@ -516,7 +602,7 @@ try {
     await page.locator('[data-screen="materials"]:visible').first().click();
     await page.locator('#sources-existing-list .source-existing-item', { hasText: 'farmacologia-desktop.pdf' }).locator('[data-action="open-source"]').click();
     await page.locator('#sources-message').getByText(/trechos? propostos?/).waitFor({ timeout: 15000 });
-    await page.locator('.source-proposal-item').first().locator('[data-action="open-draft"]').click();
+    await page.locator('#sources-drafts-list [data-action="open-draft-in-progress"]').first().click();
     await editor.waitFor({ state: 'visible', timeout: 15000 });
     const summaryAfter = await editor.locator('.lesson-summary-input').inputValue();
     expect(summaryAfter === ctx.summaryFinal, `summary after reload: ${summaryAfter}`);
@@ -649,16 +735,7 @@ try {
     const copyKey = `smartlearn.draft-recovery.v1.${ctx.draftId}`;
     // the local copy lives in IndexedDB (a write is complete only once it is on disk): read it the way the app does
     const readCopy = async () => {
-      const raw = await page.evaluate((key) => new Promise((resolve) => {
-        const open = indexedDB.open('smartlearn-recovery', 1);
-        open.onupgradeneeded = () => open.result.createObjectStore('drafts');
-        open.onerror = () => resolve(null);
-        open.onsuccess = () => {
-          const get = open.result.transaction('drafts', 'readonly').objectStore('drafts').get(key);
-          get.onsuccess = () => { open.result.close(); resolve(get.result ?? null); };
-          get.onerror = () => resolve(null);
-        };
-      }), copyKey);
+      const raw = await readRecoveryCopy(page, copyKey);
       return raw ? JSON.parse(raw) : null;
     };
     await waitFor('the local copy to be on disk', async () => (await readCopy())?.summary?.text === `A1 B1 B2 C1 ${base}`, 5000);
@@ -675,7 +752,7 @@ try {
     // "last chance" save of the closing page fails like the others; only then is the debugging connection dropped. (A forced kill of the whole process tree
     // is harsher than a browser can promise: WebView2 had not written even an IndexedDB commit to disk - recorded as a limitation in the handoff.)
     closing = true;
-    execFileSync('taskkill', ['/PID', String(app.pid)], { stdio: 'ignore' });
+    execFileSync(TASKKILL_EXECUTABLE, ['/PID', String(app.pid)], { stdio: 'ignore' });
     for (let waited = 0; app.exitCode === null && waited < 20000; waited += 300) await sleep(300);
     expect(app.exitCode !== null, 'the app did not close when asked to');
     await browser?.close().catch(() => {});
@@ -689,17 +766,11 @@ try {
     await page.locator('[data-screen="materials"]:visible').first().click();
     await page.locator('#sources-existing-list .source-existing-item', { hasText: 'farmacologia-desktop.pdf' }).locator('[data-action="open-source"]').click();
     await page.locator('#sources-message').getByText(/trechos? propostos?/).waitFor({ timeout: 15000 });
-    await page.locator('.source-proposal-item').first().locator('[data-action="open-draft"]').click();
+    await page.locator('#sources-drafts-list [data-action="open-draft-in-progress"]').first().click();
     await editor2.waitFor({ state: 'visible', timeout: 15000 });
     const banner = editor2.locator('.lesson-recovery');
     await banner.waitFor({ state: 'visible', timeout: 10000 }).catch(async (error) => { // the copy survived the kill AND the new launch (same port, same profile)
-      const after = await page.evaluate(async () => ({
-        origin: location.origin,
-        databases: (await indexedDB.databases?.())?.map((d) => d.name) ?? [],
-        recoveryKeys: await new Promise((resolve) => { const o = indexedDB.open('smartlearn-recovery', 1); o.onsuccess = () => { const r = o.result.transaction('drafts', 'readonly').objectStore('drafts').getAllKeys(); r.onsuccess = () => resolve(r.result); r.onerror = () => resolve('error'); }; o.onerror = () => resolve('open error'); }),
-        localStorageKeys: Object.keys(localStorage),
-        cookies: document.cookie.length,
-      }));
+      const after = await inspectRecoveryState(page);
       after.databases = { databases: after.databases, recoveryKeys: after.recoveryKeys, localStorageKeys: after.localStorageKeys, cookieChars: after.cookies, draftId: ctx.draftId };
       throw new Error(`no recovery offer after the kill: origin before ${originBeforeKill}, after ${after.origin}; databases after: ${JSON.stringify(after.databases)}; copy at reopen: ${JSON.stringify(copyOnReopen)}; copy now: ${JSON.stringify(await readCopy())}; ${String(error.message).slice(0, 120)}`);
     });
@@ -855,7 +926,11 @@ try {
   const readAttemptOnServer = (id) => page.evaluate(async (attemptId) => (await (await fetch(`${window.__SMARTLEARN_API_BASE__}/v1/attempts/${attemptId}`, { credentials: 'include' })).json()).attempt, id);
   const pollAttempt = async (id, predicate, label) => {
     let last;
-    for (let i = 0; i < 40; i += 1) { last = await readAttemptOnServer(id); if (predicate(last)) return last; await sleep(250); }
+    for (let i = 0; i < 40; i += 1) {
+      last = await readAttemptOnServer(id);
+      if (predicate(last)) return last;
+      await sleep(250);
+    }
     throw new Error(`attempt ${id} never reached ${label}: ${JSON.stringify(last)}`);
   };
 
@@ -1217,7 +1292,7 @@ try {
   result.fatal = String(error?.message ?? error);
 } finally {
   try { if (browser) await browser.close().catch(() => {}); } catch { /* ignore */ }
-  try { if (app && app.exitCode === null) execFileSync('taskkill', ['/PID', String(app.pid), '/T', '/F'], { stdio: 'ignore' }); } catch { /* gone */ }
+  try { if (app && app.exitCode === null) execFileSync(TASKKILL_EXECUTABLE, ['/PID', String(app.pid), '/T', '/F'], { stdio: 'ignore' }); } catch { /* gone */ }
   await sleep(1500);
   rmSync(work, { recursive: true, force: true, maxRetries: 8, retryDelay: 300 });
 }
@@ -1247,15 +1322,25 @@ try { baselineFile = JSON.parse(readFileSync(BASELINE_FILE, 'utf8')); } catch { 
 // The recorded baseline is a CODEX run. Step 5 (the model call) is the only step whose duration depends on the provider, so a FAKE run compares every
 // other step and the total without it, and never records a baseline (that would replace the real-model one with an offline number).
 const withoutModelStep = (m) => ({ total: m.total - (m.steps['5'] ?? 0), steps: Object.fromEntries(Object.entries(m.steps).filter(([k]) => k !== '5')) });
+const compareDuration = (provider, baseline, measuredDuration) => {
+  if (provider === 'CODEX') return compare(baseline, measuredDuration);
+  const baselineWithoutModel = baseline && baseline.steps ? withoutModelStep(baseline) : baseline;
+  return compare(baselineWithoutModel, withoutModelStep(measuredDuration));
+};
 if (process.argv.includes('--record-baseline') && PROVIDER !== 'CODEX') {
   result.durationCheck = { status: 'NOT_RECORDED', reason: `the baseline is recorded with the CODEX provider, not ${PROVIDER}` };
 } else if (process.argv.includes('--record-baseline')) {
   if (result.pass) { writeFileSync(BASELINE_FILE, JSON.stringify({ recordedAt: new Date().toISOString(), head, ...measured }, null, 2) + '\n'); result.durationCheck = { status: 'RECORDED', total: measured.total }; }
   else result.durationCheck = { status: 'NOT_RECORDED', reason: 'the run did not pass 23/23' };
 } else {
-  result.durationCheck = PROVIDER === 'CODEX' ? compare(baselineFile, measured) : compare(baselineFile && baselineFile.steps ? withoutModelStep(baselineFile) : baselineFile, withoutModelStep(measured));
+  result.durationCheck = compareDuration(PROVIDER, baselineFile, measured);
   if (result.durationCheck.status === 'NO_BASELINE') console.error('[journey] NO BASELINE for step durations; record one from a clean passing run with --record-baseline');
   if (result.durationCheck.status === 'DEVIATION') console.error(`[journey] DURATION DEVIATION: ${describe(result.durationCheck.deviations)}. Investigate the target and the instrument before trusting this run.`);
 }
 console.log(JSON.stringify(result, null, 2));
-process.exit(result.pass ? (result.durationCheck.status === 'DEVIATION' ? 5 : 0) : 1);
+let exitCode = 1;
+if (result.pass) {
+  exitCode = 0;
+  if (result.durationCheck.status === 'DEVIATION') exitCode = 5;
+}
+process.exit(exitCode);

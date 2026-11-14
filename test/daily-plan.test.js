@@ -55,3 +55,10 @@ test('deterministic: same input, same plan, ties broken by id; the input is not 
   assert.equal(JSON.stringify(items), before);
   assert.throws(() => planDay({ items, availableMinutes: -1, today: TODAY }), /non-negative/);
 });
+
+test('malformed input fails loudly instead of producing an inconsistent plan: bad dates and non-numeric minutes', () => {
+  assert.throws(() => planDay({ items: [item('a', 10, { dueDate: '10/10/2026' })], availableMinutes: 60, today: TODAY }), /INVALID_DATE/);
+  assert.throws(() => planDay({ items: [item('a', 10)], availableMinutes: 60, today: 'hoje' }), /INVALID_DATE/);
+  assert.throws(() => scoreItem(item('a', 10, { examDate: '2026-13-45' }), TODAY), /INVALID_DATE/);
+  assert.throws(() => planDay({ items: [item('a', '10')], availableMinutes: 60, today: TODAY }), /INVALID_MINUTES/);
+});

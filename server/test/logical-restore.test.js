@@ -528,7 +528,7 @@ test('IMPORT-1: createLogicalExport is the shape the restore consumes (guards ex
     seedRichAccount(db, a.userId);
     const exported = createLogicalExport(db, a.userId);
     const known = {
-      subjects: 8, learningUnits: 10, reviewTasks: 7, exercises: 7, exerciseVersions: 10, learningEvidence: 9,
+      subjects: 8, learningUnits: 11, reviewTasks: 7, exercises: 7, exerciseVersions: 10, learningEvidence: 9,
       exerciseAttempts: 11, exerciseFlagEvents: 7, learningEvents: 18, exams: 9, examItems: 8, examEvidence: 3,
     };
     for (const [key, columns] of Object.entries(known)) {

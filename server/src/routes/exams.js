@@ -37,7 +37,7 @@ export function registerExamRoutes(app, db) {
   app.put('/exams/:id/items/:itemId/answer', {
     schema: {
       params: { type: 'object', required: ['id', 'itemId'], properties: { id: ID, itemId: ID } },
-      body: { type: 'object', required: ['answer'], properties: { answer: { type: 'string' } } },
+      body: { type: 'object', required: ['answer'], properties: { answer: { type: 'string', maxLength: 5000 } } }, // the same 5000 the answer box allows
     },
   }, async (request, reply) => {
     const id = Number(request.params.id);

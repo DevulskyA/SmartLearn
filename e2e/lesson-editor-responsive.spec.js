@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { test, expect } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -10,6 +11,7 @@ import { waitForServerReady } from './support/wait-for-server.js';
 import { signInRegistered } from './support/session.js';
 import { startEditingSummary } from './support/summary-editing.js';
 
+import { generateByPages } from './support/materials-flow.js';
 // T-F4-04 (R-06 AC-06.2, F-34): the lesson editor in narrow windows. At 360x800 (phone) and 768x1024 (tablet) the page never scrolls
 // sideways, every control the student must press is a 44px target, and the whole job (read the summary, edit and save it, pick
 // and save a question, read the source and the review, go back) is possible. Real server, FAKE provider: no model is called.
@@ -51,14 +53,14 @@ async function openLesson(page) {
     window.__SMARTLEARN_REMOTE_MODE__ = true;
     window.__SMARTLEARN_LOCAL_AUTHORITY__ = true;
   }, API_BASE);
-  const email = `resp-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+  const email = `resp-${Date.now()}-${randomUUID()}@example.com`;
   await signInRegistered(page, { email, password: 'a genuinely long test password 1' });
   await page.locator('[data-screen="materials"]').click();
   await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
   const pdf = buildFixturePdf(['Fisiologia renal: filtração glomerular', 'Barreira de filtração e podócitos', 'Clearance de inulina mede a TFG']);
   await page.setInputFiles('#sources-file-input', { name: 'responsivo.pdf', mimeType: 'application/pdf', buffer: pdf });
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
-  await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
+  await generateByPages(page);
   await expect(page.locator('.lesson-editor')).toBeVisible({ timeout: 10000 });
   await startEditingSummary(page);
 }

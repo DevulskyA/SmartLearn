@@ -6,7 +6,7 @@
 
 export const DEFAULT_ACCOUNT_MAX_ATTEMPTS = 10;
 export const DEFAULT_IP_MAX_ATTEMPTS = 60;
-export const DEFAULT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+const DEFAULT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 
 // T12: bounded memory. Without a cap, an attacker (or just a lot of
 // distinct anonymous IPs/emails failing once) could grow this Map without
@@ -15,7 +15,7 @@ export const DEFAULT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 // if that isn't enough, the single oldest bucket is evicted (LRU-ish by
 // window start) to make room — bounded memory, not bounded correctness for
 // any individual actively-tracked key.
-export const DEFAULT_MAX_BUCKETS = 50_000;
+const DEFAULT_MAX_BUCKETS = 50_000;
 
 export function createRateLimiter({ windowMs = DEFAULT_WINDOW_MS, maxBuckets = DEFAULT_MAX_BUCKETS } = {}) {
   const buckets = new Map(); // key -> { count, windowStart }

@@ -13,6 +13,18 @@ export function measure(steps) {
   return { total, steps: byStep };
 }
 
+function compareStep(key, baselineSteps, runSteps, tolerance, floorMs) {
+  const base = baselineSteps[key];
+  const now = runSteps[key];
+  if (base === undefined) return { step: key, kind: 'not in baseline', now };
+  if (now === undefined) return { step: key, kind: 'not run', base };
+  const gap = now - base;
+  if (Math.abs(gap) >= floorMs && Math.abs(gap) / base > tolerance) {
+    return { step: key, kind: gap > 0 ? 'slower' : 'faster', base, now };
+  }
+  return null;
+}
+
 /**
  * Compares a run against the recorded baseline. A step deviates when it is more than `tolerance` away from its baseline AND the gap is at
  * least `floorMs` (a 300 ms step doubling to 600 ms is noise). A step missing from the baseline, or from the run, is also reported.
@@ -23,12 +35,8 @@ export function compare(baseline, run, { tolerance = 0.5, floorMs = 2000 } = {})
   const deviations = [];
   const keys = new Set([...Object.keys(baseline.steps), ...Object.keys(run.steps)]);
   for (const key of [...keys].sort((a, b) => Number(a) - Number(b))) {
-    const base = baseline.steps[key];
-    const now = run.steps[key];
-    if (base === undefined) { deviations.push({ step: key, kind: 'not in baseline', now }); continue; }
-    if (now === undefined) { deviations.push({ step: key, kind: 'not run', base }); continue; }
-    const gap = now - base;
-    if (Math.abs(gap) >= floorMs && Math.abs(gap) / base > tolerance) deviations.push({ step: key, kind: gap > 0 ? 'slower' : 'faster', base, now });
+    const deviation = compareStep(key, baseline.steps, run.steps, tolerance, floorMs);
+    if (deviation) deviations.push(deviation);
   }
   const totalGap = run.total - baseline.total;
   if (Math.abs(totalGap) >= floorMs * 2 && Math.abs(totalGap) / baseline.total > tolerance) deviations.push({ step: 'total', kind: totalGap > 0 ? 'slower' : 'faster', base: baseline.total, now: run.total });
@@ -36,5 +44,9 @@ export function compare(baseline, run, { tolerance = 0.5, floorMs = 2000 } = {})
 }
 
 export function describe(deviations) {
-  return deviations.map((d) => `step ${d.step}: ${d.kind}${d.base !== undefined ? ` baseline ${d.base} ms` : ''}${d.now !== undefined ? `, now ${d.now} ms` : ''}`).join('; ');
+  return deviations.map((d) => {
+    const baseline = d.base !== undefined ? ` baseline ${d.base} ms` : '';
+    const now = d.now !== undefined ? `, now ${d.now} ms` : '';
+    return `step ${d.step}: ${d.kind}${baseline}${now}`;
+  }).join('; ');
 }

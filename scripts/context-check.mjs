@@ -35,18 +35,239 @@ const ARTIFACT_KEYS = ['PURPOSE', 'CANONICAL_LOCATION', 'SHA256', 'REQUIRED_FOR'
 const WORKTREE_PREFIX = 'c:/projetos/smartlearn/.claude/worktrees/smartlearn-v1-complete';
 
 const norm = (p) => p.replace(/\\/g, '/').toLowerCase();
+
+function readCanonical(io, fail) {
+  const text = {};
+  for (const file of CANONICAL) {
+    const content = io.read(file);
+    if (content === null) {
+      fail(`MISSING canonical file: ${file}`);
+      continue;
+    }
+    text[file] = content;
+    if (!io.tracked(file)) fail(`NOT TRACKED by Git: ${file}`);
+    if (io.ignored(file)) fail(`GITIGNORED canonical file: ${file}`);
+  }
+  return text;
+}
+
+function countLines(text) {
+  const lines = text.split('\n');
+  while (lines.length > 1 && lines.at(-1) === '') lines.pop();
+  return lines.length;
+}
+
+function validateLayering(exec, state, io, fail) {
+  if (exec && countLines(exec) > MAX_MAP_LINES) fail(`EXECUTION.md has ${countLines(exec)} lines (max ${MAX_MAP_LINES}): it is a map, not memory`);
+  if (state) {
+    if (countLines(state) > MAX_MAP_LINES) fail(`STATE.md has ${countLines(state)} lines (max ${MAX_MAP_LINES})`);
+    for (const key of STATE_KEYS) if (!new RegExp(`^${key}=`, 'm').test(state)) fail(`STATE.md is missing ${key}=`);
+  }
+  const cockpit = resumeCockpit(io.read, { head: 'check' });
+  if (cockpit.length > MAX_MAP_LINES) fail(`the context:resume cockpit has ${cockpit.length} lines (max ${MAX_MAP_LINES})`);
+}
+
+function validateExecutionReferences(exec, io, fail) {
+  if (!exec) return;
+  if (!/nunca é autoridade|NEVER authority/i.test(exec)) fail('EXECUTION.md must say HANDOFF.md is never authority');
+  for (const match of exec.matchAll(/`((?:\.specs|conductor|scripts)\/[^`*\s]+|CLAUDE\.md)`/g)) {
+    const ref = match[1];
+    if (ref === '.specs/HANDOFF.md' || ref.endsWith('/')) continue;
+    if (io.read(ref) === null) fail(`EXECUTION.md points to a missing file: ${ref}`);
+    else if (!io.tracked(ref)) fail(`EXECUTION.md points to an untracked file: ${ref}`);
+    else if (io.ignored(ref)) fail(`EXECUTION.md points to a gitignored file: ${ref}`);
+  }
+}
+
+function specificationIds(spec) {
+  const source = spec ?? '';
+  return {
+    requirements: new Set([...source.matchAll(/^### (R-\d+)/gm)].map((match) => match[1])),
+    gates: new Set([...source.matchAll(/^\| (HG-\d+) \|/gm)].map((match) => match[1])),
+    findings: new Set([...source.matchAll(/^\| (F-\d+) \|/gm)].map((match) => match[1])),
+  };
+}
+
+function validateTaskReferences(block, ids, specIds, line, fail) {
+  const segment = (name) => new RegExp(`${name}:([^·\\n]*)`).exec(line)?.[1] ?? '';
+  for (const dependency of segment('Dependências').match(/T-[A-Z0-9]+-\d+[a-z]?/g) ?? []) {
+    if (!ids.has(dependency)) fail(`${block.id}: depends on unknown task ${dependency}`);
+  }
+  for (const gate of segment('Dependências').match(/HG-\d+/g) ?? []) {
+    if (!specIds.gates.has(gate)) fail(`${block.id}: unknown gate ${gate}`);
+  }
+  for (const requirement of segment('Requisitos').match(/\bR-\d+/g) ?? []) {
+    if (!specIds.requirements.has(requirement)) fail(`${block.id}: unknown requirement ${requirement}`);
+  }
+  for (const finding of segment('Requisitos').match(/\bF-\d+/g) ?? []) {
+    if (!specIds.findings.has(finding)) fail(`${block.id}: unknown finding ${finding}`);
+  }
+}
+
+function validateTaskSubtasks(block, fail) {
+  if (!block.subtasks?.length) return;
+  const leaves = block.subtasks.filter((row) => row.leaf);
+  const current = leaves.filter((row) => row.mark === '>');
+  if (block.status === '✓' && leaves.some((row) => row.mark !== 'x')) fail(`${block.id}: done but a subtask is not [x]`);
+  if (block.status === '>' && current.length !== 1) fail(`${block.id}: the active task with subtasks must have exactly ONE current subtask [>], found ${current.length}`);
+  if (block.status !== '>' && current.length) fail(`${block.id}: only the active task may have a current subtask [>]`);
+}
+
+function validateCompletedTask(block, line, validation, fail) {
+  if (block.status !== '✓') return;
+  if (!/IMPLEMENTATION_SHA/.test(line)) fail(`${block.id}: done without IMPLEMENTATION_SHA`);
+  if (validation && !new RegExp(`^#{2,4} ${block.id}(?![A-Za-z0-9])`, 'm').test(validation)) {
+    fail(`${block.id}: done but validation.md has no section "### ${block.id}"`);
+  }
+}
+
+function validateTaskBlock(block, ids, specIds, validation, fail) {
+  if (block.status === null) {
+    fail(`${block.id}: no Status line`);
+    return;
+  }
+  if (!(block.status in STATE_NAME)) fail(`${block.id}: status [${block.status}] is not one of ${Object.keys(STATE_NAME).join(' ')}`);
+  const line = /^- Status:.*$/m.exec(block.body)?.[0] ?? '';
+  validateTaskReferences(block, ids, specIds, line, fail);
+  for (const message of block.subtaskProblems ?? []) fail(`${block.id}: ${message}`);
+  validateTaskSubtasks(block, fail);
+  validateCompletedTask(block, line, validation, fail);
+}
+
+function resolveActiveTask(blocks, fail) {
+  const inProgress = blocks.filter((block) => block.status === '>');
+  const idle = inProgress.length === 0 && !safeWorkRemaining(blocks);
+  let active = null;
+  if (inProgress.length !== 0 || !idle) {
+    if (inProgress.length !== 1) fail(`exactly ONE task must be in progress ([>]) in tasks.md while safe work remains, found ${inProgress.length}`);
+    else {
+      active = inProgress[0];
+      if (!/^- Próximo passo:/m.test(active.body)) fail(`${active.id}: active task has no "Próximo passo:" line`);
+    }
+  }
+  return { active, idle };
+}
+
+function validateReadiness(blocks, active, io, program, fail) {
+  const next = nextReady(blocks, program ?? '')[0] ?? null;
+  for (const [role, block] of [['active', active], ['next', next]]) {
+    if (!block) continue;
+    const gaps = readinessGaps(block, blocks);
+    if (gaps.length) fail(`EXECUTION_READY: ${role} task ${block.id} lacks: ${gaps.join(', ')}`);
+    const generic = genericSubtasks(block);
+    const genericList = generic.map((row) => `"${row.text}"`).join(', ');
+    if (generic.length) fail(`${block.id}: generic subtask(s) cannot be verified: ${genericList}`);
+  }
+  const previous = io.previousTasks?.() ?? null;
+  if (previous) for (const problem of preservationProblems(previous, io.read(`${FEATURE}/tasks.md`) ?? '')) fail(problem);
+}
+
+function validateTaskQueue(tasks, spec, validation, program, io, fail) {
+  if (!tasks) return { active: null, idle: false };
+  const blocks = taskBlocks(tasks);
+  const ids = new Set(blocks.map((block) => block.id));
+  if (ids.size !== blocks.length) fail('duplicate task ids in tasks.md');
+  const specIds = specificationIds(spec);
+  for (const block of blocks) validateTaskBlock(block, ids, specIds, validation, fail);
+  const { active, idle } = resolveActiveTask(blocks, fail);
+  validateReadiness(blocks, active, io, program, fail);
+  return { active, idle };
+}
+
+function validatePlan(plan, idle, active, tasks, spec, program, io, fail) {
+  if (!plan) return;
+  const wantActive = idle ? 0 : 1;
+  const activePhases = plan.match(/^### \[>\]/gm) ?? [];
+  if (activePhases.length !== wantActive) fail(`conductor plan must have ${idle ? 'NO' : 'exactly ONE'} active phase ([>]), found ${activePhases.length}`);
+  const activeRows = plan.split('\n').filter((line) => /^\s*- \[>\] \*\*T-/.test(line));
+  if (activeRows.length !== wantActive) fail(`conductor plan must have ${idle ? 'NO' : 'exactly ONE'} active task row ([>]), found ${activeRows.length}`);
+  const taskIds = plan.split('\n').map((line) => /^\s*- \[.\] \*\*(T-[A-Z0-9]+-\d+[a-z]?)\*\*/.exec(line)?.[1]).filter(Boolean);
+  if (new Set(taskIds).size !== taskIds.length) fail('conductor plan lists a task more than once (FASES must hold each task exactly once)');
+  const activeLabel = /^ATIVA AGORA:.*$/m.exec(plan)?.[0] ?? '';
+  if (active && !activeLabel.startsWith(`ATIVA AGORA: ${active.id} `)) fail(`conductor plan "ATIVA AGORA" does not name the active task ${active.id}`);
+  if (tasks) validatePlanProjection(plan, tasks, spec, program, io, fail);
+}
+
+function validatePlanProjection(plan, tasks, spec, program, io, fail) {
+  const drift = planDrift(plan, { tasksText: tasks, programText: program ?? '', specText: spec ?? '', validationLine: io.validationLine?.() });
+  if (drift.drift) fail(`conductor plan diverges from tasks.md: ${drift.reason}`);
+}
+
+function validateCanonicalReferences(text, io, fail) {
+  for (const file of SCANNED) {
+    const content = file === '.specs/STATE.md' ? io.read(file) : text[file];
+    if (content === null || content === undefined) continue;
+    for (const match of content.matchAll(/`((?:\.specs|conductor)\/[A-Za-z0-9_./-]+\.(?:md|json|mjs|txt))`/g)) {
+      const ref = match[1];
+      if (ref === '.specs/HANDOFF.md') continue;
+      if (io.read(ref) === null) fail(`${file} references a missing file: ${ref}`);
+      else if (!io.tracked(ref)) fail(`${file} references an untracked file: ${ref}`);
+    }
+  }
+}
+
+function collectArtifacts(artifacts, fail) {
+  const entries = [];
+  if (!artifacts) return entries;
+  for (const block of artifacts.split(/^## (?=A-\d+)/m).slice(1)) {
+    const id = /^(A-\d+)/.exec(block)?.[1];
+    const get = (key) => new RegExp(`^- ${key}:\\s*(.+)$`, 'm').exec(block)?.[1]?.trim() ?? null;
+    for (const key of ARTIFACT_KEYS) if (get(key) === null) fail(`ARTIFACTS ${id}: missing field ${key}`);
+    entries.push({ id, location: get('CANONICAL_LOCATION') ?? '' });
+  }
+  if (entries.length === 0) fail('ARTIFACTS.md has no entries');
+  return entries;
+}
+
+function* externalWindowsPaths(text) {
+  const isAsciiLetter = (char) => char !== undefined && /[A-Za-z]/.test(char);
+  const isPathChar = (char) => char !== undefined && /[A-Za-z0-9_.\\/-]/.test(char);
+  const isTerminalPathChar = (char) => char !== undefined && /[A-Za-z0-9_-]/.test(char);
+  let cursor = 0;
+  while (cursor < text.length) {
+    const start = cursor;
+    if (!isAsciiLetter(text[start]) || isAsciiLetter(text[start - 1]) || text[start + 1] !== ':' || !/[\\/]/.test(text[start + 2] ?? '')) {
+      cursor += 1;
+      continue;
+    }
+    let end = start + 3;
+    let lastTerminal = -1;
+    while (isPathChar(text[end])) {
+      if (isTerminalPathChar(text[end])) lastTerminal = end;
+      end += 1;
+    }
+    if (lastTerminal >= start + 3) {
+      yield text.slice(start, lastTerminal + 1);
+      cursor = lastTerminal + 1;
+    } else {
+      cursor += 1;
+    }
+  }
+}
+
+function validateExternalArtifacts(artifacts, text, io, fail) {
+  const entries = collectArtifacts(artifacts, fail);
+  const locations = entries.flatMap((entry) => entry.location.split(';').map((location) => location.trim()).filter(Boolean).map(norm));
+  const seen = new Set();
+  for (const file of SCANNED) {
+    const content = file === '.specs/STATE.md' ? io.read(file) : text[file];
+    if (!content) continue;
+    for (const path of externalWindowsPaths(content)) {
+      const normalized = norm(path);
+      if (normalized.startsWith(WORKTREE_PREFIX) || seen.has(normalized)) continue;
+      seen.add(normalized);
+      if (!locations.some((location) => location.startsWith(normalized) || normalized.startsWith(location))) {
+        fail(`external path without an ARTIFACTS.md entry: ${path} (in ${file})`);
+      }
+    }
+  }
+}
+
 /** @param io {read(path)->string|null, tracked(path)->bool, ignored(path)->bool} */
 export function checkContext(io) {
   const problems = [];
   const fail = (msg) => problems.push(msg);
-  const text = {};
-  for (const f of CANONICAL) {
-    const t = io.read(f);
-    if (t === null) { fail(`MISSING canonical file: ${f}`); continue; }
-    text[f] = t;
-    if (!io.tracked(f)) fail(`NOT TRACKED by Git: ${f}`);
-    if (io.ignored(f)) fail(`GITIGNORED canonical file: ${f}`);
-  }
+  const text = readCanonical(io, fail);
   const tasks = text[`${FEATURE}/tasks.md`];
   const spec = text[`${FEATURE}/spec.md`];
   const validation = text[`${FEATURE}/validation.md`];
@@ -54,138 +275,12 @@ export function checkContext(io) {
   const exec = text['.specs/EXECUTION.md'];
   const artifacts = text['.specs/ARTIFACTS.md'];
   const state = text['.specs/STATE.md'];
-
-  // ---- layering: STATE and the resume map stay short; STATE carries its five fields; the cockpit stays compact
-  const lineCount = (s) => s.replace(/\n+$/, '').split('\n').length;
-  if (exec && lineCount(exec) > MAX_MAP_LINES) fail(`EXECUTION.md has ${lineCount(exec)} lines (max ${MAX_MAP_LINES}): it is a map, not memory`);
-  if (state) {
-    if (lineCount(state) > MAX_MAP_LINES) fail(`STATE.md has ${lineCount(state)} lines (max ${MAX_MAP_LINES})`);
-    for (const key of STATE_KEYS) if (!new RegExp(`^${key}=`, 'm').test(state)) fail(`STATE.md is missing ${key}=`);
-  }
-  {
-    const cockpit = resumeCockpit(io.read, { head: 'check' });
-    if (cockpit.length > MAX_MAP_LINES) fail(`the context:resume cockpit has ${cockpit.length} lines (max ${MAX_MAP_LINES})`);
-  }
-
-  // ---- the resume map only points at durable files
-  if (exec) {
-    if (!/nunca é autoridade|NEVER authority/i.test(exec)) fail('EXECUTION.md must say HANDOFF.md is never authority');
-    for (const m of exec.matchAll(/`((?:\.specs|conductor|scripts)\/[^`*\s]+|CLAUDE\.md)`/g)) {
-      const ref = m[1];
-      if (ref === '.specs/HANDOFF.md' || ref.endsWith('/')) continue; // derived convenience (may be absent) / a directory
-      if (io.read(ref) === null) fail(`EXECUTION.md points to a missing file: ${ref}`);
-      else if (!io.tracked(ref)) fail(`EXECUTION.md points to an untracked file: ${ref}`);
-      else if (io.ignored(ref)) fail(`EXECUTION.md points to a gitignored file: ${ref}`);
-    }
-  }
-
-  // ---- task queue
-  let active = null;
-  let idle = false; // no active task AND no safe work left: every remaining task is a human decision or waits for one
-  if (tasks) {
-    const blocks = taskBlocks(tasks);
-    const ids = new Set(blocks.map((b) => b.id));
-    if (ids.size !== blocks.length) fail('duplicate task ids in tasks.md');
-    const specR = new Set([...(spec ?? '').matchAll(/^### (R-\d+)/gm)].map((m) => m[1]));
-    const specHG = new Set([...(spec ?? '').matchAll(/^\| (HG-\d+) \|/gm)].map((m) => m[1]));
-    const specF = new Set([...(spec ?? '').matchAll(/^\| (F-\d+) \|/gm)].map((m) => m[1]));
-    for (const b of blocks) {
-      if (b.status === null) { fail(`${b.id}: no Status line`); continue; }
-      if (!(b.status in STATE_NAME)) fail(`${b.id}: status [${b.status}] is not one of ${Object.keys(STATE_NAME).join(' ')}`);
-      const line = /^- Status:.*$/m.exec(b.body)?.[0] ?? '';
-      const segment = (name) => new RegExp(`${name}:([^·\\n]*)`).exec(line)?.[1] ?? '';
-      for (const dep of segment('Dependências').match(/T-[A-Z0-9]+-\d+[a-z]?/g) ?? []) if (!ids.has(dep)) fail(`${b.id}: depends on unknown task ${dep}`);
-      for (const hg of segment('Dependências').match(/HG-\d+/g) ?? []) if (!specHG.has(hg)) fail(`${b.id}: unknown gate ${hg}`);
-      for (const r of segment('Requisitos').match(/\bR-\d+/g) ?? []) if (!specR.has(r)) fail(`${b.id}: unknown requirement ${r}`);
-      for (const f of segment('Requisitos').match(/\bF-\d+/g) ?? []) if (!specF.has(f)) fail(`${b.id}: unknown finding ${f}`);
-      for (const msg of b.subtaskProblems ?? []) fail(`${b.id}: ${msg}`);
-      if (b.subtasks?.length) {
-        const leaves = b.subtasks.filter((r) => r.leaf);
-        const current = leaves.filter((r) => r.mark === '>');
-        if (b.status === '✓' && leaves.some((r) => r.mark !== 'x')) fail(`${b.id}: done but a subtask is not [x]`);
-        if (b.status === '>' && current.length !== 1) fail(`${b.id}: the active task with subtasks must have exactly ONE current subtask [>], found ${current.length}`);
-        if (b.status !== '>' && current.length) fail(`${b.id}: only the active task may have a current subtask [>]`);
-      }
-      if (b.status === '✓') {
-        if (!/IMPLEMENTATION_SHA/.test(line)) fail(`${b.id}: done without IMPLEMENTATION_SHA`);
-        if (validation && !new RegExp(`^#{2,4} ${b.id}(?![A-Za-z0-9])`, 'm').test(validation)) fail(`${b.id}: done but validation.md has no section "### ${b.id}"`);
-      }
-    }
-    const inProgress = blocks.filter((b) => b.status === '>');
-    idle = inProgress.length === 0 && !safeWorkRemaining(blocks);
-    if (inProgress.length === 0 && idle) { /* legitimate: ACTIVE_TASK=NONE, SAFE_WORK_REMAINING=NO */ }
-    else if (inProgress.length !== 1) fail(`exactly ONE task must be in progress ([>]) in tasks.md while safe work remains, found ${inProgress.length}`);
-    else {
-      active = inProgress[0];
-      if (!/^- Próximo passo:/m.test(active.body)) fail(`${active.id}: active task has no "Próximo passo:" line`);
-      // "Comando:" is optional; "Próximo passo:" belongs to the active task only
-    }
-
-    // ---- READINESS (Outcome-Driven Lean, progressive roadmap): only the ACTIVE outcome and the ONE next ready outcome need detail
-    // (Outcome/Fazer, Gate, known dependencies, >= 1 verifiable leaf subtask). Everything else stays one line and is never linted.
-    const next = nextReady(blocks, text[`${FEATURE}/PROGRAM.md`] ?? '')[0] ?? null;
-    for (const [role, b] of [['active', active], ['next', next]]) {
-      if (!b) continue;
-      const gaps = readinessGaps(b, blocks);
-      if (gaps.length) fail(`EXECUTION_READY: ${role} task ${b.id} lacks: ${gaps.join(', ')}`);
-      const generic = genericSubtasks(b);
-      if (generic.length) fail(`${b.id}: generic subtask(s) cannot be verified: ${generic.map((r) => `"${r.text}"`).join(', ')}`);
-    }
-    const previous = io.previousTasks?.() ?? null;
-    if (previous) for (const m of preservationProblems(previous, tasks)) fail(m);
-  }
-  if (plan) {
-    const actives = plan.match(/^### \[>\]/gm) ?? [];
-    const wantActive = idle ? 0 : 1; // an idle program (nothing safe left) has no active phase or row
-    if (actives.length !== wantActive) fail(`conductor plan must have ${idle ? 'NO' : 'exactly ONE'} active phase ([>]), found ${actives.length}`);
-    const activeRows = plan.match(/^\s*- \[>\] \*\*T-/gm) ?? [];
-    if (activeRows.length !== wantActive) fail(`conductor plan must have ${idle ? 'NO' : 'exactly ONE'} active task row ([>]), found ${activeRows.length}`);
-    const taskIds = [...plan.matchAll(/^\s*- \[.\] \*\*(T-[A-Z0-9]+-\d+[a-z]?)\*\*/gm)].map((m) => m[1]);
-    if (new Set(taskIds).size !== taskIds.length) fail('conductor plan lists a task more than once (FASES must hold each task exactly once)');
-    const line = /^ATIVA AGORA:.*$/m.exec(plan)?.[0] ?? '';
-    if (active && !line.startsWith(`ATIVA AGORA: ${active.id} `)) fail(`conductor plan "ATIVA AGORA" does not name the active task ${active.id}`);
-    // the plan is the executable VIEW of tasks.md: its generated region must be exactly what tasks.md implies (npm run plan:sync)
-    if (tasks) {
-      const drift = planDrift(plan, { tasksText: tasks, programText: text[`${FEATURE}/PROGRAM.md`] ?? '', specText: spec ?? '', validationLine: io.validationLine?.() });
-      if (drift.drift) fail(`conductor plan diverges from tasks.md: ${drift.reason}`);
-    }
-  }
-
-  // ---- documents referenced by the canonical files exist and are tracked
-  for (const f of SCANNED) {
-    const t = f === '.specs/STATE.md' ? io.read(f) : text[f];
-    if (t === null || t === undefined) continue;
-    for (const m of t.matchAll(/`((?:\.specs|conductor)\/[A-Za-z0-9_./-]+\.(?:md|json|mjs|txt))`/g)) {
-      const ref = m[1];
-      if (ref === '.specs/HANDOFF.md') continue;
-      if (io.read(ref) === null) fail(`${f} references a missing file: ${ref}`);
-      else if (!io.tracked(ref)) fail(`${f} references an untracked file: ${ref}`);
-    }
-  }
-
-  // ---- external artifacts
-  const entries = [];
-  if (artifacts) {
-    for (const block of artifacts.split(/^## (?=A-\d+)/m).slice(1)) {
-      const id = /^(A-\d+)/.exec(block)?.[1];
-      const get = (key) => new RegExp(`^- ${key}:\\s*(.+)$`, 'm').exec(block)?.[1]?.trim() ?? null;
-      for (const key of ARTIFACT_KEYS) if (get(key) === null) fail(`ARTIFACTS ${id}: missing field ${key}`);
-      entries.push({ id, location: get('CANONICAL_LOCATION') ?? '' });
-    }
-    if (entries.length === 0) fail('ARTIFACTS.md has no entries');
-  }
-  const locations = entries.flatMap((e) => e.location.split(/\s*;\s*/).filter(Boolean).map(norm));
-  const seen = new Set();
-  for (const f of SCANNED) {
-    const t = f === '.specs/STATE.md' ? io.read(f) : text[f];
-    if (!t) continue;
-    for (const m of t.matchAll(/(?<![A-Za-z])[A-Za-z]:[\\/][A-Za-z0-9_.\\/-]*[A-Za-z0-9_-]/g)) {
-      const p = norm(m[0]);
-      if (p.startsWith(WORKTREE_PREFIX) || seen.has(p)) continue;
-      seen.add(p);
-      if (!locations.some((l) => l.startsWith(p) || p.startsWith(l))) fail(`external path without an ARTIFACTS.md entry: ${m[0]} (in ${f})`);
-    }
-  }
+  validateLayering(exec, state, io, fail);
+  validateExecutionReferences(exec, io, fail);
+  const { active, idle } = validateTaskQueue(tasks, spec, validation, text[`${FEATURE}/PROGRAM.md`], io, fail);
+  validatePlan(plan, idle, active, tasks, spec, text[`${FEATURE}/PROGRAM.md`], io, fail);
+  validateCanonicalReferences(text, io, fail);
+  validateExternalArtifacts(artifacts, text, io, fail);
   return { ok: problems.length === 0, problems, active: active?.id ?? null, idle };
 }
 
@@ -194,7 +289,6 @@ export function resumeSummary(io) {
   const tasks = io.read(`${FEATURE}/tasks.md`) ?? '';
   const spec = io.read(`${FEATURE}/spec.md`) ?? '';
   const validation = io.read(`${FEATURE}/validation.md`) ?? '';
-  const plan = io.read('conductor/tracks/hardening-roadmap-v1/plan.md') ?? '';
   const active = taskBlocks(tasks).find((b) => b.status === '>');
   const field = (name) => active ? new RegExp(`^- ${name}:\\s*(.+)$`, 'm').exec(active.body)?.[1]?.trim() ?? null : null;
   const openFindings = /^## Achados abertos[^\n]*\n([\s\S]*?)(?=^## |\Z)/m.exec(tasks)?.[1] ?? '';
@@ -213,22 +307,123 @@ export function resumeSummary(io) {
 }
 
 /** Known work never silently disappears: a done task stays done with its subtasks; a done subtask never vanishes. (Removing the not-done list of a distant task is allowed.) */
+function isDocumentedReopen(previous, current) {
+  return previous.status === '✓' && current && current.status !== '✓' && /\bREABERTA\b/.test(current.statusLine);
+}
+
+function completionRegression(previous, current) {
+  if (previous.status !== '✓' || (current && current.status === '✓')) return null;
+  const currentStatus = current ? `[${current.status}]` : 'missing';
+  return `COMPLETED_TASKS_PRESERVED: ${previous.id} was done and is now ${currentStatus}`;
+}
+
+function missingTaskMessage(task) {
+  return `COMPLETED_TASKS_PRESERVED: task ${task.id} disappeared`;
+}
+
+function missingCompletedSubtasks(previous, current) {
+  const keep = new Set(current.subtasks.map((row) => row.text));
+  const missing = [];
+  for (const row of previous.subtasks) {
+    if (keep.has(row.text) || (previous.status !== '✓' && row.mark !== 'x')) continue;
+    const kind = previous.status === '✓' ? 'a subtask of a done task' : 'the done subtask';
+    missing.push(`COMPLETED_TASKS_PRESERVED: ${previous.id}: ${kind} disappeared: "${row.text.slice(0, 60)}"`);
+  }
+  return missing;
+}
+
 export function preservationProblems(previousText, currentText) {
-  const now = new Map(taskBlocks(currentText).filter((b) => b.id).map((b) => [b.id, b]));
+  const currentById = new Map(taskBlocks(currentText).filter((block) => block.id).map((block) => [block.id, block]));
   const out = [];
-  for (const p of taskBlocks(previousText).filter((b) => b.id)) {
-    const c = now.get(p.id);
-    // an explicit, documented REOPEN (a close that was wrong) is the only way a done task stops being done; it must say so in its status line
-    if (p.status === '✓' && c && c.status !== '✓' && /\bREABERTA\b/.test(c.statusLine)) continue;
-    if (p.status === '✓' && (!c || c.status !== '✓')) { out.push(`COMPLETED_TASKS_PRESERVED: ${p.id} was done and is now ${c ? `[${c.status}]` : 'missing'}`); continue; }
-    if (!c) { out.push(`COMPLETED_TASKS_PRESERVED: task ${p.id} disappeared`); continue; }
-    const keep = new Set(c.subtasks.map((r) => r.text));
-    for (const r of p.subtasks) {
-      if (keep.has(r.text)) continue;
-      if (p.status === '✓' || r.mark === 'x') out.push(`COMPLETED_TASKS_PRESERVED: ${p.id}: ${p.status === '✓' ? 'a subtask of a done task' : 'the done subtask'} disappeared: "${r.text.slice(0, 60)}"`);
-    }
+  for (const previous of taskBlocks(previousText).filter((block) => block.id)) {
+    const current = currentById.get(previous.id);
+    // An explicit REABERTA status documents the only allowed reversal of a completed task.
+    if (isDocumentedReopen(previous, current)) continue;
+    const regression = completionRegression(previous, current);
+    if (regression) { out.push(regression); continue; }
+    if (!current) { out.push(missingTaskMessage(previous)); continue; }
+    out.push(...missingCompletedSubtasks(previous, current));
   }
   return out;
+}
+
+const reportProperty = (name, pass, detail = '') => ({ name, pass: !!pass, detail });
+
+function taskVisibilityProperty(plan, blocks) {
+  const planIds = [...plan.matchAll(/^ *- \[.\] \*\*(T-[A-Z0-9]+-\d+[a-z]?)\*\*/gm)].map((match) => match[1]);
+  const expectedIds = blocks.map((block) => block.id);
+  const missing = expectedIds.filter((id) => planIds.filter((listed) => listed === id).length !== 1);
+  const extra = planIds.filter((id) => !expectedIds.includes(id));
+  let detail = `${planIds.length} rows for ${expectedIds.length} tasks`;
+  if (missing.length) detail += `; missing/duplicated: ${missing.join(' ')}`;
+  if (extra.length) detail += `; unknown: ${extra.join(' ')}`;
+  return reportProperty('ALL_TASKS_VISIBLE', missing.length === 0 && extra.length === 0, detail);
+}
+
+function nextTaskProperty(blocks, model, eff) {
+  const active = blocks.find((block) => block.status === '>') ?? null;
+  const open = blocks.filter((block) => block.status !== '✓' && block.status !== '=');
+  const next = model.ready[0] ?? null;
+  const othersSafe = safeWorkRemaining(blocks.filter((block) => block.id !== active?.id), eff);
+  let detail = 'none: the active task is the last executable one';
+  if (next) detail = next.id;
+  else if (othersSafe) detail = 'no ready task';
+  return reportProperty('NEXT_TASK_IDENTIFIED', next || open.length === 0 || !othersSafe, detail);
+}
+
+function completedTaskProperty(io, read) {
+  const previous = io.previousTasks?.() ?? null;
+  const lost = previous ? preservationProblems(previous, read(FILES.tasks) ?? '') : [];
+  const detail = previous ? (lost[0] ?? 'compared with the previous committed tasks.md') : 'no previous version to compare';
+  return reportProperty('COMPLETED_TASKS_PRESERVED', lost.length === 0, detail);
+}
+
+function planSection(plan, name) {
+  return new RegExp(`^## ${name}[^\\n]*\\n([\\s\\S]*?)(?=^## |<!-- PLAN:END)`, 'm').exec(plan)?.[1] ?? '';
+}
+
+function humanGateProperty(plan, model, eff) {
+  const planned = [...planSection(plan, 'DECISÕES HUMANAS PENDENTES').matchAll(/^- (T-[A-Z0-9]+-\d+[a-z]?) ·/gm)].map((match) => match[1]);
+  const bad = planned.filter((id) => eff.get(id) !== 'D');
+  const missed = model.decisions.map((decision) => decision.id).filter((id) => !planned.includes(id));
+  let detail = `${planned.length} decisions`;
+  if (bad.length) detail += `; a dependency is listed as a human decision: ${bad.join(' ')}`;
+  if (missed.length) detail += `; missing: ${missed.join(' ')}`;
+  return reportProperty('DEPENDENCY_VS_HUMAN_GATE', bad.length === 0 && missed.length === 0, detail);
+}
+
+function globalProgressProperty(plan, model) {
+  const total = /TAREFAS: (\d+)\/(\d+)/.exec(plan);
+  const phases = [...plan.matchAll(/^### \[.\] \S+ · .* — tarefas (\d+)\/(\d+)$/gm)]
+    .reduce((sum, match) => [sum[0] + +match[1], sum[1] + +match[2]], [0, 0]);
+  const valid = total && +total[1] === model.progress.tasksDone && +total[2] === model.progress.tasksTotal
+    && phases[0] === model.progress.tasksDone && phases[1] === model.progress.tasksTotal;
+  const detail = total
+    ? `plan ${total[1]}/${total[2]}, tasks.md ${model.progress.tasksDone}/${model.progress.tasksTotal}, phases ${phases.join('/')}`
+    : 'plan has no TAREFAS a/b';
+  return reportProperty('GLOBAL_TASK_PROGRESS_VALID', valid, detail);
+}
+
+function fakeSubtaskProgressProperty(plan, read) {
+  let cockpit = '';
+  try { cockpit = resumeCockpit(read, { head: 'check' }).join('\n'); } catch { cockpit = ''; }
+  const fake = /SUBTAREFAS: \d|SUBTASKS=\d|^### \[.\] .* subtarefas \d/m.test(plan) || /SUBTASKS=\d/.test(cockpit);
+  const detail = fake ? 'a global subtask total appears in the plan or the cockpit' : 'subtask counts only for the active and next tasks';
+  return reportProperty('NO_FAKE_GLOBAL_SUBTASK_PROGRESS', !fake, detail);
+}
+
+function planSyncProperty(io, inputs) {
+  const drift = planDrift(io.read(FILES.plan) ?? '', inputs);
+  const detail = drift.drift ? drift.reason : 'plan.md equals the projection of tasks.md';
+  return reportProperty('PLAN_SYNC', !drift.drift, detail);
+}
+
+function contextCheckProperty(base) {
+  let detail;
+  if (!base.ok) detail = `${base.problems.length} problem(s): ${base.problems[0]}`;
+  else if (base.idle) detail = 'ACTIVE_TASK=NONE · SAFE_WORK_REMAINING=NO';
+  else detail = `active ${base.active}`;
+  return reportProperty('CONTEXT_CHECK', base.ok, detail);
 }
 
 /**
@@ -242,47 +437,16 @@ export function contextReport(io) {
   const inputs = { ...readInputs(read), validationLine: io.validationLine?.() };
   const plan = normText(read(FILES.plan) ?? '');
   const model = buildModel(inputs);
-  const blocks = model.blocks;
-  const eff = model.eff;
-  const section = (name) => new RegExp(`^## ${name}[^\\n]*\\n([\\s\\S]*?)(?=^## |<!-- PLAN:END)`, 'm').exec(plan)?.[1] ?? '';
-  const results = [];
-  const add = (name, pass, detail = '') => results.push({ name, pass: !!pass, detail });
-
-  const planIds = [...plan.matchAll(/^ *- \[.\] \*\*(T-[A-Z0-9]+-\d+[a-z]?)\*\*/gm)].map((m) => m[1]);
-  const want = blocks.map((b) => b.id);
-  const missing = want.filter((id) => planIds.filter((x) => x === id).length !== 1);
-  const extra = planIds.filter((id) => !want.includes(id));
-  add('ALL_TASKS_VISIBLE', missing.length === 0 && extra.length === 0, `${planIds.length} rows for ${want.length} tasks${missing.length ? `; missing/duplicated: ${missing.join(' ')}` : ''}${extra.length ? `; unknown: ${extra.join(' ')}` : ''}`);
-
-  const activeBlock = blocks.find((b) => b.status === '>') ?? null;
-  const open = blocks.filter((b) => b.status !== '✓' && b.status !== '=');
-  const next = model.ready[0] ?? null;
-  // a next task is only required while safe work OTHER than the active task remains (the last executable task has no successor)
-  const othersSafe = safeWorkRemaining(blocks.filter((b) => b.id !== activeBlock?.id), eff);
-  add('NEXT_TASK_IDENTIFIED', next || open.length === 0 || !othersSafe, next ? next.id : othersSafe ? 'no ready task' : 'none: the active task is the last executable one');
-
-  const previous = io.previousTasks?.() ?? null;
-  const lost = previous ? preservationProblems(previous, read(FILES.tasks) ?? '') : [];
-  add('COMPLETED_TASKS_PRESERVED', lost.length === 0, previous ? (lost[0] ?? 'compared with the previous committed tasks.md') : 'no previous version to compare');
-
-  const plannedDecisions = [...section('DECISÕES HUMANAS PENDENTES').matchAll(/^- (T-[A-Z0-9]+-\d+[a-z]?) ·/gm)].map((m) => m[1]);
-  const badDecisions = plannedDecisions.filter((id) => eff.get(id) !== 'D');
-  const missedDecisions = model.decisions.map((d) => d.id).filter((id) => !plannedDecisions.includes(id));
-  add('DEPENDENCY_VS_HUMAN_GATE', badDecisions.length === 0 && missedDecisions.length === 0, `${plannedDecisions.length} decisions${badDecisions.length ? `; a dependency is listed as a human decision: ${badDecisions.join(' ')}` : ''}${missedDecisions.length ? `; missing: ${missedDecisions.join(' ')}` : ''}`);
-
-  const t = /TAREFAS: (\d+)\/(\d+)/.exec(plan);
-  const phaseTotals = [...plan.matchAll(/^### \[.\] \S+ · .* — tarefas (\d+)\/(\d+)$/gm)].reduce((a, m) => [a[0] + +m[1], a[1] + +m[2]], [0, 0]);
-  const validProgress = t && +t[1] === model.progress.tasksDone && +t[2] === model.progress.tasksTotal && phaseTotals[0] === model.progress.tasksDone && phaseTotals[1] === model.progress.tasksTotal;
-  add('GLOBAL_TASK_PROGRESS_VALID', validProgress, t ? `plan ${t[1]}/${t[2]}, tasks.md ${model.progress.tasksDone}/${model.progress.tasksTotal}, phases ${phaseTotals.join('/')}` : 'plan has no TAREFAS a/b');
-
-  let cockpit = '';
-  try { cockpit = resumeCockpit(read, { head: 'check' }).join('\n'); } catch { cockpit = ''; }
-  const fake = /SUBTAREFAS: \d|SUBTASKS=\d|^### \[.\] .* subtarefas \d/m.test(plan) || /SUBTASKS=\d/.test(cockpit);
-  add('NO_FAKE_GLOBAL_SUBTASK_PROGRESS', !fake, fake ? 'a global subtask total appears in the plan or the cockpit' : 'subtask counts only for the active and next tasks');
-
-  const drift = planDrift(read(FILES.plan) ?? '', inputs);
-  add('PLAN_SYNC', !drift.drift, drift.drift ? drift.reason : 'plan.md equals the projection of tasks.md');
-  add('CONTEXT_CHECK', base.ok, base.ok ? (base.idle ? 'ACTIVE_TASK=NONE · SAFE_WORK_REMAINING=NO' : `active ${base.active}`) : `${base.problems.length} problem(s): ${base.problems[0]}`);
+  const results = [
+    taskVisibilityProperty(plan, model.blocks),
+    nextTaskProperty(model.blocks, model, model.eff),
+    completedTaskProperty(io, read),
+    humanGateProperty(plan, model, model.eff),
+    globalProgressProperty(plan, model),
+    fakeSubtaskProgressProperty(plan, read),
+    planSyncProperty(io, inputs),
+    contextCheckProperty(base),
+  ];
   return { results, base, ok: base.ok && results.every((r) => r.pass) };
 }
 
@@ -292,6 +456,7 @@ export function printReport(report) {
 }
 
 export function gitIo(root) {
+  // eslint-disable-next-line sonarjs/no-os-command-from-path -- Git has no portable fixed executable path; the project supports Git installations on PATH across platforms.
   const git = (args) => spawnSync('git', args, { cwd: root, encoding: 'utf8' });
   return {
     // a directory is not a readable document: it reads as null (missing) instead of crashing the check
@@ -312,6 +477,7 @@ export function gitIo(root) {
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  // eslint-disable-next-line sonarjs/no-os-command-from-path -- Git has no portable fixed executable path; the project supports Git installations on PATH across platforms.
   const root = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).stdout.trim() || process.cwd();
   const io = gitIo(root);
   const report = contextReport(io);
@@ -324,5 +490,10 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   else console.log(`CONTEXT_CHECK=PASS · active task ${result.active} · ${CANONICAL.length} canonical files tracked`);
   console.log('--- named properties (PASS/FAIL) ---');
   const allOk = printReport(report);
-  if (!result.ok || !allOk) { if (result.ok) console.error('CONTEXT_CHECK=FAIL: a gating named property failed'); process.exit(1); }
+  if (!result.ok || !allOk) {
+    if (result.ok) {
+      console.error('CONTEXT_CHECK=FAIL: a gating named property failed');
+    }
+    process.exit(1);
+  }
 }

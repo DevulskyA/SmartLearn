@@ -47,7 +47,10 @@ check(SERVER_READY_TIMEOUT_MS === 30_000 && SERVER_READY_POLL_MS === 250, 'defau
   const url = `http://127.0.0.1:${port}/health/ready`;
   const r = await outcome(waitForServerReady(`http://127.0.0.1:${port}`, { label: 'selftest-503', timeoutMs: 1500 }));
   check(!r.ok && r.ms >= 1450 && r.ms < 2500, `503 forever: rejected after ${r.ms} ms`);
-  check(r.message?.includes(url) && r.message.includes('1500 ms') && /waited \d+ ms/.test(r.message) && /\d+ attempts/.test(r.message), '503 forever: message has URL, limit, time waited and attempts');
+  const waitedMs = r.message?.split('waited ')[1]?.split(' ms')[0] ?? '';
+  const attempts = r.message?.split(' attempts')[0].split(' ').at(-1) ?? '';
+  const isIntegerText = (value) => value.length > 0 && [...value].every((char) => char >= '0' && char <= '9');
+  check(r.message?.includes(url) && r.message.includes('1500 ms') && isIntegerText(waitedMs) && isIntegerText(attempts), '503 forever: message has URL, limit, time waited and attempts');
   check(r.message?.includes('HTTP 503') && r.message.includes('migrating') && r.message.startsWith('selftest-503: real server did not become ready in time'), '503 forever: message has label and last HTTP status + body');
   console.log(`      ${r.message}`);
   server.close();

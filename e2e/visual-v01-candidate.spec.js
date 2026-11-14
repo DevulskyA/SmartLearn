@@ -49,40 +49,53 @@ async function apiCall(page, path, body) {
 
 // text wider than its box (cut) and sibling texts whose boxes collide, inside the visible Estatísticas screen
 const measure = (page) => page.evaluate(() => {
-  // .visually-hidden is screen-reader-only text, clipped to 1 px ON PURPOSE (it also showed up at 1280 px, where nothing is wrong): not a defect
+  const label = (el) => `${el.className}: "${el.textContent.trim().slice(0, 24)}"`;
+  // .visually-hidden is screen-reader-only text, clipped to 1 px ON PURPOSE: not a defect.
   const leaves = [...document.querySelectorAll('.screen:not([hidden]) *')].filter((el) => el.children.length === 0 && el.textContent.trim() && el.getClientRects().length && !el.closest('.table-scroll') && !el.closest('.visually-hidden'));
-  const clipped = leaves.filter((el) => { const o = getComputedStyle(el).overflow; return o !== 'visible' && el.scrollWidth > el.clientWidth + 1; }).map((el) => `${el.className}: "${el.textContent.trim().slice(0, 24)}"`);
-  const cut = leaves.filter((el) => {
-    let n = el;
-    while (n && n !== document.body) {
-      const s = getComputedStyle(n);
-      if (s.overflow !== 'visible' && el.getBoundingClientRect().right > n.getBoundingClientRect().right + 1) return true;
-      n = n.parentElement;
+  const clipped = leaves.filter((el) => {
+    const overflow = getComputedStyle(el).overflow;
+    return overflow !== 'visible' && el.scrollWidth > el.clientWidth + 1;
+  }).map(label);
+  const extendsPastClip = (el) => {
+    let ancestor = el;
+    while (ancestor && ancestor !== document.body) {
+      const clips = getComputedStyle(ancestor).overflow !== 'visible';
+      if (clips && el.getBoundingClientRect().right > ancestor.getBoundingClientRect().right + 1) return true;
+      ancestor = ancestor.parentElement;
     }
     return false;
-  }).map((el) => `${el.className}: "${el.textContent.trim().slice(0, 24)}"`);
-  const rows = [...document.querySelectorAll('.v5-data-table tbody tr')];
-  const overlaps = [];
-  for (const row of rows) {
-    const boxes = [...row.querySelectorAll('td')].map((td) => td.getBoundingClientRect());
-    for (let i = 0; i < boxes.length; i += 1) for (let j = i + 1; j < boxes.length; j += 1) {
-      const a = boxes[i]; const b = boxes[j];
-      if (a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1) overlaps.push(`cell ${i + 1} x cell ${j + 1}`);
+  };
+  const cut = leaves.filter(extendsPastClip).map(label);
+  const intersects = (a, b) => a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1;
+  const pairOverlaps = (boxes, kind) => {
+    const found = [];
+    for (let i = 0; i < boxes.length; i += 1) {
+      for (let j = i + 1; j < boxes.length; j += 1) {
+        if (intersects(boxes[i], boxes[j])) found.push(`${kind} ${i + 1} x ${kind} ${j + 1}`);
+      }
     }
-  }
-  // the sort buttons of the phone header row must not run into each other
-  const heads = [...document.querySelectorAll('.v5-data-table thead th')].map((th) => (th.querySelector('.v5-th-sort') ?? th).getBoundingClientRect());
-  for (let i = 0; i < heads.length; i += 1) for (let j = i + 1; j < heads.length; j += 1) {
-    const a = heads[i]; const b = heads[j];
-    if (a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1) overlaps.push(`header ${i + 1} x header ${j + 1}`);
-  }
-  // a header label wider than its own cell spills onto the next one even when overflow is visible
-  for (const th of document.querySelectorAll('.v5-data-table thead th')) {
-    const btn = th.querySelector('.v5-th-sort');
-    if (btn && btn.scrollWidth > th.clientWidth + 1) overlaps.push(`header "${btn.textContent.trim().slice(0, 16)}" wider than its cell`);
-  }
-  return { clipped: [...new Set(clipped)], cut: [...new Set(cut)], overlaps, rows: rows.length };
+    return found;
+  };
+  const rows = [...document.querySelectorAll('.v5-data-table tbody tr')];
+  const cellOverlaps = rows.flatMap((row) => pairOverlaps([...row.querySelectorAll('td')].map((td) => td.getBoundingClientRect()), 'cell'));
+  // The sort buttons of the phone header row must not run into each other.
+  const headerCells = [...document.querySelectorAll('.v5-data-table thead th')];
+  const headers = headerCells.map((th) => (th.querySelector('.v5-th-sort') ?? th).getBoundingClientRect());
+  const headerOverlaps = pairOverlaps(headers, 'header');
+  // A header label wider than its own cell spills onto the next one even when overflow is visible.
+  const wideHeaders = headerCells.flatMap((th) => {
+    const button = th.querySelector('.v5-th-sort');
+    return button && button.scrollWidth > th.clientWidth + 1 ? [`header "${button.textContent.trim().slice(0, 16)}" wider than its cell`] : [];
+  });
+  return { clipped: [...new Set(clipped)], cut: [...new Set(cut)], overlaps: [...cellOverlaps, ...headerOverlaps, ...wideHeaders], rows: rows.length };
 });
+
+async function waitForStatsContent(page) {
+  const rows = page.locator('#screen-stats .v5-data-table tbody tr');
+  await expect(rows.filter({ hasText: 'Fisiologia Renal' })).toBeVisible();
+  await expect(rows.filter({ hasText: 'Cardiologia' })).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
+}
 
 test('V-01: Estatísticas at 390/360 px has nothing cut or overlapping', async ({ page }) => {
   await page.addInitScript((base) => { window.__SMARTLEARN_API_BASE__ = base; window.__SMARTLEARN_REMOTE_MODE__ = true; window.__SMARTLEARN_LOCAL_AUTHORITY__ = true; }, API_BASE);
@@ -104,7 +117,7 @@ test('V-01: Estatísticas at 390/360 px has nothing cut or overlapping', async (
     await page.setViewportSize({ width, height: 844 });
     await page.locator('[data-screen="stats"]:visible').first().click();
     await expect(page.locator('#screen-stats')).toBeVisible();
-    await page.waitForTimeout(500);
+    await waitForStatsContent(page);
     result[width] = await measure(page);
     if (OUT) {
       await page.screenshot({ path: join(OUT, `v01-${width}.png`) });

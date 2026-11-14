@@ -131,6 +131,7 @@ export function verifyPhysicalBackup(sourceDb, backupPath) {
         throw new BackupError('CONTENT_MISMATCH', `SCHEMA_TABLE_MISSING:${table}`);
       }
       const { n: sourceCount } = sourceDb.prepare(`SELECT COUNT(*) as n FROM ${table}`).get();
+      // eslint-disable-next-line sonarjs/sql-queries -- table comes only from the private static BACKUP_TABLES allowlist; SQL parameters cannot bind identifiers.
       const { n: backupCount } = backupDb.prepare(`SELECT COUNT(*) as n FROM ${table}`).get();
       tableCounts[table] = { sourceCount, backupCount, match: sourceCount === backupCount };
       if (sourceCount !== backupCount) {

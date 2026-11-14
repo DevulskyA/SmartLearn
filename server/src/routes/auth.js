@@ -15,8 +15,8 @@ const registerBodySchema = {
     type: 'object',
     required: ['email', 'password'],
     properties: {
-      email: { type: 'string' },
-      password: { type: 'string' },
+      email: { type: 'string', maxLength: 320 }, // the longest address the standard allows
+      password: { type: 'string', maxLength: 1024 }, // a password is hashed on every attempt: an unbounded one is a cheap way to burn the server
     },
   },
 };
@@ -222,7 +222,9 @@ export function registerAuthRoutes(app, db, {
     let userId;
     try {
       userId = consumeResetToken(db, token);
-    } catch {
+    } catch (err) {
+      // A database fault is not an invalid link: let it surface as a server error instead of telling the student to retry a valid token.
+      if (typeof err?.code === 'string' && err.code.startsWith('SQLITE_')) throw err;
       // Never distinguish "invalid", "used" or "expired" to the caller —
       // all three are handled identically to avoid leaking token state.
       reply.status(400);

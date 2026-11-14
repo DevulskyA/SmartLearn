@@ -19,7 +19,8 @@ for (const rel of order) {
   const out = `${r.stdout}${r.stderr}`;
   const line = out.match(/batch: (\d+) lines, (\d+) failed, (\d+) ms/);
   const evid = out.match(/EVIDENCE (\S.*)$/m)?.[1]?.trim();
-  const errs = [...out.matchAll(/^ERR (.*)$/gm)].map((m) => `${m[1].slice(0, 70)}${evid ? ` -> ${evid.replace(/^.*ui-funcional-2026-11-01[\\/]/, '')}` : ''}`);
+  const evidenceSuffix = evid ? ` -> ${evid.replace(/^.*ui-funcional-2026-11-01[\\/]/, '')}` : '';
+  const errs = [...out.matchAll(/^ERR (.*)$/gm)].map((m) => `${m[1].slice(0, 70)}${evidenceSuffix}`);
   rows.push({ rel, lines: line?.[1] ?? '?', failed: Number(line?.[2] ?? 0), ms: Number(line?.[3] ?? Date.now() - t), slow: /SLOW LINES/.test(out), deviation: /PERF DEVIATION/.test(out), nobase: /NO BASELINE/.test(out), errs });
 }
 const md = ['# Resultado do ciclo funcional', '', `Total: ${Date.now() - t0} ms, ${rows.length} lotes, ${rows.filter((r) => r.failed).length} com falha.`, '', '| Lote | Linhas | Falhas | ms | Lentas | Desvio de tempo | Sem medição |', '|---|---|---|---|---|---|---|',

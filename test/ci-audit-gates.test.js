@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 // its own install in CI) -- an existing, recorded decision (FIX_PLAN.md P2-3), not an oversight.
 
 const ci = readFileSync(fileURLToPath(new URL('../.github/workflows/ci.yml', import.meta.url)), 'utf8').replace(/\r\n/g, '\n');
-const steps = ci.split(/\n(?=      - name: )/).slice(1);
+const steps = ci.split(/\n(?= {6}- name: )/).slice(1);
 const stepRunning = (command) => steps.find((s) => new RegExp(`\\n\\s+run: ${command}\\s*(\\n|$)`).test(s));
 
 test('CI audits the root production dependencies and every server dependency', () => {
@@ -38,6 +38,6 @@ test('security is an independent, blocking job using npm ci before both audits',
   assert.ok(security.indexOf('run: npm ci') < security.indexOf('run: npm audit --omit=dev'));
   assert.ok(security.indexOf('run: npm audit --omit=dev') < security.indexOf('run: npm audit\n'));
   assert.doesNotMatch(security, /continue-on-error|\|\|\s*(true|:|exit 0)/);
-  assert.match(ci, /\n  test:\n/, 'functional tests remain an independent CI job');
-  assert.match(ci, /\n  ui:\n/, 'UI regressions remain independently observable');
+  assert.match(ci, /\n {2}test:\n/, 'functional tests remain an independent CI job');
+  assert.match(ci, /\n {2}ui:\n/, 'UI regressions remain independently observable');
 });

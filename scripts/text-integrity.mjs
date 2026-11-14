@@ -13,7 +13,7 @@ import { join } from 'node:path';
 // cp1252 shows bytes 0x80-0x9F as these characters (instead of C1 controls), which is what a mis-decoded UTF-8 continuation byte becomes.
 const CP1252_HIGH = '€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ';
 
-export const MOJIBAKE_PATTERNS = [
+const MOJIBAKE_PATTERNS = [
   { kind: 'A-tilde followed by a Latin-1 symbol (e.g. c-cedilla read as two characters)', re: new RegExp(`\\u00C3[\\u0080-\\u00BF${CP1252_HIGH}]`, 'u') },
   { kind: 'A-circumflex followed by a Latin-1 symbol (e.g. a non-breaking space or ordinal read as two characters)', re: /Â[ -¿]/u },
   { kind: 'a-circumflex + euro sign (a curly quote or dash read as three characters)', re: /\u00E2\u20AC/u },
@@ -44,6 +44,19 @@ export function findAsciiEllipsis(text) {
   return found;
 }
 
+function resolveGitExecutable() {
+  const candidates = process.platform === 'win32'
+    ? [
+      join(process.env.ProgramW6432 ?? 'C:\\Program Files', 'Git', 'cmd', 'git.exe'),
+      join(process.env.ProgramFiles ?? 'C:\\Program Files', 'Git', 'cmd', 'git.exe'),
+      join(process.env['ProgramFiles(x86)'] ?? 'C:\\Program Files (x86)', 'Git', 'cmd', 'git.exe'),
+    ]
+    : ['/usr/bin/git', '/usr/local/bin/git', '/opt/homebrew/bin/git', '/opt/local/bin/git', '/bin/git'];
+  const executable = candidates.find((candidate) => existsSync(candidate));
+  if (!executable) throw new Error('text-integrity requires Git in a fixed system installation path');
+  return executable;
+}
+
 const TEXT_EXT = /\.(js|mjs|cjs|html|css|json|rs|toml|yml|yaml)$/;
 
 /**
@@ -51,7 +64,7 @@ const TEXT_EXT = /\.(js|mjs|cjs|html|css|json|rs|toml|yml|yaml)$/;
  * (not ignored), so a file with a lost byte is seen BEFORE it is committed; files deleted from the working tree are skipped.
  */
 export function trackedTextFiles(root = process.cwd()) {
-  const out = execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  const out = execFileSync(resolveGitExecutable(), ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
   return out.split('\0').filter((f) => f && TEXT_EXT.test(f) && !/(^|\/)(package-lock\.json|node_modules\/|dist\/|test-results\/)/.test(f) && existsSync(join(root, f)));
 }
 

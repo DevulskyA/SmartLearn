@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -43,7 +44,7 @@ test.beforeEach(async ({ page }) => {
     window.__SMARTLEARN_API_BASE__ = base;
     window.__SMARTLEARN_REMOTE_MODE__ = true;
   }, API_BASE);
-  await signInRegistered(page, { email: `dc-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`, password: 'a genuinely long test password 1' });
+  await signInRegistered(page, { email: `dc-${Date.now()}-${randomUUID()}@example.com`, password: 'a genuinely long test password 1' });
 });
 
 async function apiCall(page, method, path, body) {
@@ -64,8 +65,13 @@ async function seedDisciplines(page, names = ['Farmacologia', 'Anatomia']) {
 
 async function openPlanForm(page) {
   await page.locator('[data-screen="plan"]').click();
-  if (!(await page.locator('#plan-study-title').isVisible())) await page.locator('#plan-new-unit-btn').click();
-  await expect(page.locator('#plan-study-title')).toBeVisible();
+  const title = page.locator('#plan-study-title');
+  const newUnit = page.locator('#plan-new-unit-btn');
+  // isVisible() does not wait: decide only after the screen shows either the open form or the button that opens it, so a form that
+  // is still opening is never closed again by a second click (A-10 failed once in a full run for this reason, not reproduced alone).
+  await expect(title.or(newUnit).first()).toBeVisible(); // both can be visible at once, hence first()
+  if (!(await title.isVisible())) await newUnit.click();
+  await expect(title).toBeVisible();
 }
 
 async function openSubjectsPanel(page) {

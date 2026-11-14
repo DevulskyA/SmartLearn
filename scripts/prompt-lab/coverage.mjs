@@ -9,13 +9,27 @@ export const TIERS = ['ESSENTIAL', 'RELEVANT', 'PERIPHERAL'];
 //   - "45 %" / "GFR / RPF" must equal "45%" / "GFR/RPF" (space around % and / is typography, not meaning);
 //   - a bare number must not sit inside a longer one ("80" is not in "180"), and a short word (<= 4 letters) must start a word
 //     ("aine" matches "AINEs" but not "Elaine" or "painel"). Longer words stay substring matches so inflections still match.
-const squeeze = (s) => normalizeForMatch(s).replace(/\s*%/g, '%').replace(/\s*\/\s*/g, '/');
+function squeeze(s) {
+  const normalized = normalizeForMatch(s);
+  let result = '';
+  for (let index = 0; index < normalized.length; index += 1) {
+    const char = normalized[index];
+    if (char === '%' || char === '/') {
+      while (result.endsWith(' ')) result = result.slice(0, -1);
+      result += char;
+      if (char === '/') while (normalized[index + 1] === ' ') index += 1;
+    } else result += char;
+  }
+  return result;
+}
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 function wordInText(text, word) {
   const w = squeeze(word);
   if (w === '') return false;
   const body = escapeRe(w);
-  const pattern = /^\d/.test(w) ? `(?<!\\d[.,]?)${body}(?![.,]?\\d)` : w.replace(/[^a-z0-9]/g, '').length <= 4 ? `(?<![a-z0-9])${body}` : body;
+  let pattern = body;
+  if (/^\d/.test(w)) pattern = `(?<!\\d[.,]?)${body}(?![.,]?\\d)`;
+  else if (w.replace(/[^a-z0-9]/g, '').length <= 4) pattern = `(?<![a-z0-9])${body}`;
   return new RegExp(pattern).test(text);
 }
 const hasGroup = (text, groups) => groups.some((group) => group.length > 0 && group.every((word) => wordInText(text, word)));
@@ -87,7 +101,7 @@ export function formulationsOf(questions, map, minFormulations = 2) {
  * The pedagogically relevant denominator: the source text without extraction residue. Removed: the site watermark, and lines that carry no
  * sentence (short, no sentence ending: equation fragments, figure labels, table cells). Everything else counts as meaningful.
  */
-export function meaningfulChars(sourceText) {
+function meaningfulChars(sourceText) {
   const withoutWatermark = String(sourceText).replace(/www\.medicalstudyzone\.com/gi, '');
   return withoutWatermark
     .split('\n')
@@ -106,7 +120,8 @@ if (isMain) {
   console.log(`COVERAGE ${r.covered}/${r.total}; summary ${summary.length} chars`);
   const tierProblems = validateTiers(map);
   if (tierProblems.length === 0) {
-    console.log(`ESSENTIAL_COVERAGE ${r.essentialCovered}/${r.essentialTotal}; ${TIERS.map((t) => `${t} ${r.byTier[t].covered}/${r.byTier[t].total}`).join('; ')}`);
+    const tierCoverage = TIERS.map((tier) => `${tier} ${r.byTier[tier].covered}/${r.byTier[tier].total}`).join('; ');
+    console.log(`ESSENTIAL_COVERAGE ${r.essentialCovered}/${r.essentialTotal}; ${tierCoverage}`);
     for (const m of r.essentialMissing) console.log(`  essential missing ${m.id} ${m.label}`);
     const questions = data.draft?.questions ?? data.questions;
     if (Array.isArray(questions)) {

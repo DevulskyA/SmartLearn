@@ -1,6 +1,7 @@
 // Private visual assets of the Resumo Mestre: real-byte validation and re-encoding, owner-only access, idempotent creation, safe file/row
 // ordering, protection against deleting what is still referenced, and the checks that run when a summary is saved or accepted.
 import { test } from 'node:test';
+import { randomUUID } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, readdirSync, readFileSync, writeFileSync, existsSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
@@ -40,7 +41,7 @@ const makeUser = (db, email) => {
     VALUES (?, ?, 'h', 's', 'scrypt', '{}', ?, ?)`).run(email, email, now, now).lastInsertRowid);
 };
 const raster = (format, { width = 40, height = 30, color = '#2563eb' } = {}) => sharp({ create: { width, height, channels: 3, background: color } })[format]().toBuffer();
-const input = (buffer, extra = {}) => ({ buffer, alt: 'Esquema', caption: 'Figura 1', operationKey: `k-${Math.random().toString(36).slice(2)}`, ...extra });
+const input = (buffer, extra = {}) => ({ buffer, alt: 'Esquema', caption: 'Figura 1', operationKey: `k-${randomUUID()}`, ...extra });
 const filesIn = (dir) => (existsSync(dir) ? readdirSync(dir) : []);
 const code = (c) => (e) => e.code === c;
 
@@ -201,7 +202,7 @@ test('saving a lesson summary: a figure that does not exist or is not yours is r
     const bob = makeUser(e.db, 'b@example.com');
     const mine = (await assets.create(e.db, alice, input(await raster('png')), { mediaDir: e.mediaDir })).asset;
     const theirs = (await assets.create(e.db, bob, input(await raster('png')), { mediaDir: e.mediaDir })).asset;
-    const create = (summaryBody) => learningUnits.create(e.db, alice, { newSubjectName: `D${Math.random().toString(36).slice(2, 6)}`, title: 'Aula', studyDate: '2026-09-01', summaryBody });
+    const create = (summaryBody) => learningUnits.create(e.db, alice, { newSubjectName: `D${randomUUID()}`, title: 'Aula', studyDate: '2026-09-01', summaryBody });
     assert.throws(() => create(`[[fig:${theirs.id}]]`), (err) => err.code === 'VALIDATION_FAILED' && err.field === 'summaryBody');
     assert.throws(() => create('[[fig:00000000-0000-4000-8000-000000000000]]'), (err) => err.code === 'VALIDATION_FAILED');
     assert.ok(create(`ok\n\n[[fig:${mine.id}]]`).unit.id);
@@ -428,10 +429,14 @@ test('HTTP: a hostile upload is refused without touching the disk (SVG with an i
   const h = await httpApp();
   try {
     const alice = await h.account('a@example.com');
-    const send = (body, extra = {}) => h.app.inject({
-      method: 'POST', url: `/v1/visual-assets?${query({ operationKey: `k-${Math.random()}`, alt: 'x', ...extra })}`, payload: body.payload,
-      headers: { ...alice.headers, 'content-type': body.contentType },
-    });
+    const send = (body, extra = {}) => {
+      const params = query({ operationKey: `k-${randomUUID()}`, alt: 'x', ...extra });
+      const url = `/v1/visual-assets?${params}`;
+      return h.app.inject({
+        method: 'POST', url, payload: body.payload,
+        headers: { ...alice.headers, 'content-type': body.contentType },
+      });
+    };
     const svg = multipart(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>1</script></svg>'), 'evil.png', 'image/png');
     assert.equal((await send(svg)).statusCode, 400);
     const noAlt = await h.app.inject({ method: 'POST', url: `/v1/visual-assets?${query({ operationKey: 'k' })}`, payload: multipart(await raster('png')).payload, headers: { ...alice.headers, 'content-type': multipart(await raster('png')).contentType } });

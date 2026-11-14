@@ -16,7 +16,35 @@ export const SUITES = {
   e2e: { cwd: '.', args: ['scripts/e2e.mjs', '--reporter=list'], parser: 'playwright' },
 };
 
+function resolveGitExecutable() {
+  const candidates = process.platform === 'win32'
+    ? [
+      join(process.env.ProgramW6432 ?? 'C:\\Program Files', 'Git', 'cmd', 'git.exe'),
+      join(process.env.ProgramFiles ?? 'C:\\Program Files', 'Git', 'cmd', 'git.exe'),
+      join(process.env['ProgramFiles(x86)'] ?? 'C:\\Program Files (x86)', 'Git', 'cmd', 'git.exe'),
+    ]
+    : ['/usr/bin/git', '/usr/local/bin/git', '/opt/homebrew/bin/git', '/opt/local/bin/git', '/bin/git'];
+  return candidates.find((candidate) => existsSync(candidate)) ?? null;
+}
+
 const emptyCounts = () => ({ total: null, done: 0, passed: 0, failed: 0, skipped: 0 });
+
+function parsePlaywrightTestLine(line) {
+  const parts = line.trim().split(/\s+/);
+  const [status, number, ...description] = parts;
+  const statuses = ['✓', '✔', 'ok', '✘', '✗', '×', 'x', '-'];
+  if (!statuses.includes(status) || !number || !description.length || [...number].some((character) => character < '0' || character > '9')) return null;
+  const title = description.join(' ');
+  const suffixStart = title.lastIndexOf(' (');
+  if (suffixStart < 0 || !title.endsWith(')')) return { status, title };
+  const elapsed = title.slice(suffixStart + 2, -1);
+  let unit = '';
+  if (elapsed.endsWith('ms')) unit = 'ms';
+  else if (elapsed.endsWith('s')) unit = 's';
+  const duration = unit ? elapsed.slice(0, -unit.length) : '';
+  if (!duration || [...duration].some((character) => (character < '0' || character > '9') && character !== '.')) return { status, title };
+  return { status, title: title.slice(0, suffixStart) };
+}
 
 /**
  * Incremental parser: feed() raw stdout/stderr chunks, snapshot() the counts so far, finish() prefers the
@@ -57,13 +85,13 @@ export function createParser(kind) {
   function playwrightLine(line) {
     const run = line.match(/^Running (\d+) tests? using/);
     if (run) { live.total = Number(run[1]); return; }
-    const res = line.match(/^\s*(✓|✔|ok|✘|✗|×|x|-)\s+(\d+)\s+(.*?)(?:\s+\([\d.]+m?s\))?$/);
+    const res = parsePlaywrightTestLine(line);
     if (res) {
       live.done += 1;
-      if (res[1] === '-') live.skipped += 1;
-      else if (['✓', '✔', 'ok'].includes(res[1])) live.passed += 1;
+      if (res.status === '-') live.skipped += 1;
+      else if (['✓', '✔', 'ok'].includes(res.status)) live.passed += 1;
       else live.failed += 1;
-      lastTest = res[3];
+      lastTest = res.title;
       return;
     }
     const end = line.match(/^\s+(\d+) (passed|failed|skipped|flaky|did not run)\b/);
@@ -96,7 +124,7 @@ export function createParser(kind) {
 }
 
 /** True while the process exists (signal 0 only probes). EPERM = exists but not ours = alive. */
-export function pidAlive(pid) {
+function pidAlive(pid) {
   if (!Number.isInteger(pid) || pid <= 0) return false;
   try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; }
 }
@@ -166,13 +194,17 @@ export function headValidation(artifacts, { currentHead, alive, now, docsOnlySin
   if (rows.every((r) => r.eff.state === 'PASS') && notRun.length) return { proven: false, partial: true, notRun, line: `${prefix} ◐ PASS PARCIAL (${rows.map((r) => r.suite).join(', ')}); NÃO EXECUTADO: ${notRun.join(', ')}` };
   if (rows.every((r) => r.eff.state === 'PASS')) return { proven: true, line: `${prefix} ✓ PASS (${rows.map((r) => r.suite).join(', ')}) no HEAD atual` };
   const label = (st) => (st === 'STALE' ? 'DESATUALIZADO' : st);
-  const detail = rows.map((r) => `${r.suite} ${label(r.eff.state)}${r.eff.state === 'STALE' ? ` (testado ${String(r.tested ?? '?').slice(0, 7)})` : ''}`).join(' · ');
+  const detail = rows.map((r) => {
+    const staleDetail = r.eff.state === 'STALE' ? ` (testado ${String(r.tested ?? '?').slice(0, 7)})` : '';
+    return `${r.suite} ${label(r.eff.state)}${staleDetail}`;
+  }).join(' · ');
   return { proven: false, line: `${prefix} ⚠ NÃO PROVADA / DESATUALIZADA — ${detail}; HEAD atual ≠ HEAD testado` };
 }
 
 /** headValidation() for the worktree `wt`: ITS recorded results judged against ITS current git head (reads files and runs git). */
 export function headValidationFor(wt) {
-  const git = (args) => { try { return execFileSync('git', args, { cwd: wt, encoding: 'utf8' }).trim(); } catch { return ''; } };
+  const gitExecutable = resolveGitExecutable();
+  const git = (args) => { try { return gitExecutable ? execFileSync(gitExecutable, args, { cwd: wt, encoding: 'utf8' }).trim() : ''; } catch { return ''; } };
   const docsOnlySince = (from, to, suite) => unaffectedBy(git(['diff', '--name-only', from, to]).split('\n'), suite);
   return headValidation(readArtifacts(artifactDir(wt)), { currentHead: git(['rev-parse', 'HEAD']), docsOnlySince, required: Object.keys(SUITES) });
 }
@@ -198,14 +230,20 @@ export function renderTestsSection(artifacts, { currentHead, alive, now, docsOnl
     const eff = effectiveState(a, { currentHead, alive, now, docsOnlySince });
     const c = a.counts ?? emptyCounts();
     const total = c.total ?? '?';
-    const head = eff.docsOnly ? `HEAD testado ${short(a.headTested)} (depois, só mudanças sem efeito nesta suíte)` : eff.headMatches ? `HEAD ${short(a.headTested)} = atual` : `HEAD testado ${short(a.headTested)} ≠ HEAD atual`;
+    let head;
+    if (eff.docsOnly) head = `HEAD testado ${short(a.headTested)} (depois, só mudanças sem efeito nesta suíte)`;
+    else if (eff.headMatches) head = `HEAD ${short(a.headTested)} = atual`;
+    else head = `HEAD testado ${short(a.headTested)} ≠ HEAD atual`;
     const running = eff.state === 'RUNNING';
     summaries.push(`${a.suite} ${stateLabel(eff.state)} ${c.done}/${c.total ?? '?'}`);
     const dur = running ? fmtDuration(Date.now() - Date.parse(a.startedAt)) : fmtDuration(a.durationMs ?? Date.parse(a.updatedAt) - Date.parse(a.startedAt));
-    return `<div class="tl ${esc(eff.state.toLowerCase())}"${running ? ` data-hb="${esc(a.updatedAt)}"` : ''}>
+    const heartbeatAttribute = running ? ` data-hb="${esc(a.updatedAt)}"` : '';
+    const lastTestText = a.lastTest ? `último: ${esc(String(a.lastTest).slice(0, 110))}` : '';
+    const lastTestSeparator = a.lastTest ? ' · ' : '';
+    return `<div class="tl ${esc(eff.state.toLowerCase())}"${heartbeatAttribute}>
 <div><span class="st">${esc(stateLabel(eff.state))}</span> <strong>${esc(a.suite)}</strong> · ${c.done}/${total} feitos · ${c.passed} ok · ${c.failed} falhas · ${c.skipped} pulados · ${esc(dur)}</div>
 <div class="muted">${esc(head)}${eff.note ? ` · ${esc(eff.note)}` : ''} · exit ${a.exitCode ?? '—'} · pid ${a.runnerPid ?? '—'} ${running ? '(vivo)' : '(fim)'} · atualizado ${esc(clock(a.updatedAt))}</div>
-<div class="muted">${a.lastTest ? `último: ${esc(String(a.lastTest).slice(0, 110))} · ` : ''}cmd: ${esc(a.cmd)} · log: ${esc(a.log ?? '—')}</div>
+<div class="muted">${lastTestText}${lastTestSeparator}cmd: ${esc(a.cmd)} · log: ${esc(a.log ?? '—')}</div>
 </div>`;
   });
   // ONE line by default; paths, commands and counts per suite are inside the <details>
@@ -224,6 +262,7 @@ export function writeArtifact(dir, artifact) {
   writeFileSync(tmp, JSON.stringify(artifact, null, 2));
   for (let i = 0; ; i++) {
     try { renameSync(tmp, file); return file; } catch (e) {
+      if (!['EPERM', 'EACCES', 'EBUSY'].includes(e.code)) throw e;
       if (i >= 5) { writeFileSync(file, JSON.stringify(artifact, null, 2)); return file; } // Windows: reader briefly holds the file
     }
   }

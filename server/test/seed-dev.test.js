@@ -44,6 +44,7 @@ test('seed-dev refuses any non-loopback server', () => {
   assert.doesNotThrow(() => assertLoopback('http://127.0.0.1:3000'));
   assert.doesNotThrow(() => assertLoopback('http://localhost:3000'));
   assert.throws(() => assertLoopback('https://smartlearn.example.com'), /REFUSING/);
+  // eslint-disable-next-line sonarjs/no-clear-text-protocols -- test input must prove plaintext non-loopback is rejected; no request is sent.
   assert.throws(() => assertLoopback('http://192.168.0.10:3000'), /REFUSING/);
 });
 
@@ -56,6 +57,16 @@ test('the plan covers every state the product needs to be observed in, with vali
   assert.ok(plan.units.some((u) => u.exercises.length > 0) && plan.units.some((u) => u.exercises.length === 0), 'units with and without exercises');
   for (const u of plan.units) for (const [offset, q, c] of u.evidence) { assert.ok(offset <= 0 && q > 0 && c >= 0 && c <= q, `bad evidence in ${u.key}`); }
   assert.deepEqual(buildPlan(today), buildPlan(today), 'deterministic for the same day');
+});
+
+test('SEED-1: no seeded discipline looks broken: it has a lesson with a Resumo Mestre, or every lesson in it says on purpose why it has none', () => {
+  const plan = buildPlan(new Date(2026, 8, 19));
+  for (const subject of plan.subjects) {
+    const units = plan.units.filter((u) => u.subject === subject);
+    assert.ok(units.length > 0, `${subject} has no lesson at all`);
+    if (units.some((u) => u.summary)) continue;
+    for (const u of units) assert.ok(u.emptyOnPurpose, `${subject} / ${u.key}: no summary and no "emptyOnPurpose" reason (a discipline that looks empty by accident)`);
+  }
 });
 
 test('seed-dev builds the living dataset through the real API, is idempotent, and never touches an already-populated account', async () => {

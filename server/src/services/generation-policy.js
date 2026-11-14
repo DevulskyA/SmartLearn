@@ -35,7 +35,7 @@ export function planPrefetch({ orderedIds, currentId, states, remainingUnits = n
   for (const id of window) {
     if (states.get(id) !== 'NOT_GENERATED') continue; // already generated/accepted/stale: the window does not slide past it
     const cost = estimateOf(id);
-    if (remaining !== null && !(remaining >= cost * comfortFactor)) break; // not comfortable: stop, never partially spend
+    if (remaining !== null && (remaining >= cost * comfortFactor) === false) break; // not comfortable: stop, never partially spend; preserve NaN handling.
     plan.push(id);
     if (remaining !== null) remaining -= cost;
   }

@@ -10,7 +10,7 @@ import { buildDraftPrompt } from './draft-prompt.js';
 import { ProviderRequestError } from './anthropic-provider.js';
 
 export const OPENAI_PROVIDER_NAME = 'OPENAI';
-export const OPENAI_DEFAULT_REASONING_EFFORT = 'high';
+const OPENAI_DEFAULT_REASONING_EFFORT = 'high';
 const API_URL = 'https://api.openai.com/v1/responses';
 // Reasoning tokens count against the output budget: a high-effort call needs room for them as well as for the JSON.
 const GENERATION_MAX_OUTPUT_TOKENS = 16_000;

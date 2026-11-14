@@ -19,8 +19,9 @@ function setup() {
   runMigrations(db, MIGRATIONS_DIR);
   db.prepare("INSERT INTO users (email, email_display, password_hash, password_salt, password_params, created_at, updated_at) VALUES ('a@x.com','a@x.com','h','s','p',?,?)").run(NOW, NOW);
   let n = 0;
+  const nextHash = () => { n += 1; return `hash-${n}`; };
   const add = ({ issued, expires, revoked = null }) => db.prepare('INSERT INTO sessions (token_hash, user_id, issued_at, expires_at, last_seen, revoked_at, csrf_token) VALUES (?,?,?,?,?,?,?)')
-    .run(`hash-${(n += 1)}`, 1, issued, expires, issued, revoked, 'c');
+    .run(nextHash(), 1, issued, expires, issued, revoked, 'c');
   return { db, add, ids: () => db.prepare('SELECT token_hash FROM sessions ORDER BY id').all().map((r) => r.token_hash), cleanup: () => { db.close(); rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); } };
 }
 

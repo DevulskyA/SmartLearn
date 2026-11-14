@@ -10,7 +10,7 @@
 // Prints one JSON object; exit code 0 only when every mechanical check holds.
 import { spawn, execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, existsSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { isAbsolute, join, resolve } from 'node:path';
 import { tmpdir, homedir } from 'node:os';
 import { createServer } from 'node:net';
 import { fileURLToPath } from 'node:url';
@@ -18,8 +18,21 @@ import { chromium } from '@playwright/test';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const exe = resolve(process.env.SL_JOURNEY_EXE ?? join(root, 'src-tauri', 'target', 'debug', 'smartlearn.exe')); // same override as the other native scripts
-const head = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
-const version = JSON.parse(execFileSync('node', ['scripts/build-identity.mjs'], { cwd: root, encoding: 'utf8' })).version;
+const systemRoot = process.env.SystemRoot ?? 'C:\\Windows';
+const powershell = join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+const taskkill = join(systemRoot, 'System32', 'taskkill.exe');
+if (!existsSync(powershell) || !existsSync(taskkill)) throw new Error('Required Windows system executables are missing');
+const gitCandidates = process.platform === 'win32'
+  ? [
+    join(process.env.ProgramW6432 ?? 'C:\\Program Files', 'Git', 'cmd', 'git.exe'),
+    join(process.env.ProgramFiles ?? 'C:\\Program Files', 'Git', 'cmd', 'git.exe'),
+    join(process.env['ProgramFiles(x86)'] ?? 'C:\\Program Files (x86)', 'Git', 'cmd', 'git.exe'),
+  ]
+  : ['/usr/bin/git', '/usr/local/bin/git', '/opt/homebrew/bin/git', '/opt/local/bin/git', '/bin/git'];
+const gitExecutable = gitCandidates.find((candidate) => isAbsolute(candidate) && existsSync(candidate));
+if (!gitExecutable) throw new Error('Git executable not found in a validated absolute path');
+const head = execFileSync(gitExecutable, ['rev-parse', '--short', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
+const version = JSON.parse(execFileSync(process.execPath, ['scripts/build-identity.mjs'], { cwd: root, encoding: 'utf8' })).version;
 const expectedTitle = `SmartLearn DEV - v${version} - ${head}`;
 
 const freePort = () => new Promise((ok, fail) => {
@@ -69,7 +82,7 @@ try {
   if (!page) throw new Error('the Desktop window page was not found over CDP');
   await page.waitForLoadState('networkidle');
   result.appUrl = page.url();
-  result.nativeWindowTitle = execFileSync('powershell', ['-NoProfile', '-Command', `(Get-Process -Id ${app.pid}).MainWindowTitle`], { encoding: 'utf8' }).trim();
+  result.nativeWindowTitle = execFileSync(powershell, ['-NoProfile', '-Command', `(Get-Process -Id ${app.pid}).MainWindowTitle`], { encoding: 'utf8' }).trim();
   result.checks.nativeTitleShowsHead = result.nativeWindowTitle === expectedTitle;
   result.isLocalAuthority = await page.evaluate(() => window.__SMARTLEARN_LOCAL_AUTHORITY__ === true);
   result.checks.localAuthority = result.isLocalAuthority;
@@ -148,7 +161,7 @@ try {
 } finally {
   await browser?.close().catch(() => {});
   // only the process this script started (and its tree: backend + WebView2 children)
-  try { execFileSync('taskkill', ['/PID', String(app.pid), '/T', '/F'], { stdio: 'ignore' }); } catch { /* already gone */ }
+  try { execFileSync(taskkill, ['/PID', String(app.pid), '/T', '/F'], { stdio: 'ignore' }); } catch { /* already gone */ }
   await sleep(1500);
   rmSync(work, { recursive: true, force: true, maxRetries: 8, retryDelay: 300 });
 }

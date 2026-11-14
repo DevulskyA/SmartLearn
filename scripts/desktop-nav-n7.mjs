@@ -12,14 +12,22 @@ import { chromium } from '@playwright/test';
 import { verifyServedIdentity } from './desktop-identity.mjs';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
+const systemRoot = process.env.SystemRoot ?? 'C:\\Windows';
+const POWERSHELL_EXECUTABLE = join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+const TASKKILL_EXECUTABLE = join(systemRoot, 'System32', 'taskkill.exe');
 const targetDir = process.env.CARGO_TARGET_DIR ? resolve(process.env.CARGO_TARGET_DIR) : join(root, 'src-tauri', 'target');
 const exe = resolve(process.env.SL_JOURNEY_EXE ?? join(targetDir, 'debug', 'smartlearn.exe'));
+// eslint-disable-next-line sonarjs/no-os-command-from-path -- Git has no portable fixed executable path; normal installed Git on PATH is required here.
 const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
 const head = git('rev-parse', '--short', 'HEAD');
-const identity = JSON.parse(execFileSync('node', ['scripts/build-identity.mjs'], { cwd: root, encoding: 'utf8', env: { ...process.env, SMARTLEARN_BUILD_MODE: 'DEV' } }));
+const identity = JSON.parse(execFileSync(process.execPath, ['scripts/build-identity.mjs'], { cwd: root, encoding: 'utf8', env: { ...process.env, SMARTLEARN_BUILD_MODE: 'DEV' } }));
 const expectedTitle = `SmartLearn DEV - v${identity.version} - ${head}`;
-const ps = (command) => execFileSync('powershell', ['-NoProfile', '-Command', `${command}; exit 0`], { encoding: 'utf8' }).trim();
+const ps = (command) => execFileSync(POWERSHELL_EXECUTABLE, ['-NoProfile', '-Command', `${command}; exit 0`], { encoding: 'utf8' }).trim();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const withoutQuery = (url) => {
+  const query = url.indexOf('?');
+  return query === -1 ? url : url.slice(0, query);
+};
 const freePort = () => new Promise((ok, fail) => { const s = createServer(); s.listen(0, '127.0.0.1', () => { const { port } = s.address(); s.close(() => ok(port)); }); s.on('error', fail); });
 
 const instrument = (message) => { console.error(`INSTRUMENT: ${message}`); process.exit(2); };
@@ -52,12 +60,12 @@ const env = {
 };
 const app = spawn(exe, [], { env, stdio: 'ignore', windowsHide: false });
 // the person works on the larger display: move the window under test onto the smallest one, without stealing focus (same helper as the journey)
-spawn('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(root, 'scripts', 'move-window-to-small-display.ps1'), '-ProcessId', String(app.pid)], { stdio: 'ignore', windowsHide: true });
+spawn(POWERSHELL_EXECUTABLE, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(root, 'scripts', 'move-window-to-small-display.ps1'), '-ProcessId', String(app.pid)], { stdio: 'ignore', windowsHide: true });
 const checks = [];
 let browser;
 const cleanup = async () => {
   await browser?.close().catch(() => {});
-  if (app.exitCode === null) { try { execFileSync('taskkill', ['/PID', String(app.pid), '/T', '/F'], { stdio: 'ignore' }); } catch { /* gone */ } }
+  if (app.exitCode === null) { try { execFileSync(TASKKILL_EXECUTABLE, ['/PID', String(app.pid), '/T', '/F'], { stdio: 'ignore' }); } catch { /* gone */ } }
   await sleep(1500);
   rmSync(work, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 };
@@ -90,7 +98,7 @@ try {
   // So 401s are tracked by response: tolerated before sign-in, a failure after it.
   let signedIn = false;
   const late401 = [];
-  page.on('response', (r) => { if (r.status() === 401 && signedIn) late401.push(`${r.request().method()} ${r.url().replace(/\?.*$/, '')}`); });
+  page.on('response', (r) => { if (r.status() === 401 && signedIn) late401.push(`${r.request().method()} ${withoutQuery(r.url())}`); });
   page.on('console', (m) => { if (m.type() === 'error' && !/status of 401/.test(m.text())) consoleErrors.push(`console.error: ${m.text()}`); });
   await page.waitForLoadState('networkidle');
   const screenId = () => page.evaluate(() => document.querySelector('.screen:not([hidden])')?.id ?? null);
@@ -148,8 +156,8 @@ try {
   });
 
   // Phone layout natively: shrink the real window, then exercise the "Mais" disclosure
-  const original = JSON.parse(execFileSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(root, 'scripts', 'window-rect.ps1'), '-ProcessId', String(app.pid)], { encoding: 'utf8' }).trim().split('\n').pop()).rect;
-  const narrow = JSON.parse(execFileSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(root, 'scripts', 'window-rect.ps1'), '-ProcessId', String(app.pid), '-X', String(original[0]), '-Y', String(original[1]), '-W', '420', '-H', '860'], { encoding: 'utf8' }).trim().split('\n').pop()).rect;
+  const original = JSON.parse(execFileSync(POWERSHELL_EXECUTABLE, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(root, 'scripts', 'window-rect.ps1'), '-ProcessId', String(app.pid)], { encoding: 'utf8' }).trim().split('\n').pop()).rect;
+  const narrow = JSON.parse(execFileSync(POWERSHELL_EXECUTABLE, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(root, 'scripts', 'window-rect.ps1'), '-ProcessId', String(app.pid), '-X', String(original[0]), '-Y', String(original[1]), '-W', '420', '-H', '860'], { encoding: 'utf8' }).trim().split('\n').pop()).rect;
   await sleep(800);
   const widthNow = await page.evaluate(() => window.innerWidth);
   const toggle = page.locator('#mobile-more-toggle');
@@ -183,7 +191,7 @@ try {
   });
 
   // put the window back where it was (the instance is removed anyway, but leave no surprise)
-  execFileSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(root, 'scripts', 'window-rect.ps1'), '-ProcessId', String(app.pid), '-X', String(original[0]), '-Y', String(original[1]), '-W', String(original[2] - original[0]), '-H', String(original[3] - original[1])], { stdio: 'ignore' });
+  execFileSync(POWERSHELL_EXECUTABLE, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(root, 'scripts', 'window-rect.ps1'), '-ProcessId', String(app.pid), '-X', String(original[0]), '-Y', String(original[1]), '-W', String(original[2] - original[0]), '-H', String(original[3] - original[1])], { stdio: 'ignore' });
 
   await check('no console or page errors during the sweep', async () => {
     expect(consoleErrors.length === 0, consoleErrors.slice(0, 3).join(' | '));
@@ -191,11 +199,15 @@ try {
     return { errors: 0, http401AfterSignIn: 0 };
   });
 } catch (error) {
-  exitCode = checks.some((c) => c.status === 'FAIL') ? 1 : 1;
+  exitCode = 1;
   console.error(`FAILED: ${String(error?.message ?? error).split('\n')[0]}`);
 } finally {
   await cleanup();
 }
-for (const c of checks) console.log(`${c.status} ${c.name} (${c.ms} ms)${c.error ? ` :: ${c.error}` : ''}${c.evidence ? ` :: ${JSON.stringify(c.evidence)}` : ''}`);
+for (const c of checks) {
+  const error = c.error ? ` :: ${c.error}` : '';
+  const evidence = c.evidence ? ` :: ${JSON.stringify(c.evidence)}` : '';
+  console.log(`${c.status} ${c.name} (${c.ms} ms)${error}${evidence}`);
+}
 console.log(`N7 native: ${checks.filter((c) => c.status === 'PASS').length}/${checks.length} passed, head ${head}, humanDevDatastoreTouched=false, AI=none`);
 process.exit(exitCode);

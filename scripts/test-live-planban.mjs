@@ -51,18 +51,20 @@ export function formatCard(artifact, { now = Date.now(), root = null } = {}) {
   const duration = fmtDuration(running ? now - Date.parse(artifact.startedAt) : artifact.durationMs);
   const head = String(artifact.headTested ?? '').slice(0, 7) || '?';
   const where = root ? ` Worktree: ${root}.` : '';
+  const lastTest = artifact.lastTest ? ` Último: ${clip(artifact.lastTest, 90)}.` : '';
   if (running) {
     return {
       title: `[Rodando] test-live ${artifact.suite}`,
       status: 'in-progress',
-      summary: `Suíte ${artifact.suite} em execução. ${counts} · ${duration}. HEAD ${head}.${where}${artifact.lastTest ? ` Último: ${clip(artifact.lastTest, 90)}.` : ''} Contagem das ${clock(new Date(now).toISOString())}.`,
+      summary: `Suíte ${artifact.suite} em execução. ${counts} · ${duration}. HEAD ${head}.${where}${lastTest} Contagem das ${clock(new Date(now).toISOString())}.`,
       nextAction: 'Aguardar o término. Este cartão é atualizado sozinho pelo scripts/test-live.mjs; não editar à mão.',
     };
   }
   const exit = artifact.exitCode == null ? '' : ` (exit ${artifact.exitCode})`;
+  const logSuffix = artifact.log ? ` Log: ${artifact.log}` : '';
   const nextAction = {
     PASS: 'Nenhuma ação: resultado registrado. A próxima execução do test-live reaproveita este cartão.',
-    FAIL: `Ver o log e corrigir as falhas antes de integrar.${artifact.log ? ` Log: ${artifact.log}` : ''}`,
+    FAIL: `Ver o log e corrigir as falhas antes de integrar.${logSuffix}`,
   }[artifact.state] ?? 'Execução interrompida sem resultado: rodar o test-live de novo.';
   return {
     title: `[Terminou] test-live ${artifact.suite} · ${artifact.state}`,
@@ -79,7 +81,7 @@ export function makeCliExec({ cli, cwd, timeoutMs = CALL_TIMEOUT_MS }) {
       if (err) {
         // the Planban CLI prints one plain line ("Card not found: x"); a Node crash prints a stack, so prefer the line that names the error
         const lines = String(stderr).split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-        const named = lines.find((l) => /^\w*Error\b|not found|cannot /i.test(l)) ?? lines[0] ?? err.message;
+        const named = lines.find((line) => /^\w*Error\b/i.test(line) || /not found|cannot /i.test(line)) ?? lines[0] ?? err.message;
         reject(new Error(err.killed ? `sem resposta em ${Math.round(timeoutMs / 1000)}s` : clip(named, 160)));
       } else resolve(stdout);
     });

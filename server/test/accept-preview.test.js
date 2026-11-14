@@ -46,7 +46,7 @@ async function richLesson(db, sourcesDir, userId) {
   const generated = await drafts.createDraft(db, userId, proposal.id, {});
   let d = drafts.replaceDraftContent(db, userId, generated.id, { summary: 'Resumo da aula revisado', questions: ['A', 'B', 'C', 'D'].map((x) => q(x)) });
   d = drafts.reviseQuestion(db, userId, generated.id, d.questions[1].id, { status: 'REJECTED' });
-  d = drafts.reviseQuestion(db, userId, generated.id, d.questions[2].id, { answer: 'Resposta C corrigida' });
+  drafts.reviseQuestion(db, userId, generated.id, d.questions[2].id, { answer: 'Resposta C corrigida' });
   d = drafts.addQuestion(db, userId, generated.id, q('E'));
   return { draftId: generated.id, draft: d };
 }

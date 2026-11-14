@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { test, expect } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -9,6 +10,7 @@ import { VITE_ORIGIN, serverPort } from './support/ports.js';
 import { waitForServerReady } from './support/wait-for-server.js';
 import { signInRegistered } from './support/session.js';
 
+import { generateByPages } from './support/materials-flow.js';
 // Sending the SAME PDF again (a normal thing to do) dedupes to the same source, whose trechos already carry a
 // rascunho. The server refuses to replace them (HAS_EXISTING_DRAFT). The student must land on those trechos with
 // an honest message, not on a dead-end error. Same real-server-child-process + REMOTE_MODE pattern as
@@ -50,7 +52,7 @@ test.beforeEach(async ({ page }) => {
     window.__SMARTLEARN_REMOTE_MODE__ = true;
     window.__SMARTLEARN_LOCAL_AUTHORITY__ = true;
   }, API_BASE);
-  const email = `reupload-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+  const email = `reupload-${Date.now()}-${randomUUID()}@example.com`;
   const password = 'a genuinely long test password 1';
   await signInRegistered(page, { email: email, password: password });
 });
@@ -62,20 +64,19 @@ test('sending the same PDF again lands on its existing trechos and their rascunh
   const file = { name: 'fisiologia-renal.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf(['Introdução à fisiologia renal', 'A taxa de filtração glomerular é de 120 mL/min.']) };
   await page.setInputFiles('#sources-file-input', file);
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
-  const item = page.locator('.source-proposal-item').first();
-  await item.locator('[data-action="generate-draft"]').click();
+  await generateByPages(page);
   await expect(page.locator('#sources-message')).toContainText('Resumo gerado', { timeout: 10000 });
   await page.locator('[data-action="lesson-back"]').click();
 
   // Same bytes again: the server has a rascunho on this source's trechos and refuses to replace them.
   await page.setInputFiles('#sources-file-input', file);
   await expect(page.locator('#sources-message')).toContainText('Este PDF já foi processado', { timeout: 10000 });
-  await expect(page.locator('#sources-message')).toContainText('1 trecho existente');
+  await expect(page.locator('#sources-message')).toContainText(/\d+ trechos? existentes?/);
   await expect(page.locator('#sources-message')).not.toContainText('Não foi possível');
-  await expect(page.locator('.source-proposal-item')).toHaveCount(1);
+  await expect(page.locator('#sources-drafts-list .source-draft-item')).toHaveCount(1);
 
   // Nothing was replaced or lost: the trecho is the same one, and its rascunho is still there.
-  const proposalId = await page.locator('.source-proposal-item').first().getAttribute('data-proposal-id');
+  const proposalId = await page.locator('#sources-drafts-list .source-draft-item').first().getAttribute('data-proposal-id');
   const drafts = await page.evaluate(async ({ base, id }) => (await fetch(`${base}/v1/proposals/${id}/drafts`, { credentials: 'include' })).json(), { base: API_BASE, id: proposalId });
   expect(drafts.drafts).toHaveLength(1);
   expect(drafts.drafts[0].status).toBe('DRAFT');

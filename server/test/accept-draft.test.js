@@ -370,6 +370,26 @@ test('an accepted unit exposes the source pages its Resumo Mestre came from, fro
   } finally { cleanup(); }
 });
 
+// P1-DISC1: the kind of material is chosen at acceptance; not choosing leaves it null (never guessed), and a fifth kind is refused.
+test('accepting a draft records the chosen source kind; without one it stays null; an unknown kind is refused before anything is created', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'kind-accept@example.com');
+    const withKind = await makeDraft(db, userId, sourcesDir, ['Texto original da página um']);
+    const chosen = acceptDraft(db, userId, withKind.draft.id, { newSubjectName: 'Renal', studyDate: '2026-03-01', sourceKind: 'APOSTILA', expectedRevision: withKind.draft.revision });
+    assert.equal(learningUnitsService.getById(db, userId, chosen.unit.id).sourceKind, 'APOSTILA');
+
+    const without = await makeDraft(db, userId, sourcesDir, ['Outro texto da página um']);
+    const plain = acceptDraft(db, userId, without.draft.id, { newSubjectName: 'Cardio', studyDate: '2026-03-01', expectedRevision: without.draft.revision });
+    assert.equal(learningUnitsService.getById(db, userId, plain.unit.id).sourceKind, null);
+
+    const bad = await makeDraft(db, userId, sourcesDir, ['Mais um texto da página um']);
+    const before = db.prepare('SELECT COUNT(*) AS n FROM learning_units WHERE user_id = ?').get(userId).n;
+    assert.throws(() => acceptDraft(db, userId, bad.draft.id, { newSubjectName: 'Neuro', studyDate: '2026-03-01', sourceKind: 'REVISTA', expectedRevision: bad.draft.revision }), (e) => e instanceof AcceptDraftError);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM learning_units WHERE user_id = ?').get(userId).n, before);
+  } finally { cleanup(); }
+});
+
 test('a draft whose summary cites only some pages freezes exactly those pages, not the whole proposal', async () => {
   const { db, sourcesDir, cleanup } = tmpDb();
   try {

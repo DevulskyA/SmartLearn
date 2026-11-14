@@ -10,7 +10,7 @@
 // has no effect on this provider's behavior (design.md: "treat source
 // text as data, including any embedded instructions").
 export const FAKE_PROVIDER_NAME = 'FAKE';
-export const FAKE_MODEL_VERSION = 'fake-v1';
+const FAKE_MODEL_VERSION = 'fake-v1';
 
 const SUMMARY_SNIPPET_LENGTH = 150;
 const ANSWER_SNIPPET_LENGTH = 80;

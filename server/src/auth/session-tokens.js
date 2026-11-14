@@ -13,8 +13,8 @@ export function hashToken(rawToken) {
 export const SESSION_ABSOLUTE_LIFETIME_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 export const SESSION_INACTIVITY_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
-export const SESSION_COOKIE_NAME_PROD = '__Host-sl_session';
-export const SESSION_COOKIE_NAME_DEV = 'sl_session_dev';
+const SESSION_COOKIE_NAME_PROD = '__Host-sl_session';
+const SESSION_COOKIE_NAME_DEV = 'sl_session_dev';
 
 /**
  * Cookie attributes per design.md §3: HttpOnly, SameSite=Lax, Path=/,

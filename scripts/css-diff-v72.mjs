@@ -43,10 +43,16 @@ const out = [];
 for (const [key, decls] of ref) {
   if (!pattern.test(key)) continue;
   const mine = app.get(key);
-  if (!mine) { out.push(`MISSING  ${key}\n    ${[...decls].map(([k, v]) => `${k}:${v}`).join('; ')}`); continue; }
+  if (!mine) {
+    const declarationText = [...decls].map(([k, v]) => `${k}:${v}`).join('; ');
+    out.push(`MISSING  ${key}\n    ${declarationText}`);
+    continue;
+  }
   const diffs = [];
   for (const [k, v] of decls) if (mine.get(k) !== v) diffs.push(`${k}: ref "${v}" | app "${mine.get(k) ?? '(absent)'}"`);
   if (diffs.length) out.push(`DIFFERS  ${key}\n    ${diffs.join('\n    ')}`);
 }
 for (const line of out) { if (shown++ < max) console.log(line); }
-console.log(`\n${out.length} differing/missing rules matching /${pattern.source}/ (${shown > max ? `first ${max} shown` : 'all shown'}); reference rules scanned: ${[...ref.keys()].filter((k) => pattern.test(k)).length}`);
+const displayLimit = shown > max ? `first ${max} shown` : 'all shown';
+const scannedRuleCount = [...ref.keys()].filter((key) => pattern.test(key)).length;
+console.log(`\n${out.length} differing/missing rules matching /${pattern.source}/ (${displayLimit}); reference rules scanned: ${scannedRuleCount}`);

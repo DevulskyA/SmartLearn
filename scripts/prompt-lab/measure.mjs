@@ -1,7 +1,9 @@
 // Measures ONE stored draft against the source pages of its unit. Read-only on the database (opened readonly), no model call.
 //   node scripts/prompt-lab/measure.mjs --db <file.db> [--draft <id>] [--terms PAH,hematócrito] [--json <out.json>] [--audit]
 import { writeFileSync } from 'node:fs';
-import Database from '../../server/node_modules/better-sqlite3/lib/index.js';
+import { createRequire } from 'node:module';
+const requireServerDependency = createRequire(new URL('../../server/package.json', import.meta.url));
+const Database = requireServerDependency('better-sqlite3');
 import { auditDraft } from '../../server/src/ai/draft-audit.js';
 import { measureDraft, summarizeMeasures } from './metrics.mjs';
 

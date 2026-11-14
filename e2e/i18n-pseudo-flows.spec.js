@@ -68,35 +68,51 @@ function untranslatedOf([selector, studentText]) {
   const found = new Set();
   const mixed = new Set();
   let marked = 0;
-  const isStudent = (s) => studentText.some((x) => s.includes(x));
-  const withoutStudent = (s) => studentText.reduce((rest, x) => rest.split(x).join(' '), s).replace(/\s+/g, ' ').trim();
-  const prose = (s) => /\p{L}{2,}/u.test(s) && !/^[\d\s:/.,\-–·%()]+$/.test(s);
-  const visible = (el) => { const r = el.getBoundingClientRect(); const cs = getComputedStyle(el); return cs.visibility !== 'hidden' && cs.display !== 'none' && (r.width > 0 || r.height > 0); };
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-    const el = n.parentElement;
-    if (!el || ['SCRIPT', 'STYLE', 'OPTION'].includes(el.tagName) || !visible(el)) continue;
-    const s = n.nodeValue.replace(/\s+/g, ' ').trim();
-    if (s.includes('\u27E6')) { marked += 1; continue; }
+  const isStudent = (value) => studentText.some((studentValue) => value.includes(studentValue));
+  const withoutStudent = (value) => studentText.reduce((rest, studentValue) => rest.split(studentValue).join(' '), value).replace(/\s+/g, ' ').trim();
+  const prose = (value) => /\p{L}{2,}/u.test(value) && !/^[\d\s:/.,\-–·%()]+$/.test(value);
+  const visible = (element) => {
+    const rect = element.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    return style.visibility !== 'hidden' && style.display !== 'none' && (rect.width > 0 || rect.height > 0);
+  };
+  const isDate = (value) => {
+    const weekday = ['Monday,', 'Tuesday,', 'Wednesday,', 'Thursday,', 'Friday,', 'Saturday,', 'Sunday,'].some((prefix) => value.startsWith(prefix));
+    const formattedDate = /^[A-Z][a-z]{2} \d{2}, \d{4}$/.test(value);
+    const commit = /^[0-9a-f]{7,40}(\+[a-z]+)?$/.test(value);
+    const channel = value === 'DEV' || value === 'PROD';
+    const buildIdentity = /^SmartLearn (DEV|PROD) · v[0-9.]+ · \S+$/.test(value);
+    const autonym = ['Português (Brasil)', 'Español', 'English'].includes(value);
+    return weekday || formattedDate || commit || channel || buildIdentity || autonym;
+  };
+  const inspectTextNode = (node) => {
+    const element = node.parentElement;
+    if (!element || ['SCRIPT', 'STYLE', 'OPTION'].includes(element.tagName) || !visible(element)) return;
+    const value = node.nodeValue.replace(/\s+/g, ' ').trim();
+    if (value.includes('\u27E6')) { marked += 1; return; }
     // Not catalog text, on purpose: a date formatted by the active locale, the commit hash and channel of the build, and the
     // name of each language written in that language (autonyms never change with the interface language).
-    const isDate = /^(Mon|Tues|Wednes|Thurs|Fri|Satur|Sun)day,|^[A-Z][a-z]{2} \d{2}, \d{4}$|^[0-9a-f]{7,40}(\+[a-z]+)?$|^(DEV|PROD)$|^SmartLearn (DEV|PROD) · v[0-9.]+ · \S+$|^(Português \(Brasil\)|Español|English)$/.test(s);
-    if (!prose(s) || isDate) continue;
-    if (!isStudent(s)) found.add(`text: ${s}`);
-    else { const rest = withoutStudent(s); if (prose(rest)) mixed.add(`text: ${s}`); }
-  }
-  for (const el of root.querySelectorAll('[title],[aria-label],[placeholder],[alt]')) {
-    if (!visible(el)) continue;
-    for (const a of ['title', 'aria-label', 'placeholder', 'alt']) {
-      const s = (el.getAttribute(a) ?? '').trim();
-      if (!s || !prose(s) || s.includes('\u27E6')) continue;
-      if (!isStudent(s)) found.add(`${a}: ${s}`);
-      else if (prose(withoutStudent(s))) mixed.add(`${a}: ${s}`);
+    if (!prose(value) || isDate(value)) return;
+    if (!isStudent(value)) found.add('text: ' + value);
+    else {
+      const rest = withoutStudent(value);
+      if (prose(rest)) mixed.add('text: ' + value);
     }
-  }
+  };
+  const inspectAttributes = (element) => {
+    if (!visible(element)) return;
+    for (const attribute of ['title', 'aria-label', 'placeholder', 'alt']) {
+      const value = (element.getAttribute(attribute) ?? '').trim();
+      if (!value || !prose(value) || value.includes('\u27E6')) continue;
+      if (!isStudent(value)) found.add(attribute + ': ' + value);
+      else if (prose(withoutStudent(value))) mixed.add(attribute + ': ' + value);
+    }
+  };
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) inspectTextNode(node);
+  for (const element of root.querySelectorAll('[title],[aria-label],[placeholder],[alt]')) inspectAttributes(element);
   return { missing: false, found: [...found], mixed: [...mixed], marked };
 }
-
 // The app registers an app-shell service worker that would answer the module requests itself and bypass the interception below;
 // this test is about where the TEXTS come from, not about offline behavior.
 test.use({ serviceWorkers: 'block' });
@@ -159,6 +175,12 @@ test('pseudo-locale: the texts of the data-driven states, and where they come fr
   await seedUnit(page, { ...HOJE, studyDate: '2020-01-01' }, HOJE_Q);
   await seedUnit(page, { ...ESTUDO, studyDate: '2030-01-01' }, ESTUDO_Q);
   await seedUnit(page, { ...PROVA, studyDate: '2026-04-01' }, PROVA_Q);
+
+  await page.locator('[data-screen="settings"]').click();
+  await expect(page.locator('#ui-language-card')).toBeVisible();
+  await page.locator('#ui-language-select').selectOption('en');
+  await page.locator('#ui-language-save').click();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
 
   const { pseudo, counter } = await openPseudoPage(context);
   const servedPages = [counter];
@@ -312,7 +334,7 @@ test('pseudo-locale: the texts of the data-driven states, and where they come fr
   report.materials_initial = await materials.evaluate(untranslatedOf, ['#screen-materials', STUDENT_TEXT]);
   await materials.setInputFiles('#sources-file-input', { name: 'ZZFlow-material.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf(['ZZFlow Farmacocinetica: absorcao e distribuicao de farmacos.']) });
   await expect(materials.locator('#sources-proposals-panel')).toBeVisible({ timeout: 15000 });
-  await expect(materials.locator('#sources-proposals-list li').first()).toBeAttached({ timeout: 8000 });
+  await expect(materials.locator('#sources-range-form')).toBeVisible({ timeout: 8000 });
   await materials.waitForTimeout(400);
   report.materials_proposals = await materials.evaluate(untranslatedOf, ['#screen-materials', STUDENT_TEXT]);
 

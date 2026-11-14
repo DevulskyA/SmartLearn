@@ -65,7 +65,7 @@ test('three densities: AGORA = active task (Estado/Resultado atual/Próximo pass
   assert.match(agora, /^ {2}Gate: O gate da ativa passa; mais detalhes aqui$/m, 'one full sentence of the Gate line');
   assert.match(agora, /^ {2}- \[x\] Group A$/m);
   assert.match(agora, /^ {4}- \[x\] step a1$/m);
-  assert.match(agora, /^ {2}- \[>\] Step B \(current\)  ← EM EXECUÇÃO$/m);
+  assert.match(agora, /^ {2}- \[>\] Step B \(current\) {2}← EM EXECUÇÃO$/m);
   assert.equal((region.match(/^ +- \[.\] .*← EM EXECUÇÃO$/gm) ?? []).length, 1, 'only the current subtask line carries the marker');
   assert.ok(agora.indexOf('Estado:') < agora.indexOf('- [x] Group A'), 'facts come before the tree');
   const prox = section(region, 'PRÓXIMO');

@@ -23,6 +23,10 @@ export async function startForwarder(listenPort, targetPort) {
   return {
     cut() { open = false; for (const socket of sockets) socket.destroy(); },
     restore() { open = true; },
-    async close() { open = false; for (const socket of sockets) socket.destroy(); await new Promise((resolve) => server.close(resolve)); },
+    async close() {
+      open = false;
+      for (const socket of sockets) socket.destroy();
+      await new Promise((resolve) => server.close(resolve));
+    },
   };
 }

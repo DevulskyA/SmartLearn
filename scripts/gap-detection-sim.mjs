@@ -9,7 +9,7 @@
 import { fileURLToPath } from 'node:url';
 import { wilsonUpper, cautiousState } from '../shared/unit-evidence.js';
 
-export function mulberry32(seed) {
+function mulberry32(seed) {
   let a = seed >>> 0;
   return () => {
     a = (a + 0x6D2B79F5) >>> 0;
@@ -26,7 +26,7 @@ export { wilsonUpper, cautiousState };
 export const naiveFlag = ({ attempts, correct }) => attempts >= 1 && correct / attempts < 0.6;
 
 /** One synthetic student: `subtopics` subtopics of `pool` questions; the first `weak` are weak (ability 0.4), the rest strong (0.9). */
-export function runStudent({ seed, subtopics = 8, weak = 2, pool = 10, attempts }) {
+function runStudent({ seed, subtopics = 8, weak = 2, pool = 10, attempts }) {
   const rnd = mulberry32(seed);
   const stats = Array.from({ length: subtopics }, () => ({ attempts: 0, correct: 0, seen: new Set() }));
   for (let i = 0; i < attempts; i += 1) {

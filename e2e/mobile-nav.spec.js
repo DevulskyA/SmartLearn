@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -157,7 +158,7 @@ test.describe('signed in', () => {
     }, API_BASE);
     // the sign-in helper clicks Conta in the sidebar, which only exists at desktop width
     await page.setViewportSize({ width: 1280, height: 800 });
-    await signInRegistered(page, { email: `nav-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`, password: 'a genuinely long test password 1' });
+    await signInRegistered(page, { email: `nav-${Date.now()}-${randomUUID()}@example.com`, password: 'a genuinely long test password 1' });
     await page.setViewportSize({ width: 375, height: 812 });
 
     const toggle = page.locator('#mobile-more-toggle');

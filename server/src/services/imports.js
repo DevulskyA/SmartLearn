@@ -190,6 +190,131 @@ function offsetDaysBetween(studyDate, dueDate) {
   return Math.round((toUtcDay(dueDate) - toUtcDay(studyDate)) / 86400000);
 }
 
+function insertImportedSubjects(db, userId, subjects, nowIso) {
+  const idMap = new Map();
+  const insert = db.prepare(`
+    INSERT INTO subjects (user_id, name, color, is_active, sort_order, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+  // T25's normalized subject carries no createdAt/updatedAt (the source
+  // shape never guaranteed one) — nowIso is the disclosed default,
+  // consistent with normalizeSubjects' own DEFAULTED_* warnings.
+  for (const subject of subjects) {
+    const result = insert.run(userId, subject.name, subject.color, subject.isActive ? 1 : 0, subject.sortOrder, nowIso, nowIso);
+    idMap.set(subject.legacyId, result.lastInsertRowid);
+  }
+  return idMap;
+}
+
+function insertImportedUnits(db, userId, units, subjectIdMap) {
+  const unitIdMap = new Map();
+  const studyDateByLegacyId = new Map();
+  const insert = db.prepare(`
+    INSERT INTO learning_units (user_id, subject_id, title, source_text, summary_body, study_date, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  for (const unit of units) {
+    const subjectId = subjectIdMap.get(unit.legacySubjectId);
+    if (!subjectId) throw new ImportError('IMPORT_INTEGRITY_ERROR', 'Referência de disciplina ausente ao confirmar a importação (unidade ' + unit.legacyId + ').');
+    const result = insert.run(userId, subjectId, unit.title, unit.sourceText || null, unit.summaryBody, unit.studyDate, unit.createdAt, unit.updatedAt);
+    unitIdMap.set(unit.legacyId, result.lastInsertRowid);
+    studyDateByLegacyId.set(unit.legacyId, unit.studyDate);
+  }
+  return { unitIdMap, studyDateByLegacyId };
+}
+
+function insertImportedTasks(db, userId, tasks, unitIdMap, studyDateByLegacyId, nowIso) {
+  const taskIdMap = new Map();
+  const insert = db.prepare(`
+    INSERT INTO review_tasks (user_id, unit_id, offset_days, due_date, completed_at, created_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+  for (const task of tasks) {
+    const unitId = unitIdMap.get(task.legacyUnitId);
+    if (!unitId) throw new ImportError('IMPORT_INTEGRITY_ERROR', 'Referência de unidade ausente ao confirmar a importação (revisão ' + task.legacyId + ').');
+    const offsetDays = offsetDaysBetween(studyDateByLegacyId.get(task.legacyUnitId), task.dueDate);
+    const result = insert.run(userId, unitId, offsetDays, task.dueDate, task.completedAt, nowIso);
+    taskIdMap.set(task.legacyId, result.lastInsertRowid);
+  }
+  return taskIdMap;
+}
+
+function insertImportedExercises(db, userId, exercises, unitIdMap, nowIso) {
+  const exerciseIdMap = new Map();
+  const insertExercise = db.prepare('INSERT INTO exercises (user_id, unit_id, order_index, created_at, updated_at) VALUES (?, ?, ?, ?, ?)');
+  const insertVersion = db.prepare('INSERT INTO exercise_versions (user_id, exercise_id, question, answer, hint, provenance, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
+  for (const exercise of exercises) {
+    const unitId = unitIdMap.get(exercise.legacyUnitId);
+    if (!unitId) throw new ImportError('IMPORT_INTEGRITY_ERROR', 'Referência de unidade ausente ao confirmar a importação (exercício ' + exercise.legacyId + ').');
+    const createdAt = exercise.createdAt ?? nowIso;
+    const updatedAt = exercise.updatedAt ?? createdAt;
+    const result = insertExercise.run(userId, unitId, exercise.order, createdAt, updatedAt);
+    const exerciseId = result.lastInsertRowid;
+    insertVersion.run(userId, exerciseId, exercise.question, exercise.answer || null, exercise.hint, exercise.provenance, createdAt);
+    exerciseIdMap.set(exercise.legacyId, exerciseId);
+  }
+  return exerciseIdMap;
+}
+
+function insertImportedEvidence(db, userId, evidenceRows, unitIdMap, taskIdMap, nowIso) {
+  const insert = db.prepare(`
+    INSERT INTO learning_evidence (user_id, unit_id, review_task_id, type, questions_count, correct_count, evidence_date, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  let count = 0;
+  for (const evidence of evidenceRows) {
+    const unitId = unitIdMap.get(evidence.legacyUnitId);
+    if (!unitId) throw new ImportError('IMPORT_INTEGRITY_ERROR', 'Referência de unidade ausente ao confirmar a importação (evidência de aprendizagem).');
+    let reviewTaskId = null;
+    if (evidence.legacyReviewTaskId != null) {
+      reviewTaskId = taskIdMap.get(evidence.legacyReviewTaskId);
+      if (!reviewTaskId) throw new ImportError('IMPORT_INTEGRITY_ERROR', 'Referência de revisão ausente ao confirmar a importação (evidência de aprendizagem).');
+    }
+    insert.run(userId, unitId, reviewTaskId, evidence.context, evidence.questionsCount, evidence.correctCount, evidence.evidenceDate, nowIso);
+    count++;
+  }
+  return count;
+}
+
+function reconcileImportedCounts(createdCounts, expectedCounts) {
+  for (const key of Object.keys(expectedCounts)) {
+    if (createdCounts[key] !== expectedCounts[key]) {
+      throw new ImportError('IMPORT_INTEGRITY_ERROR', 'Contagem de ' + key + ' divergente ao confirmar a importação: esperado ' + expectedCounts[key] + ', inserido ' + createdCounts[key] + '.');
+    }
+  }
+}
+
+function commitLegacyRestore(db, userId, row, report, now) {
+  const normalized = JSON.parse(row.normalized_json);
+  return db.transaction(() => {
+    const nowIso = now.toISOString();
+    const subjectIdMap = insertImportedSubjects(db, userId, normalized.subjects, nowIso);
+    const { unitIdMap, studyDateByLegacyId } = insertImportedUnits(db, userId, normalized.learningUnits, subjectIdMap);
+    const taskIdMap = insertImportedTasks(db, userId, normalized.reviewTasks, unitIdMap, studyDateByLegacyId, nowIso);
+    const exerciseIdMap = insertImportedExercises(db, userId, normalized.exercises, unitIdMap, nowIso);
+    const evidenceCount = insertImportedEvidence(db, userId, normalized.learningEvidence, unitIdMap, taskIdMap, nowIso);
+    const createdCounts = {
+      subjects: subjectIdMap.size,
+      learningUnits: unitIdMap.size,
+      reviewTasks: taskIdMap.size,
+      exercises: exerciseIdMap.size,
+      learningEvidence: evidenceCount,
+    };
+    reconcileImportedCounts(createdCounts, report.counts);
+
+    const result = {
+      previewId: row.id,
+      sourceVersion: row.source_version,
+      checksum: row.source_checksum,
+      counts: createdCounts,
+      committedAt: nowIso,
+    };
+    db.prepare('UPDATE import_previews SET committed_at = ?, commit_result_json = ? WHERE id = ?')
+      .run(nowIso, JSON.stringify(result), row.id);
+    return result;
+  })();
+}
+
 /**
  * Applies an owned, unexpired, conflict-free preview's normalized data as
  * real owned rows, in ONE bounded transaction (design.md §6/T27: never a
@@ -244,110 +369,7 @@ export function commitImport(db, userId, previewId, now = new Date()) {
     });
   }
 
-  const normalized = JSON.parse(row.normalized_json);
-
-  const run = db.transaction(() => {
-    const nowIso = now.toISOString();
-
-    const subjectIdMap = new Map();
-    const insertSubject = db.prepare(`
-      INSERT INTO subjects (user_id, name, color, is_active, sort_order, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `);
-    // T25's normalized subject carries no createdAt/updatedAt (the source
-    // shape never guaranteed one) — nowIso is the disclosed default,
-    // consistent with normalizeSubjects' own DEFAULTED_* warnings.
-    for (const s of normalized.subjects) {
-      const r = insertSubject.run(userId, s.name, s.color, s.isActive ? 1 : 0, s.sortOrder, nowIso, nowIso);
-      subjectIdMap.set(s.legacyId, r.lastInsertRowid);
-    }
-
-    const unitIdMap = new Map();
-    const unitStudyDateByLegacyId = new Map();
-    const insertUnit = db.prepare(`
-      INSERT INTO learning_units (user_id, subject_id, title, source_text, summary_body, study_date, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    for (const u of normalized.learningUnits) {
-      const subjectId = subjectIdMap.get(u.legacySubjectId);
-      if (!subjectId) throw new ImportError('IMPORT_INTEGRITY_ERROR', 'Referência de disciplina ausente ao confirmar a importação (unidade ' + u.legacyId + ').');
-      const r = insertUnit.run(userId, subjectId, u.title, u.sourceText || null, u.summaryBody, u.studyDate, u.createdAt, u.updatedAt);
-      unitIdMap.set(u.legacyId, r.lastInsertRowid);
-      unitStudyDateByLegacyId.set(u.legacyId, u.studyDate);
-    }
-
-    const taskIdMap = new Map();
-    const insertTask = db.prepare(`
-      INSERT INTO review_tasks (user_id, unit_id, offset_days, due_date, completed_at, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `);
-    for (const t of normalized.reviewTasks) {
-      const unitId = unitIdMap.get(t.legacyUnitId);
-      if (!unitId) throw new ImportError('IMPORT_INTEGRITY_ERROR', 'Referência de unidade ausente ao confirmar a importação (revisão ' + t.legacyId + ').');
-      const offsetDays = offsetDaysBetween(unitStudyDateByLegacyId.get(t.legacyUnitId), t.dueDate);
-      const r = insertTask.run(userId, unitId, offsetDays, t.dueDate, t.completedAt, nowIso);
-      taskIdMap.set(t.legacyId, r.lastInsertRowid);
-    }
-
-    const exerciseIdMap = new Map();
-    const insertExercise = db.prepare('INSERT INTO exercises (user_id, unit_id, order_index, created_at, updated_at) VALUES (?, ?, ?, ?, ?)');
-    const insertVersion = db.prepare('INSERT INTO exercise_versions (user_id, exercise_id, question, answer, hint, provenance, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
-    for (const e of normalized.exercises) {
-      const unitId = unitIdMap.get(e.legacyUnitId);
-      if (!unitId) throw new ImportError('IMPORT_INTEGRITY_ERROR', 'Referência de unidade ausente ao confirmar a importação (exercício ' + e.legacyId + ').');
-      const createdAt = e.createdAt ?? nowIso;
-      const updatedAt = e.updatedAt ?? createdAt;
-      const r = insertExercise.run(userId, unitId, e.order, createdAt, updatedAt);
-      const exerciseId = r.lastInsertRowid;
-      insertVersion.run(userId, exerciseId, e.question, e.answer || null, e.hint, e.provenance, createdAt);
-      exerciseIdMap.set(e.legacyId, exerciseId);
-    }
-
-    const insertEvidence = db.prepare(`
-      INSERT INTO learning_evidence (user_id, unit_id, review_task_id, type, questions_count, correct_count, evidence_date, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    let evidenceCount = 0;
-    for (const ev of normalized.learningEvidence) {
-      const unitId = unitIdMap.get(ev.legacyUnitId);
-      if (!unitId) throw new ImportError('IMPORT_INTEGRITY_ERROR', 'Referência de unidade ausente ao confirmar a importação (evidência de aprendizagem).');
-      let reviewTaskId = null;
-      if (ev.legacyReviewTaskId != null) {
-        reviewTaskId = taskIdMap.get(ev.legacyReviewTaskId);
-        if (!reviewTaskId) throw new ImportError('IMPORT_INTEGRITY_ERROR', 'Referência de revisão ausente ao confirmar a importação (evidência de aprendizagem).');
-      }
-      insertEvidence.run(userId, unitId, reviewTaskId, ev.context, ev.questionsCount, ev.correctCount, ev.evidenceDate, nowIso);
-      evidenceCount++;
-    }
-
-    const createdCounts = {
-      subjects: subjectIdMap.size,
-      learningUnits: unitIdMap.size,
-      reviewTasks: taskIdMap.size,
-      exercises: exerciseIdMap.size,
-      learningEvidence: evidenceCount,
-    };
-    for (const key of Object.keys(report.counts)) {
-      if (createdCounts[key] !== report.counts[key]) {
-        throw new ImportError('IMPORT_INTEGRITY_ERROR', 'Contagem de ' + key + ' divergente ao confirmar a importação: esperado ' + report.counts[key] + ', inserido ' + createdCounts[key] + '.');
-      }
-    }
-
-    const result = {
-      previewId: row.id,
-      sourceVersion: row.source_version,
-      checksum: row.source_checksum,
-      counts: createdCounts,
-      committedAt: nowIso,
-    };
-
-    db.prepare('UPDATE import_previews SET committed_at = ?, commit_result_json = ? WHERE id = ?')
-      .run(nowIso, JSON.stringify(result), row.id);
-
-    return result;
-  });
-
-  return run();
+  return commitLegacyRestore(db, userId, row, report, now);
 }
 
 /** IMPORT-1 commit: capacity preflight, then the whole restore in ONE transaction. */

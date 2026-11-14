@@ -14,7 +14,8 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 function describeFailure(err, probeLimitMs) {
   if (err?.name === 'TimeoutError' || err?.name === 'AbortError') return `no answer within ${probeLimitMs} ms (connection accepted or hung, no HTTP response)`;
   const cause = err?.cause?.code || err?.cause?.message;
-  return `${err?.message || String(err)}${cause ? ` (${cause})` : ''}`;
+  const causeText = cause ? ` (${cause})` : '';
+  return `${err?.message || String(err)}${causeText}`;
 }
 
 /**
@@ -37,7 +38,8 @@ export async function waitForServerReady(baseUrl, { label = 'E2E', path = '/heal
       const response = await fetchImpl(url, { signal: AbortSignal.timeout(probeLimit) });
       if (response.status === 200) return;
       const body = (await response.text().catch(() => '')).replace(/\s+/g, ' ').slice(0, 200);
-      last = `HTTP ${response.status}${body ? ` ${body}` : ''}`;
+      const bodyText = body ? ` ${body}` : '';
+      last = `HTTP ${response.status}${bodyText}`;
     } catch (err) {
       last = describeFailure(err, probeLimit);
     }

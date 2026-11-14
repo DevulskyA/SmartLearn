@@ -160,7 +160,7 @@ export function registerGeneratedDraftRoutes(app, db, aiOptions = {}) {
   app.patch('/drafts/:id/summary', {
     schema: {
       params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } },
-      body: { type: 'object', required: ['summary'], properties: { summary: { type: 'string' }, expectedVersion: { type: 'integer' } } },
+      body: { type: 'object', required: ['summary'], properties: { summary: { type: 'string', maxLength: 200000 }, expectedVersion: { type: 'integer' } } },
     },
   }, async (request, reply) => {
     const id = Number(request.params.id);
@@ -176,10 +176,10 @@ export function registerGeneratedDraftRoutes(app, db, aiOptions = {}) {
       body: {
         type: 'object',
         properties: {
-          question: { type: 'string' },
-          answer: { type: 'string' },
-          explanation: { type: ['string', 'null'] },
-          hint: { type: ['string', 'null'] },
+          question: { type: 'string', maxLength: 5000 },
+          answer: { type: 'string', maxLength: 5000 },
+          explanation: { type: ['string', 'null'], maxLength: 5000 },
+          hint: { type: ['string', 'null'], maxLength: 5000 },
           questionType: { type: ['string', 'null'] },
           sourceSpans: { type: 'array', items: { type: 'object', required: ['pageIndex'], properties: { pageIndex: { type: 'integer' } } } },
           status: { type: 'string' },
@@ -310,10 +310,10 @@ export function registerGeneratedDraftRoutes(app, db, aiOptions = {}) {
         type: 'object',
         required: ['question', 'answer', 'sourceSpans'],
         properties: {
-          question: { type: 'string' },
-          answer: { type: 'string' },
-          explanation: { type: ['string', 'null'] },
-          hint: { type: ['string', 'null'] },
+          question: { type: 'string', maxLength: 5000 },
+          answer: { type: 'string', maxLength: 5000 },
+          explanation: { type: ['string', 'null'], maxLength: 5000 },
+          hint: { type: ['string', 'null'], maxLength: 5000 },
           questionType: { type: ['string', 'null'] },
           sourceSpans: { type: 'array', items: { type: 'object', required: ['pageIndex'], properties: { pageIndex: { type: 'integer' } } } },
         },
@@ -360,7 +360,7 @@ export function registerGeneratedDraftRoutes(app, db, aiOptions = {}) {
       querystring: {
         type: 'object',
         properties: {
-          subjectId: { type: 'string' }, newSubjectName: { type: 'string' }, newSubjectColor: { type: 'string' },
+          subjectId: { type: 'string' }, newSubjectName: { type: 'string', maxLength: 100 }, newSubjectColor: { type: 'string', maxLength: 40 },
           studyDate: { type: 'string' }, lessonDate: { type: 'string' }, expectedRevision: { type: 'string' }, acknowledgeSummaryFindings: { type: 'string' },
         },
       },
@@ -398,10 +398,11 @@ export function registerGeneratedDraftRoutes(app, db, aiOptions = {}) {
         required: ['studyDate', 'expectedRevision'],
         properties: {
           subjectId: { type: 'integer' },
-          newSubjectName: { type: 'string' },
-          newSubjectColor: { type: 'string' },
+          newSubjectName: { type: 'string', maxLength: 100 },
+          newSubjectColor: { type: 'string', maxLength: 40 },
           studyDate: { type: 'string' },
           lessonDate: { type: ['string', 'null'] },
+          sourceKind: { type: ['string', 'null'], enum: ['APOSTILA', 'LIVRO', 'VIDEO', 'OUTRO', null] },
           expectedRevision: { type: 'integer' },
           acknowledgeSummaryFindings: { type: 'boolean' },
         },

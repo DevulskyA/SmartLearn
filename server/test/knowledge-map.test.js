@@ -74,7 +74,7 @@ test('links a question to a section only with sustained identification; unknown 
     assert.equal(b.signal, 'INSUFFICIENT'); assert.equal(b.assisted, 3, 'answers with the solution shown are not evidence');
     assert.equal(a.basis, 'CITATION_PAGE_IN_OUTLINE'); assert.equal(a.pageFrom, 1);
     assert.deepEqual(u.notLinked, { ambiguousQuestions: 2, unknownQuestions: 1 });
-    assert.equal(u.sections.some((s) => /C|D/.test(s.title.slice(-1)) && s.attempts > 0), false, 'nothing is attributed to the two-start page');
+    assert.equal(u.sections.some((s) => /[CD]/.test(s.title.slice(-1)) && s.attempts > 0), false, 'nothing is attributed to the two-start page');
     for (const s of u.sections) assert.ok(!('mastery' in s) && !('level' in s && typeof s.level === 'string'));
   } finally { cleanup(); }
 });

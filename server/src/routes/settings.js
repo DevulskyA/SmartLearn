@@ -36,7 +36,7 @@ export function registerSettingsRoutes(app, db) {
   }, async (request) => ({ reuse: setReuseConsent(db, request.actor.userId, request.body.granted) }));
 
   app.patch('/settings', {
-    schema: { body: { type: 'object', properties: { timezone: { type: 'string' }, uiLocale: { type: 'string' }, generationLocale: { type: 'string' } } } },
+    schema: { body: { type: 'object', properties: { timezone: { type: 'string', maxLength: 100 }, uiLocale: { type: 'string', maxLength: 20 }, generationLocale: { type: 'string', maxLength: 20 } } } },
   }, async (request, reply) => {
     const { timezone, uiLocale, generationLocale } = request.body;
     const hasLanguage = uiLocale !== undefined || generationLocale !== undefined;

@@ -19,7 +19,14 @@ let serverBody = { mode: 'DEV', head: 'ffffeee', provider: 'CODEX', content: nul
 globalThis.fetch = async () => ({ ok: true, json: async () => serverBody });
 let clipboardText = null;
 let clipboardFails = false;
-Object.defineProperty(globalThis, 'navigator', { value: { clipboard: { writeText: async (t) => { if (clipboardFails) throw new Error('denied'); clipboardText = t; } } }, configurable: true, writable: true });
+Object.defineProperty(globalThis, 'navigator', {
+  value: { clipboard: { writeText: async (t) => {
+    if (clipboardFails) throw new Error('denied');
+    clipboardText = t;
+  } } },
+  configurable: true,
+  writable: true,
+});
 
 const mod = await import('../src/build-identity-ui.js');
 const settle = () => new Promise((resolve) => setTimeout(resolve, 20));

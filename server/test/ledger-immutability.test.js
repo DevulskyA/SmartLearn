@@ -20,11 +20,11 @@ import * as subjects from '../src/services/subjects.js';
 //   2. BEHAVIOR - the flows that touch a ledger's neighbours (reopen, recomplete, archive, delete subject) leave
 //                 every existing ledger row byte-for-byte unchanged.
 //   3. SCHEMA  - no foreign key cascades into the ledgers, so deleting a parent cannot silently delete history.
-// ALLOWLIST: empty on purpose. Proven legitimate exceptions found while writing this test: NONE. (Restore and
+// No exceptions are permitted. Proven legitimate exceptions found while writing this test: NONE. (Restore and
 // import only INSERT; exercise_attempts IS mutable by design - state machine, max_assistance, evidence_id link -
 // but it is a different table and is not covered by this guard.) Adding an exception needs a human gate.
 const LEDGERS = ['learning_events', 'learning_evidence'];
-const ALLOWLIST = [];
+
 
 const SRC_DIR = fileURLToPath(new URL('../src', import.meta.url));
 const MIGRATIONS_DIR = fileURLToPath(new URL('../migrations', import.meta.url));
@@ -111,7 +111,7 @@ test('static: nothing in server/src or server/migrations updates, deletes, repla
     const hits = findLedgerMutations(readFileSync(f, 'utf8'), { sql });
     for (const hit of hits) {
       const rel = relative(join(SRC_DIR, '..'), f).replaceAll('\\', '/');
-      if (!ALLOWLIST.some((a) => a.file === rel && hit.includes(a.fragment))) offenders.push(`${rel}: ${hit}`);
+      offenders.push(`${rel}: ${hit}`);
     }
   }
   assert.deepEqual(offenders, [], 'ledger tables are append-only; see the header of this test before adding an exception');

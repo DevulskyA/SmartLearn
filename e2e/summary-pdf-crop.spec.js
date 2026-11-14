@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -31,7 +32,8 @@ function markerPdf({ rotate = 0 } = {}) {
   const offsets = [];
   objects.forEach((body, i) => { offsets.push(out.length); out += `${i + 1} 0 obj\n${body}\nendobj\n`; });
   const xref = out.length;
-  out += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.map((o) => `${String(o).padStart(10, '0')} 00000 n \n`).join('')}`;
+  const xrefRows = offsets.map((o) => `${String(o).padStart(10, '0')} 00000 n \n`).join('');
+  out += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${xrefRows}`;
   out += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
   return Buffer.from(out, 'latin1');
 }
@@ -76,7 +78,7 @@ async function prepare(page) {
     window.__SMARTLEARN_REMOTE_MODE__ = true;
     window.__SMARTLEARN_LOCAL_AUTHORITY__ = true;
   }, API_BASE);
-  await signInRegistered(page, { email: `crop-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`, password: PASSWORD });
+  await signInRegistered(page, { email: `crop-${Date.now()}-${randomUUID()}@example.com`, password: PASSWORD });
 }
 test.beforeEach(async ({ page }) => { await prepare(page); });
 
@@ -240,7 +242,7 @@ test('keyboard only: Enter marks a region, arrows move it, Shift+arrows resize i
   await expect(dialog).toBeVisible();
   await dialog.locator('button', { hasText: 'Cancelar' }).click();
   await expect(dialog).toHaveCount(0);
-  expect(mediaFiles().length).toBe(before);
+  expect(mediaFiles()).toHaveLength(before);
   await expect(textarea).toHaveValue('Texto.');
 });
 

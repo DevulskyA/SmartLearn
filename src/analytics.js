@@ -40,9 +40,9 @@ function comparePeriods(olderEvidence, recentEvidence, minQuestions, minDelta) {
   const olderAcc = sumField(olderEvidence, 'correctCount') / olderQ;
   const recentAcc = sumField(recentEvidence, 'correctCount') / recentQ;
   const delta = recentAcc - olderAcc;
-  const direction = delta > minDelta ? 'IMPROVING'
-    : delta < -minDelta ? 'DECLINING'
-    : 'STABLE';
+  let direction = 'STABLE';
+  if (delta > minDelta) direction = 'IMPROVING';
+  else if (delta < -minDelta) direction = 'DECLINING';
   // olderQuestions/recentQuestions: the evidence volume this comparison actually rests on (VERDICT-1 weighs by it).
   return { direction, delta, olderAccuracy: olderAcc * 100, recentAccuracy: recentAcc * 100, olderQuestions: olderQ, recentQuestions: recentQ };
 }
@@ -107,7 +107,7 @@ export function studyVerdict(subjectRows, unitRows, reinforcementByUnit = {}) {
   const volumes = { improving: 0, declining: 0, stable: 0, compared: 0 };
   let totalQuestions = 0;
   for (const r of subjectRows) {
-    if (!(r.totalQuestions > 0)) { counts.noEvidence += 1; continue; }
+    if (r.totalQuestions <= 0) { counts.noEvidence += 1; continue; }
     totalQuestions += r.totalQuestions;
     const d = r.trend.direction;
     const volume = comparedVolume(r.trend);
@@ -118,9 +118,10 @@ export function studyVerdict(subjectRows, unitRows, reinforcementByUnit = {}) {
   }
   volumes.compared = volumes.improving + volumes.declining + volumes.stable;
   const compared = counts.improving + counts.declining + counts.stable;
-  const state = totalQuestions === 0 ? 'NO_EVIDENCE'
-    : compared === 0 ? 'INSUFFICIENT'
-    : aggregateDirection(volumes);
+  let state;
+  if (totalQuestions === 0) state = 'NO_EVIDENCE';
+  else if (compared === 0) state = 'INSUFFICIENT';
+  else state = aggregateDirection(volumes);
 
   const reinforceOf = (u) => (reinforcementByUnit[u.unitId] ?? []).length;
   const describe = (u, reason) => ({
@@ -138,15 +139,24 @@ export function studyVerdict(subjectRows, unitRows, reinforcementByUnit = {}) {
   const reinforce = unitRows
     .filter((u) => reinforceOf(u) > 0)
     .sort((a, b) => reinforceOf(b) - reinforceOf(a) || b.totalQuestions - a.totalQuestions);
-  const attention = declining.length > 0 ? describe(declining[0], 'DECLINING')
-    : reinforce.length > 0 ? describe(reinforce[0], 'REINFORCE')
-    : null;
+  let attention = null;
+  if (declining.length > 0) attention = describe(declining[0], 'DECLINING');
+  else if (reinforce.length > 0) attention = describe(reinforce[0], 'REINFORCE');
 
   return { state, counts, volumes, totalQuestions, attention };
 }
 
 // Fixed pt-BR thousands separator ("1.020"): independent of the runtime's ICU data.
-const thousands = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+function thousands(n) {
+  const value = String(n);
+  const sign = value.startsWith('-') ? '-' : '';
+  const digits = sign ? value.slice(1) : value;
+  const groups = [];
+  for (let end = digits.length; end > 0; end -= 3) {
+    groups.push(digits.slice(Math.max(0, end - 3), end));
+  }
+  return `${sign}${groups.reverse().join('.')}`;
+}
 // Singular only for exactly 1 (the catalog plural rule would also treat 0 as singular, so the choice is explicit here).
 const questions = (n) => (n === 1
   ? t('analytics.verdict.questions.one', { count: thousands(n) })
@@ -201,7 +211,7 @@ export const TREND_WINDOW_DAYS = 30;
 const dayNumber = (isoDate) => Date.parse(`${isoDate}T00:00:00Z`) / 86_400_000;
 
 // First day (ISO) of the period, N days ending today inclusive; null for "any period".
-export function periodStart(periodValue, today) {
+function periodStart(periodValue, today) {
   const days = PERIOD_DAYS[periodValue];
   return days ? subtractDays(today, days - 1) : null;
 }
@@ -255,12 +265,16 @@ export function largestRemainderPercents(counts) {
   const floors = exact.map(Math.floor);
   let left = 100 - floors.reduce((a, b) => a + b, 0);
   const order = exact.map((x, i) => ({ i, r: x - floors[i] })).sort((a, b) => b.r - a.r || a.i - b.i);
-  for (const { i } of order) { if (left <= 0) break; floors[i] += 1; left -= 1; }
+  for (const { i } of order) {
+    if (left <= 0) break;
+    floors[i] += 1;
+    left -= 1;
+  }
   return floors;
 }
 
 // Canonical bands (getState), worst first; counts are disciplines.
-export const PERFORMANCE_BAND_ORDER = ['CRITICAL', 'ATTENTION', 'ADEQUATE', 'STRONG', 'NO_EVIDENCE'];
+const PERFORMANCE_BAND_ORDER = ['CRITICAL', 'ATTENTION', 'ADEQUATE', 'STRONG', 'NO_EVIDENCE'];
 export function performanceDistribution(rows) {
   const counts = PERFORMANCE_BAND_ORDER.map((state) => rows.filter((r) => r.state === state).length);
   const percents = largestRemainderPercents(counts);
@@ -279,7 +293,9 @@ export function evolutionSeries(evidence, units, { periodValue = '', today = get
   if (rows.length === 0) return { from: null, to: today, spanDays: 0, bucketDays: 0, points: [], segments: [] };
   const from = periodStart(periodValue, today) ?? rows.reduce((min, e) => (e.evidenceDate < min ? e.evidenceDate : min), today);
   const spanDays = dayNumber(today) - dayNumber(from) + 1;
-  const bucketDays = spanDays <= 35 ? 3 : spanDays <= 100 ? 7 : 30;
+  let bucketDays = 30;
+  if (spanDays <= 35) bucketDays = 3;
+  else if (spanDays <= 100) bucketDays = 7;
   const buckets = new Map();
   for (const e of rows) {
     const index = Math.floor((dayNumber(e.evidenceDate) - dayNumber(from)) / bucketDays);

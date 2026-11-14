@@ -22,7 +22,9 @@ test('390px: no visible control smaller than 24x24 on the main screens', async (
     const nav = page.locator(`[data-screen="${screen}"]`);
     if (!(await nav.count()) || !(await nav.first().isVisible())) continue;
     await nav.first().click();
-    await page.waitForTimeout(400);
+    const panel = page.locator(`[data-screen-panel="${screen}"]`);
+    await expect(panel).toBeVisible();
+    await expect(panel).not.toHaveAttribute('aria-busy', 'true');
     const found = await page.evaluate(() => {
       const sel = 'button, a[href], input:not([type="hidden"]), select, textarea, [role="button"], [tabindex="0"]';
       const out = [];

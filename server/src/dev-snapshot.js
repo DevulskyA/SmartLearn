@@ -43,6 +43,7 @@ export function takeVerifiedSnapshot(dbPath, snapshotsDir, name, { now = new Dat
     let sourceCounts;
     try {
       source.pragma('busy_timeout = 5000');
+      // eslint-disable-next-line sonarjs/sql-queries -- file is a SQL string literal with every apostrophe doubled; VACUUM INTO uses raw exec SQL.
       source.exec(`VACUUM INTO '${file.replace(/'/g, "''")}'`);
       if (expectSameCounts) sourceCounts = tableCounts(source);
     } finally { source.close(); }

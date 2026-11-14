@@ -35,7 +35,9 @@
     "test:e2e:smoke": "node scripts/e2e.mjs --suite smoke",
     "test:e2e:summary": "node scripts/e2e.mjs --suite summary",
     "test:ui:fast": "playwright test e2e/ui-fast-pilot.spec.js --workers=1 --retries=0 --reporter=dot",
-    "build:installer": "tauri build --ci"
+    "build:installer": "tauri build --ci",
+    "audit:fallow": "fallow",
+    "lint:oxlint": "oxlint"
   },
   "repository": {
     "type": "git",
@@ -80,11 +82,15 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
-    "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.63.0",
     "@tauri-apps/cli": "^2.11.3",
     "eslint": "^10.14.0",
+    "eslint-plugin-sonarjs": "^4.2.2",
+    "espree": "11.2.0",
+    "fallow": "3.42.0",
     "globals": "^17.12.0",
+    "oxlint": "1.93.0",
+    "postcss": "8.5.32",
     "vite": "^8.3.5"
   }
 }

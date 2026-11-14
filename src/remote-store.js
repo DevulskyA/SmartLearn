@@ -198,11 +198,18 @@ function dayBefore(dateStr) {
   return date.toISOString().slice(0, 10);
 }
 
+function agendaQuery(dateStr, browserTimezone) {
+  if (!dateStr) return '';
+  const dateQuery = `?date=${encodeURIComponent(dateStr)}`;
+  if (!browserTimezone) return dateQuery;
+  return `${dateQuery}&timezone=${encodeURIComponent(browserTimezone)}`;
+}
+
 async function agenda(dateStr) {
   // The date is the browser's "today"; the browser's timezone goes with it so the server buckets "completed today" in the same day.
   let browserTimezone = null;
   try { browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || null; } catch { /* the server falls back to the saved timezone */ }
-  const query = dateStr ? `?date=${encodeURIComponent(dateStr)}${browserTimezone ? `&timezone=${encodeURIComponent(browserTimezone)}` : ''}` : '';
+  const query = agendaQuery(dateStr, browserTimezone);
   const result = await apiRequest(`/v1/agenda${query}`);
   return {
     date: result.date,
@@ -527,4 +534,3 @@ export const DB = {
   clearAll,
 };
 
-export { ApiError, NetworkError };

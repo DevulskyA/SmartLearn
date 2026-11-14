@@ -13,9 +13,23 @@ export function missingTokens(oldText, liveText, archiveTexts) {
   return [...tokensOf(oldText)].filter((t) => !have.has(t)).sort();
 }
 
+function resolveGitExecutable() {
+  const candidates = process.platform === 'win32'
+    ? [
+      join(process.env.ProgramW6432 ?? 'C:\\Program Files', 'Git', 'cmd', 'git.exe'),
+      join(process.env.ProgramFiles ?? 'C:\\Program Files', 'Git', 'cmd', 'git.exe'),
+      join(process.env['ProgramFiles(x86)'] ?? 'C:\\Program Files (x86)', 'Git', 'cmd', 'git.exe'),
+    ]
+    : ['/usr/bin/git', '/usr/local/bin/git', '/opt/homebrew/bin/git', '/opt/local/bin/git', '/bin/git'];
+  const executable = candidates.find((candidate) => existsSync(candidate));
+  if (!executable) throw new Error('check-state-ids requires Git in a fixed system installation path');
+  return executable;
+}
+
 if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replaceAll('\\', '/').split('/').pop())) {
   const rev = process.argv[2] ?? 'HEAD';
-  const oldText = execFileSync('git', ['show', `${rev}:.specs/STATE.md`], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  const gitExecutable = resolveGitExecutable();
+  const oldText = execFileSync(gitExecutable, ['show', `${rev}:.specs/STATE.md`], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
   const live = readFileSync('.specs/STATE.md', 'utf8');
   const dir = '.specs/archive';
   const archives = existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith('.md')).map((f) => readFileSync(join(dir, f), 'utf8')) : [];

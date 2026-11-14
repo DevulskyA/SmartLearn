@@ -20,7 +20,7 @@ function modal(titleText, className) {
   const previouslyFocused = document.activeElement;
   const dialog = document.createElement("dialog");
   dialog.className = `figure-dialog ${className}`;
-  const titleId = `figure-dialog-${Math.random().toString(36).slice(2)}`;
+  const titleId = `figure-dialog-${globalThis.crypto.randomUUID()}`;
   dialog.setAttribute("aria-labelledby", titleId);
   const title = document.createElement("h2");
   title.id = titleId;

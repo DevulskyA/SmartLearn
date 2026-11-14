@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 class FakeEl {
   constructor(tagName) { this.tagName = tagName; this.className = ''; this.textContent = ''; this.children = []; }
   append(...nodes) { this.children.push(...nodes); }
-  addEventListener(type, fn) { (this.handlers ??= {})[type] = fn; }
+  addEventListener(type, fn) { this.handlers ??= {}; this.handlers[type] = fn; }
   querySelector(selector) {
     assert.equal(selector, ':scope > .summary-source');
     return this.children.find((c) => c.className.split(' ').includes('summary-source')) ?? null;

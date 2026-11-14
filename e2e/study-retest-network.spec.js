@@ -1,12 +1,16 @@
 import { test, expect } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import Database from '../server/node_modules/better-sqlite3/lib/index.js';
+import { createRequire } from 'node:module';
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
 import { waitForServerReady } from './support/wait-for-server.js';
+
+const requireServerDependency = createRequire(new URL('../server/package.json', import.meta.url));
+const Database = requireServerDependency('better-sqlite3');
 
 // NEXT-4 / RETESTNET-1: the redo of "Estudar agora" ("Refazer erros") when the connection drops. What the student
 // sees, what the server holds and the longitudinal evidence must never disagree.
@@ -38,7 +42,7 @@ test.beforeEach(async ({ page }) => {
     window.__SMARTLEARN_API_BASE__ = base;
     window.__SMARTLEARN_REMOTE_MODE__ = true;
   }, API_BASE);
-  const email = `retestnet-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+  const email = `retestnet-${Date.now()}-${randomUUID()}@example.com`;
   const password = 'a genuinely long test password 1';
   await page.goto('/');
   await page.waitForLoadState('networkidle');
@@ -131,19 +135,28 @@ async function openRedo(page, title) {
   await row.locator('.plan-expand-btn').click();
   await row.locator('[data-action="plan-study-now"]').click();
   await expect(page.locator('#study-now-progress')).toHaveText('Questão 1 de 2');
+  const firstAttemptStarted = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return response.request().method() === 'POST' && /\/v1\/exercises\/\d+\/attempts$/.test(url.pathname) && response.ok();
+  });
   await page.locator('#study-now-reveal-btn').click();
+  await firstAttemptStarted;
   await page.locator('#study-now-incorrect-btn').click();
   await expect(page.locator('#study-now-progress')).toHaveText('Questão 2 de 2');
   await page.locator('#study-now-reveal-btn').click();
   await page.locator('#study-now-correct-btn').click();
   await expect(page.locator('#study-now-result-card')).toBeVisible();
   expect(await reinforceTotal(page)).toBe(1); // the wrong item is "para reforçar"
-  expect((await evidenceRows(page, unit.id)).length).toBe(1);
+  expect(await evidenceRows(page, unit.id)).toHaveLength(1);
   await page.locator('#study-now-retest-btn').click();
   await expect(page.locator('#study-now-progress')).toHaveText('Erro 1 de 1');
+  const redoAttemptStarted = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return response.request().method() === 'POST' && /\/v1\/exercises\/\d+\/attempts$/.test(url.pathname) && response.ok();
+  });
   await page.locator('#study-now-reveal-btn').click();
+  await redoAttemptStarted;
   await expect(page.locator('#study-now-judgment')).toBeVisible();
-  await page.waitForTimeout(400); // the attempt is started on the server when the answer is revealed
   return unit;
 }
 
@@ -159,7 +172,7 @@ test('RETESTNET-1: a redo answer that never reached the server is not shown as r
   await expect(page.locator('#study-now-result-title')).toHaveText('Resultado do reteste', { timeout: 8000 });
   await expect(page.locator('#study-now-result-text')).toContainText('1/1 erros corrigidos');
   expect(await reinforceTotal(page)).toBe(0); // now the server has the correction
-  expect((await evidenceRows(page, unit.id)).length).toBe(1); // the redo never writes aggregate evidence
+  expect(await evidenceRows(page, unit.id)).toHaveLength(1); // the redo never writes aggregate evidence
   expectCleanRetestLedger(unit.id);
 });
 
@@ -176,7 +189,7 @@ test('RETESTNET-1: if the server RECEIVED the redo answer but the reply was lost
   await page.locator('#study-now-correct-btn').click(); // the student follows the message and taps again
   await expect(page.locator('#study-now-result-title')).toHaveText('Resultado do reteste', { timeout: 8000 });
   await expect(page.locator('#study-now-result-text')).toContainText('1/1 erros corrigidos');
-  expect((await evidenceRows(page, unit.id)).length).toBe(1);
+  expect(await evidenceRows(page, unit.id)).toHaveLength(1);
   expectCleanRetestLedger(unit.id);
 });
 
@@ -193,7 +206,7 @@ test('RETESTNET-1: if the reply was lost and the student then taps the OTHER but
   await page.locator('#study-now-incorrect-btn').click(); // the student changes their mind
   await expect(page.locator('#study-now-result-text')).toContainText('1/1 erros corrigidos', { timeout: 8000 }); // the server's CORRECT stands
   expect(await reinforceTotal(page)).toBe(0);
-  expect((await evidenceRows(page, unit.id)).length).toBe(1);
+  expect(await evidenceRows(page, unit.id)).toHaveLength(1);
   expectCleanRetestLedger(unit.id);
 });
 

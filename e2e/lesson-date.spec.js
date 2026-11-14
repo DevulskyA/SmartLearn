@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { test, expect } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -32,7 +33,7 @@ test.afterAll(async () => {
 
 async function openPlanForm(page) {
   await page.addInitScript((base) => { window.__SMARTLEARN_API_BASE__ = base; window.__SMARTLEARN_REMOTE_MODE__ = true; window.__SMARTLEARN_LOCAL_AUTHORITY__ = true; }, API_BASE);
-  await signInRegistered(page, { email: `lesson-date-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`, password: 'a genuinely long test password 1' });
+  await signInRegistered(page, { email: `lesson-date-${Date.now()}-${randomUUID()}@example.com`, password: 'a genuinely long test password 1' });
   await page.locator('[data-screen="plan"]').click();
   await page.locator('#plan-new-unit-btn').click();
   await page.locator('#plan-show-subject-form').click();

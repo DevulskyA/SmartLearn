@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -35,7 +36,7 @@ test.afterAll(async () => {
 });
 
 async function signIn(page) {
-  const email = `firstq-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+  const email = `firstq-${Date.now()}-${randomUUID()}@example.com`;
   const password = 'a genuinely long test password 1';
   await page.addInitScript((base) => { window.__SMARTLEARN_API_BASE__ = base; window.__SMARTLEARN_REMOTE_MODE__ = true; }, API_BASE);
   await page.goto('/');
@@ -83,7 +84,6 @@ test('FIRST-QUESTION: from a signed-in student to the first question of a lesson
     await click(page.locator('[data-screen="plan"]'));
     const row = page.locator('.plan-row', { hasText: title });
     await expect(row).toBeVisible({ timeout: 8000 });
-    const planShown = Date.now();
     if (!await row.locator('[data-action="plan-study-now"]').isVisible()) await click(row.locator('.plan-expand-btn'));
     const beforeStart = Date.now();
     await click(row.locator('[data-action="plan-study-now"]'));
@@ -92,9 +92,7 @@ test('FIRST-QUESTION: from a signed-in student to the first question of a lesson
     clicks.push(count);
     lastClickToQuestion.push(t1 - beforeStart);
     planToQuestion.push(t1 - t0);
-    void planShown;
     await page.locator('[data-screen="plan"]').click(); // leave the block unfinished; the next run starts from a calm screen
-    await page.waitForTimeout(300);
   }
   const report = { runs: RUNS, clicks, lastClickToQuestionMs: lastClickToQuestion, fromTodayToQuestionMs: planToQuestion, medianLastClickToQuestionMs: median(lastClickToQuestion), medianFromTodayMs: median(planToQuestion) };
   mkdirSync('test-results', { recursive: true });

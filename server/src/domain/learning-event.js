@@ -5,12 +5,12 @@
 // `now` explicitly so this stays deterministic and testable.
 
 export const ASSISTANCE_LEVELS = Object.freeze(['NONE', 'HINT', 'PARTIAL_SOLUTION', 'SOLUTION']);
-export const ASSISTANCE_LEVELS_WITH_UNKNOWN = Object.freeze(['UNKNOWN', ...ASSISTANCE_LEVELS]);
-export const OUTCOMES = Object.freeze(['CORRECT', 'INCORRECT', 'UNKNOWN']);
-export const ASSESSMENT_METHODS = Object.freeze(['SELF_REPORT', 'AUTOMATIC']);
-export const EVENT_KINDS = Object.freeze(['ATTEMPT', 'CORRECTION']);
-export const PROVENANCE_VALUES = Object.freeze(['APP', 'IMPORT']);
-export const SCHEMA_VERSION = 1;
+const ASSISTANCE_LEVELS_WITH_UNKNOWN = Object.freeze(['UNKNOWN', ...ASSISTANCE_LEVELS]);
+const OUTCOMES = Object.freeze(['CORRECT', 'INCORRECT', 'UNKNOWN']);
+const ASSESSMENT_METHODS = Object.freeze(['SELF_REPORT', 'AUTOMATIC']);
+const EVENT_KINDS = Object.freeze(['ATTEMPT', 'CORRECTION']);
+const PROVENANCE_VALUES = Object.freeze(['APP', 'IMPORT']);
+const SCHEMA_VERSION = 1;
 
 export class LearningEventError extends Error {
   constructor(code, message, field) {

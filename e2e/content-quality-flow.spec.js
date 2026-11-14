@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -10,6 +11,7 @@ import { VITE_ORIGIN, serverPort } from './support/ports.js';
 import { waitForServerReady } from './support/wait-for-server.js';
 import { signInRegistered } from './support/session.js';
 
+import { generateByPages } from './support/materials-flow.js';
 // CONTENT-QUALITY CQ-4: one medical unit through the WHOLE product, on the LIVE-provider code path
 // (real server, real UI, real PDF extraction) with the model endpoint replaced by a local stub that
 // returns a flawed first draft, a semantic audit finding, and a targeted repair. The stub is a
@@ -118,7 +120,7 @@ test.beforeEach(async ({ page }) => {
     window.__SMARTLEARN_REMOTE_MODE__ = true;
     window.__SMARTLEARN_LOCAL_AUTHORITY__ = true;
   }, API_BASE);
-  const email = `cq-flow-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+  const email = `cq-flow-${Date.now()}-${randomUUID()}@example.com`;
   const password = 'a genuinely long test password 1';
   await signInRegistered(page, { email: email, password: password });
 });
@@ -132,7 +134,7 @@ test('medical PDF -> audited draft -> human accept -> summary origin -> study wi
   await page.locator('[data-screen="materials"]').click();
   await page.setInputFiles('#sources-file-input', { name: 'fisiologia-renal.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf([PAGE_1, PAGE_2]) });
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
-  await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
+  await generateByPages(page);
   const panel = page.locator('.lesson-editor');
   await expect(panel).toBeVisible({ timeout: 15000 });
 

@@ -23,7 +23,7 @@ import { has, t } from './i18n/index.js';
 const API_BASE = (typeof window !== 'undefined' && window.__SMARTLEARN_API_BASE__) || '';
 
 export class ApiError extends Error {
-  constructor(code, message, { status, field, requestId, msg } = {}) {
+  constructor(code, message, { status, field, requestId, msg, details } = {}) {
     // A sentence the server sends as a stable code + params is shown from the catalog (follows the interface language); the server's own
     // text is the reserve for an old server, an unknown code or a sentence with no code.
     const key = typeof msg?.code === 'string' ? `api.msg.${msg.code}` : '';
@@ -34,6 +34,7 @@ export class ApiError extends Error {
     this.status = status;
     this.field = field;
     this.requestId = requestId;
+    this.details = details;
   }
 }
 
@@ -108,7 +109,7 @@ async function handleResponse(res) {
     if (res.status === 401 && typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
       window.dispatchEvent(new CustomEvent('smartlearn:unauthenticated'));
     }
-    throw new ApiError(err.code ?? 'UNKNOWN_ERROR', err.message, { status: res.status, field: err.field, requestId: err.requestId, msg: err.msg });
+    throw new ApiError(err.code ?? 'UNKNOWN_ERROR', err.message, { status: res.status, field: err.field, requestId: err.requestId, msg: err.msg, details: err.details });
   }
   return json;
 }

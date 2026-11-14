@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -60,7 +61,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 function uniqueEmail() {
-  return `e2e-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+  return `e2e-${Date.now()}-${randomUUID()}@example.com`;
 }
 
 test('keyboard journey: register, then log in, then see the account view', async ({ page }) => {

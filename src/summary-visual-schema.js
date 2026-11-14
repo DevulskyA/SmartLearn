@@ -24,7 +24,7 @@ const BLOCK_TYPES = ["paragraph", "heading", "bulletList", "orderedList", "block
 
 // Bookkeeping that lets an untouched block be written back as its original bytes (see shared/summary-doc.js). Never rendered.
 // `loose` is the list spacing (blank lines between items), which is part of the text and must survive an edit.
-export const SourceMemory = Extension.create({
+const SourceMemory = Extension.create({
   name: "sourceMemory",
   addGlobalAttributes() {
     const memory = { default: null, rendered: false, keepOnSplit: false };
@@ -93,7 +93,7 @@ export const RawBlock = Node.create({
 });
 
 // A quote holds paragraphs only (what Markdown can say without nesting other blocks).
-export const Quote = Blockquote.extend({ content: "paragraph+" });
+const Quote = Blockquote.extend({ content: "paragraph+" });
 
 // A table cell holds exactly one paragraph (a Markdown cell is one line of inline text); a line break would not survive the file format, so
 // Enter and Shift-Enter move to the next row / do nothing instead of breaking the cell.
@@ -105,13 +105,13 @@ function cellNode(base) {
     },
   });
 }
-export const SummaryTable = Table.configure({ resizable: false, renderWrapper: false });
-export const SummaryTableHeader = cellNode(TableHeader);
-export const SummaryTableCell = cellNode(TableCell);
+const SummaryTable = Table.configure({ resizable: false, renderWrapper: false });
+const SummaryTableHeader = cellNode(TableHeader);
+const SummaryTableCell = cellNode(TableCell);
 
 
 // A line break that came from the text itself (a single newline inside a paragraph), kept distinct from a deliberate "hard" break.
-export const SoftBreak = Node.create({
+const SoftBreak = Node.create({
   name: "softBreak",
   group: "inline",
   inline: true,

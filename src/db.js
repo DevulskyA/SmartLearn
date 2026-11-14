@@ -150,6 +150,32 @@ function validateEvidenceContext(context) {
   }
 }
 
+function validateEvidenceCounts(questionsCount, correctCount) {
+  const q = Number(questionsCount);
+  const c = Number(correctCount);
+  if (!Number.isFinite(q) || q <= 0) throw new Error('questionsCount deve ser inteiro positivo.');
+  if (!Number.isFinite(c) || c < 0) throw new Error('correctCount deve ser >= 0.');
+  if (c > q) throw new Error('correctCount não pode ser maior que questionsCount.');
+  return { q, c };
+}
+
+function validateEvidenceTaskContext(context, reviewTaskId) {
+  if (context === 'REVIEW' && reviewTaskId == null) throw new Error('context REVIEW requer reviewTaskId.');
+  if (context !== 'REVIEW' && reviewTaskId != null) throw new Error('context ' + context + ' não pode ter reviewTaskId.');
+}
+
+function validateBrowserEvidenceRelations(state, unitId, reviewTaskId) {
+  if (!state.learningUnits.some((unit) => unit.id === unitId)) {
+    throw new Error('unit_id não encontrado.');
+  }
+  if (reviewTaskId == null) return;
+  const duplicate = state.learningEvidence.find((evidence) => evidence.reviewTaskId === reviewTaskId);
+  if (duplicate) throw new Error('Já existe evidência para esta revisão.');
+  const task = state.reviewTasks.find((reviewTask) => reviewTask.id === reviewTaskId);
+  if (!task) throw new Error('review_task_id não encontrado.');
+  if (task.unitId !== unitId) throw new Error('review_task_id deve pertencer à mesma unidade (unit_id).');
+}
+
 function calcScorePercent(questionsCount, correctCount) {
   if (questionsCount == null || correctCount == null) return null;
   const q = Number(questionsCount);
@@ -243,17 +269,20 @@ function isValidIsoDate(value) {
   return d <= new Date(y, mo, 0).getDate();
 }
 
-function validateImportContent(normalized) {
+function validateImportSubjects(subjects) {
   const subjectIds = new Set();
-  for (const s of normalized.subjects) {
+  for (const s of subjects) {
     if (s.id == null) throw new Error('Backup inválido: subject sem id.');
     if (!s.name || typeof s.name !== 'string' || !s.name.trim()) throw new Error('Backup inválido: subject sem name.');
     if (subjectIds.has(s.id)) throw new Error('Backup inválido: subject id duplicado: ' + s.id);
     subjectIds.add(s.id);
   }
+  return subjectIds;
+}
 
+function validateImportUnits(units, subjectIds) {
   const unitIds = new Set();
-  for (const u of normalized.learningUnits) {
+  for (const u of units) {
     if (u.id == null) throw new Error('Backup inválido: learningUnit sem id.');
     if (!subjectIds.has(u.subjectId ?? u.subject_id)) throw new Error('Backup inválido: learningUnit ' + u.id + ' referencia subject inexistente: ' + (u.subjectId ?? u.subject_id));
     if (!isValidIsoDate(u.studyDate ?? u.study_date)) throw new Error('Backup inválido: learningUnit ' + u.id + ' tem studyDate inválida.');
@@ -265,10 +294,13 @@ function validateImportContent(normalized) {
     if (unitIds.has(u.id)) throw new Error('Backup inválido: learningUnit id duplicado: ' + u.id);
     unitIds.add(u.id);
   }
+  return unitIds;
+}
 
+function validateImportReviewTasks(reviewTasks, unitIds) {
   const taskIds = new Set();
   const taskUnitMap = new Map();
-  for (const t of normalized.reviewTasks) {
+  for (const t of reviewTasks) {
     if (t.id == null) throw new Error('Backup inválido: reviewTask sem id.');
     const unitId = t.unitId ?? t.unit_id;
     if (!unitIds.has(unitId)) throw new Error('Backup inválido: reviewTask ' + t.id + ' referencia unit inexistente: ' + unitId);
@@ -278,12 +310,25 @@ function validateImportContent(normalized) {
     taskUnitMap.set(t.id, unitId);
     const q = t.questionsCount ?? t.questions_count;
     const c = t.correctCount ?? t.correct_count;
-    if (q != null && (!Number.isFinite(Number(q)) || Number(q) < 0)) throw new Error('Backup inválido: reviewTask ' + t.id + ' tem questionsCount inválido.');
-    if (c != null && q == null) throw new Error('Backup inválido: reviewTask ' + t.id + ' tem correctCount sem questionsCount.');
-    if (q != null && c != null && (!Number.isFinite(Number(c)) || Number(c) < 0 || Number(c) > Number(q))) throw new Error('Backup inválido: reviewTask ' + t.id + ' tem correctCount inválido.');
+    validateImportReviewCounts(t, q, c);
   }
+  return { taskIds, taskUnitMap };
+}
 
-  for (const e of (Array.isArray(normalized.exercises) ? normalized.exercises : [])) {
+function validateImportReviewCounts(task, questionsCount, correctCount) {
+  if (questionsCount != null && (!Number.isFinite(Number(questionsCount)) || Number(questionsCount) < 0)) {
+    throw new Error('Backup inválido: reviewTask ' + task.id + ' tem questionsCount inválido.');
+  }
+  if (correctCount != null && questionsCount == null) {
+    throw new Error('Backup inválido: reviewTask ' + task.id + ' tem correctCount sem questionsCount.');
+  }
+  if (questionsCount != null && correctCount != null && (!Number.isFinite(Number(correctCount)) || Number(correctCount) < 0 || Number(correctCount) > Number(questionsCount))) {
+    throw new Error('Backup inválido: reviewTask ' + task.id + ' tem correctCount inválido.');
+  }
+}
+
+function validateImportExercises(exercises, unitIds) {
+  for (const e of exercises) {
     if (e.id == null) throw new Error('Backup inválido: exercise sem id.');
     const unitId = e.unitId ?? e.unit_id;
     if (!unitIds.has(unitId)) throw new Error('Backup inválido: exercise ' + e.id + ' referencia unit inexistente: ' + unitId);
@@ -291,9 +336,12 @@ function validateImportContent(normalized) {
       throw new Error('Backup inválido: exercise ' + e.id + ' tem provenance inválida: ' + e.provenance);
     }
   }
+  return new Set(exercises.map((exercise) => exercise.id));
+}
 
+function validateImportEvidence(evidence, unitIds, taskIds, taskUnitMap) {
   const evidenceTaskIds = new Set();
-  for (const ev of (Array.isArray(normalized.learningEvidence) ? normalized.learningEvidence : [])) {
+  for (const ev of evidence) {
     const unitId = ev.unitId ?? ev.unit_id;
     if (!unitIds.has(unitId)) throw new Error('Backup inválido: learningEvidence referencia unit inexistente: ' + unitId);
     const context = ev.context;
@@ -302,33 +350,56 @@ function validateImportContent(normalized) {
     }
     const q = Number(ev.questionsCount ?? ev.questions_count);
     const c = Number(ev.correctCount ?? ev.correct_count);
-    if (!Number.isFinite(q) || q <= 0) throw new Error('Backup inválido: learningEvidence questionsCount deve ser positivo.');
-    if (!Number.isFinite(c) || c < 0 || c > q) throw new Error('Backup inválido: learningEvidence correctCount fora do intervalo [0, questionsCount].');
     const reviewTaskId = ev.reviewTaskId ?? ev.review_task_id ?? null;
-    if (context === 'REVIEW' && reviewTaskId == null) throw new Error('Backup inválido: learningEvidence REVIEW requer reviewTaskId.');
-    if (context !== 'REVIEW' && reviewTaskId != null) throw new Error('Backup inválido: learningEvidence ' + context + ' não pode ter reviewTaskId.');
-    if (reviewTaskId != null) {
-      if (!taskIds.has(reviewTaskId)) throw new Error('Backup inválido: learningEvidence referencia reviewTask inexistente: ' + reviewTaskId);
-      if (taskUnitMap.get(reviewTaskId) !== unitId) throw new Error('Backup inválido: learningEvidence REVIEW tem reviewTask de unidade diferente.');
-      if (evidenceTaskIds.has(reviewTaskId)) throw new Error('Backup inválido: reviewTask ' + reviewTaskId + ' tem mais de uma learningEvidence (conflito).');
-      evidenceTaskIds.add(reviewTaskId);
-    }
+    validateImportEvidenceFields(context, q, c, reviewTaskId);
+    validateImportEvidenceTask(unitId, reviewTaskId, taskIds, taskUnitMap, evidenceTaskIds);
     if (!isValidIsoDate(ev.evidenceDate ?? ev.evidence_date)) throw new Error('Backup inválido: learningEvidence tem evidenceDate inválida.');
   }
+}
 
-  const exerciseIds = new Set((Array.isArray(normalized.exercises) ? normalized.exercises : []).map((e) => e.id));
-  for (const event of (Array.isArray(normalized.exerciseFlagEvents) ? normalized.exerciseFlagEvents : [])) {
+function validateImportEvidenceFields(context, questionsCount, correctCount, reviewTaskId) {
+  if (!Number.isFinite(questionsCount) || questionsCount <= 0) throw new Error('Backup inválido: learningEvidence questionsCount deve ser positivo.');
+  if (!Number.isFinite(correctCount) || correctCount < 0 || correctCount > questionsCount) throw new Error('Backup inválido: learningEvidence correctCount fora do intervalo [0, questionsCount].');
+  if (context === 'REVIEW' && reviewTaskId == null) throw new Error('Backup inválido: learningEvidence REVIEW requer reviewTaskId.');
+  if (context !== 'REVIEW' && reviewTaskId != null) throw new Error('Backup inválido: learningEvidence ' + context + ' não pode ter reviewTaskId.');
+}
+
+function validateImportEvidenceTask(unitId, reviewTaskId, taskIds, taskUnitMap, evidenceTaskIds) {
+  if (reviewTaskId == null) return;
+  if (!taskIds.has(reviewTaskId)) throw new Error('Backup inválido: learningEvidence referencia reviewTask inexistente: ' + reviewTaskId);
+  if (taskUnitMap.get(reviewTaskId) !== unitId) throw new Error('Backup inválido: learningEvidence REVIEW tem reviewTask de unidade diferente.');
+  if (evidenceTaskIds.has(reviewTaskId)) throw new Error('Backup inválido: reviewTask ' + reviewTaskId + ' tem mais de uma learningEvidence (conflito).');
+  evidenceTaskIds.add(reviewTaskId);
+}
+
+function validateImportExerciseFlagEvents(events, exerciseIds) {
+  for (const event of events) {
     const exerciseId = event.exerciseId ?? event.exercise_id;
     if (!exerciseIds.has(exerciseId)) throw new Error('Invalid backup: exerciseFlagEvent references a missing exercise: ' + exerciseId);
-    if (!['FLAG', 'CLEAR'].includes(event.action)) throw new Error('Invalid backup: exerciseFlagEvent has an invalid action: ' + event.action);
-    if (event.action === 'FLAG') {
-      if (!['CONFUSING_STATEMENT', 'DOUBTFUL_ANSWER_KEY', 'CONTENT_ERROR', 'OTHER'].includes(event.reason)) {
-        throw new Error('Invalid backup: exerciseFlagEvent has an invalid reason: ' + event.reason);
-      }
-      if (event.comment != null && typeof event.comment !== 'string') throw new Error('Invalid backup: exerciseFlagEvent comment must be text.');
-      if (typeof event.comment === 'string' && event.comment.trim().length > 500) throw new Error('Invalid backup: exerciseFlagEvent comment exceeds 500 characters.');
-    }
+    validateImportExerciseFlagEvent(event);
   }
+}
+
+function validateImportExerciseFlagEvent(event) {
+  if (!['FLAG', 'CLEAR'].includes(event.action)) throw new Error('Invalid backup: exerciseFlagEvent has an invalid action: ' + event.action);
+  if (event.action !== 'FLAG') return;
+  if (!['CONFUSING_STATEMENT', 'DOUBTFUL_ANSWER_KEY', 'CONTENT_ERROR', 'OTHER'].includes(event.reason)) {
+    throw new Error('Invalid backup: exerciseFlagEvent has an invalid reason: ' + event.reason);
+  }
+  if (event.comment != null && typeof event.comment !== 'string') throw new Error('Invalid backup: exerciseFlagEvent comment must be text.');
+  if (typeof event.comment === 'string' && event.comment.trim().length > 500) throw new Error('Invalid backup: exerciseFlagEvent comment exceeds 500 characters.');
+}
+
+function validateImportContent(normalized) {
+  const subjects = validateImportSubjects(normalized.subjects);
+  const units = validateImportUnits(normalized.learningUnits, subjects);
+  const { taskIds, taskUnitMap } = validateImportReviewTasks(normalized.reviewTasks, units);
+  const exercises = Array.isArray(normalized.exercises) ? normalized.exercises : [];
+  const exerciseIds = validateImportExercises(exercises, units);
+  const evidence = Array.isArray(normalized.learningEvidence) ? normalized.learningEvidence : [];
+  validateImportEvidence(evidence, units, taskIds, taskUnitMap);
+  const events = Array.isArray(normalized.exerciseFlagEvents) ? normalized.exerciseFlagEvents : [];
+  validateImportExerciseFlagEvents(events, exerciseIds);
 }
 
 function assertImportData(data) {
@@ -370,6 +441,47 @@ function buildClearStatements() {
   ];
 }
 
+function legacyReviewEvidenceStatement(task, unitsMap) {
+  const q = task.questionsCount ?? task.questions_count;
+  const c = task.correctCount ?? task.correct_count;
+  if (!task.review_done && !task.reviewDone) return null;
+  if (!task.questions_done && !task.questionsDone) return null;
+  if (q == null || !Number.isFinite(Number(q)) || Number(q) <= 0) return null;
+  const unitId = task.unitId ?? task.unit_id;
+  const unit = unitsMap.get(unitId);
+  if (!unit) return null;
+  const evidenceDate = (task.completedAt ?? task.completed_at ?? task.dueDate ?? task.due_date ?? '').slice(0, 10);
+  if (!evidenceDate) return null;
+  return {
+    query: 'INSERT OR IGNORE INTO learning_evidence\n          (unit_id, evidence_date, context, questions_count, correct_count, score_percent, review_task_id, created_at)\n          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+    values: [unitId, evidenceDate, 'REVIEW', Number(q), c != null ? Number(c) : 0,
+      c != null ? (Number(c) / Number(q)) * 100 : null, task.id,
+      task.completedAt ?? task.completed_at ?? new Date().toISOString()],
+  };
+}
+
+function appendLegacyReviewEvidence(statements, data) {
+  if ((data.schemaVersion ?? 0) >= 3) return;
+  const unitsMap = new Map((data.learningUnits ?? []).map((unit) => [unit.id, unit]));
+  for (const task of (data.reviewTasks ?? [])) {
+    const statement = legacyReviewEvidenceStatement(task, unitsMap);
+    if (statement) statements.push(statement);
+  }
+}
+
+function appendImportedLearningEvidence(statements, learningEvidence) {
+  for (const row of learningEvidence) {
+    if (!row.questionsCount || Number(row.questionsCount) <= 0) continue;
+    statements.push({
+      query: 'INSERT INTO learning_evidence\n        (id, unit_id, evidence_date, context, questions_count, correct_count, score_percent, review_task_id, created_at)\n        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+      values: [row.id, row.unitId ?? row.unit_id, row.evidenceDate ?? row.evidence_date, row.context,
+        row.questionsCount ?? row.questions_count, row.correctCount ?? row.correct_count,
+        row.scorePercent ?? row.score_percent ?? null, row.reviewTaskId ?? row.review_task_id ?? null,
+        row.createdAt ?? row.created_at ?? new Date().toISOString()],
+    });
+  }
+}
+
 function buildImportStatements(data) {
   const statements = [
     { query: 'DELETE FROM learning_evidence', values: [] },
@@ -380,128 +492,41 @@ function buildImportStatements(data) {
     { query: 'DELETE FROM settings', values: [] },
   ];
 
-  for (const row of data.subjects) {
-    statements.push({
-      query: 'INSERT INTO subjects (id, name, created_at, updated_at, is_active, sort_order, color)\n        VALUES ($1, $2, $3, $4, $5, $6, $7)',
-      values: [
-        row.id,
-        normalizeEntityName(row.name, t('shell.field.subjectName')),
-        row.createdAt,
-        row.updatedAt,
-        (row.isActive ?? row.is_active ?? true) ? 1 : 0,
-        row.sortOrder ?? row.sort_order ?? 0,
-        row.color ?? 'DISC-BLUE',
-      ],
-    });
-  }
+  for (const row of data.subjects) statements.push({
+    query: 'INSERT INTO subjects (id, name, created_at, updated_at, is_active, sort_order, color)\n        VALUES ($1, $2, $3, $4, $5, $6, $7)',
+    values: [row.id, normalizeEntityName(row.name, t('shell.field.subjectName')), row.createdAt, row.updatedAt,
+      (row.isActive ?? row.is_active ?? true) ? 1 : 0, row.sortOrder ?? row.sort_order ?? 0, row.color ?? 'DISC-BLUE'],
+  });
 
-  for (const row of data.learningUnits) {
-    statements.push({
-      query: 'INSERT INTO learning_units\n        (id, subject_id, source_text, study_date, title, summary_body, created_at, updated_at)\n        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-      values: [
-        row.id,
-        row.subjectId ?? row.subject_id,
-        row.sourceText ?? row.source_text ?? '',
-        row.studyDate ?? row.study_date,
-        row.title,
-        row.summaryBody ?? row.summary_body ?? null,
-        row.createdAt ?? row.created_at,
-        row.updatedAt ?? row.updated_at,
-      ],
-    });
-  }
+  for (const row of data.learningUnits) statements.push({
+    query: 'INSERT INTO learning_units\n        (id, subject_id, source_text, study_date, title, summary_body, created_at, updated_at)\n        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+    values: [row.id, row.subjectId ?? row.subject_id, row.sourceText ?? row.source_text ?? '', row.studyDate ?? row.study_date,
+      row.title, row.summaryBody ?? row.summary_body ?? null, row.createdAt ?? row.created_at, row.updatedAt ?? row.updated_at],
+  });
 
-  for (const row of data.reviewTasks) {
-    statements.push({
-      query: 'INSERT INTO review_tasks\n        (id, unit_id, review_number, due_date, completed_at,\n         review_done, questions_done, questions_count, correct_count,\n         score_percent, comment, created_at, updated_at)\n        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)',
-      values: [
-        row.id, row.unitId ?? row.unit_id, row.reviewNumber ?? row.review_number,
-        row.dueDate ?? row.due_date, row.completedAt ?? null,
-        row.reviewDone ? 1 : 0, row.questionsDone ? 1 : 0,
-        row.questionsCount ?? null, row.correctCount ?? null, row.scorePercent ?? null,
-        row.comment ?? null, row.createdAt, row.updatedAt,
-      ],
-    });
-  }
+  for (const row of data.reviewTasks) statements.push({
+    query: 'INSERT INTO review_tasks\n        (id, unit_id, review_number, due_date, completed_at,\n         review_done, questions_done, questions_count, correct_count,\n         score_percent, comment, created_at, updated_at)\n        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)',
+    values: [row.id, row.unitId ?? row.unit_id, row.reviewNumber ?? row.review_number, row.dueDate ?? row.due_date,
+      row.completedAt ?? null, row.reviewDone ? 1 : 0, row.questionsDone ? 1 : 0,
+      row.questionsCount ?? null, row.correctCount ?? null, row.scorePercent ?? null,
+      row.comment ?? null, row.createdAt, row.updatedAt],
+  });
 
-  for (const row of (Array.isArray(data.exercises) ? data.exercises : [])) {
-    statements.push({
-      query: 'INSERT INTO exercises\n        (id, unit_id, question_text, answer_text, hint_text, position, provenance, created_at, updated_at)\n        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
-      values: [
-        row.id,
-        row.unitId ?? row.unit_id,
-        row.questionText ?? row.question_text ?? "",
-        row.answerText ?? row.answer_text ?? "",
-        row.hintText ?? row.hint_text ?? null,
-        row.position ?? 0,
-        row.provenance,
-        row.createdAt ?? row.created_at ?? new Date().toISOString(),
-        row.updatedAt ?? row.updated_at ?? new Date().toISOString(),
-      ],
-    });
-  }
+  for (const row of (Array.isArray(data.exercises) ? data.exercises : [])) statements.push({
+    query: 'INSERT INTO exercises\n        (id, unit_id, question_text, answer_text, hint_text, position, provenance, created_at, updated_at)\n        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+    values: [row.id, row.unitId ?? row.unit_id, row.questionText ?? row.question_text ?? "", row.answerText ?? row.answer_text ?? "",
+      row.hintText ?? row.hint_text ?? null, row.position ?? 0, row.provenance,
+      row.createdAt ?? row.created_at ?? new Date().toISOString(), row.updatedAt ?? row.updated_at ?? new Date().toISOString()],
+  });
 
-  // Import explicit learning_evidence rows (v3 backups only)
-  for (const row of (Array.isArray(data.learningEvidence) ? data.learningEvidence : [])) {
-    if (!row.questionsCount || Number(row.questionsCount) <= 0) continue;
-    statements.push({
-      query: 'INSERT INTO learning_evidence\n        (id, unit_id, evidence_date, context, questions_count, correct_count, score_percent, review_task_id, created_at)\n        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
-      values: [
-        row.id,
-        row.unitId ?? row.unit_id,
-        row.evidenceDate ?? row.evidence_date,
-        row.context,
-        row.questionsCount ?? row.questions_count,
-        row.correctCount ?? row.correct_count,
-        row.scorePercent ?? row.score_percent ?? null,
-        row.reviewTaskId ?? row.review_task_id ?? null,
-        row.createdAt ?? row.created_at ?? new Date().toISOString(),
-      ],
-    });
-  }
+  appendImportedLearningEvidence(statements, Array.isArray(data.learningEvidence) ? data.learningEvidence : []);
 
-  // For v2 backups: migrate completed review_tasks with questions into learning_evidence
-  if ((data.schemaVersion ?? 0) < 3) {
-    const unitsMap = new Map((data.learningUnits ?? []).map((u) => [u.id, u]));
-    for (const task of (data.reviewTasks ?? [])) {
-      const q = task.questionsCount ?? task.questions_count;
-      const c = task.correctCount ?? task.correct_count;
-      if (!task.review_done && !task.reviewDone) continue;
-      if (!task.questions_done && !task.questionsDone) continue;
-      if (q == null || !Number.isFinite(Number(q)) || Number(q) <= 0) continue;
-      const taskId = task.id;
-      const unitId = task.unitId ?? task.unit_id;
-      const unit = unitsMap.get(unitId);
-      if (!unit) continue;
-      const evidenceDate = (task.completedAt ?? task.completed_at ?? task.dueDate ?? task.due_date ?? '').slice(0, 10);
-      if (!evidenceDate) continue;
-      const scorePercent = c != null ? (Number(c) / Number(q)) * 100 : null;
-      statements.push({
-        query: 'INSERT OR IGNORE INTO learning_evidence\n          (unit_id, evidence_date, context, questions_count, correct_count, score_percent, review_task_id, created_at)\n          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-        values: [
-          unitId,
-          evidenceDate,
-          'REVIEW',
-          Number(q),
-          c != null ? Number(c) : 0,
-          scorePercent,
-          taskId,
-          task.completedAt ?? task.completed_at ?? new Date().toISOString(),
-        ],
-      });
-    }
-  }
-
+  appendLegacyReviewEvidence(statements, data);
   const settings = (Array.isArray(data.settings) ? data.settings[0] : data.settings) ?? {};
   statements.push({
     query: "INSERT INTO settings (key, app_version, review_schedule, last_backup_at)\n      VALUES ('main', $1, $2, $3)",
-    values: [
-      settings.appVersion ?? '2.0.0',
-      JSON.stringify(settings.reviewSchedule ?? REVIEW_SCHEDULE),
-      settings.lastBackupAt ?? null,
-    ],
+    values: [settings.appVersion ?? '2.0.0', JSON.stringify(settings.reviewSchedule ?? REVIEW_SCHEDULE), settings.lastBackupAt ?? null],
   });
-
   return statements;
 }
 
@@ -1009,26 +1034,10 @@ function createBrowserStore() {
       },
       async create({ unitId, evidenceDate, context, questionsCount, correctCount, reviewTaskId = null }) {
         validateEvidenceContext(context);
-        const q = Number(questionsCount);
-        const c = Number(correctCount);
-        if (!Number.isFinite(q) || q <= 0) throw new Error('questionsCount deve ser inteiro positivo.');
-        if (!Number.isFinite(c) || c < 0) throw new Error('correctCount deve ser >= 0.');
-        if (c > q) throw new Error('correctCount não pode ser maior que questionsCount.');
-        if (context === 'REVIEW' && reviewTaskId == null) throw new Error('context REVIEW requer reviewTaskId.');
-        if (context !== 'REVIEW' && reviewTaskId != null) throw new Error('context ' + context + ' não pode ter reviewTaskId.');
+        const { q, c } = validateEvidenceCounts(questionsCount, correctCount);
+        validateEvidenceTaskContext(context, reviewTaskId);
         const state = readState();
-        // unit_id must exist (no FK enforcement in BrowserStore)
-        if (!state.learningUnits.some((u) => u.id === unitId)) {
-          throw new Error('unit_id não encontrado.');
-        }
-        if (reviewTaskId != null) {
-          const dup = state.learningEvidence.find((e) => e.reviewTaskId === reviewTaskId);
-          if (dup) throw new Error('Já existe evidência para esta revisão.');
-          // review_task_id must exist and must belong to the same unit_id
-          const task = state.reviewTasks.find((t) => t.id === reviewTaskId);
-          if (!task) throw new Error('review_task_id não encontrado.');
-          if (task.unitId !== unitId) throw new Error('review_task_id deve pertencer à mesma unidade (unit_id).');
-        }
+        validateBrowserEvidenceRelations(state, unitId, reviewTaskId);
         const scorePercent = q > 0 ? (c / q) * 100 : null;
         const evidence = {
           id: nextId(state, "learningEvidence"),
@@ -1234,107 +1243,100 @@ function createBrowserStore() {
   return store;
 }
 
+async function renameLegacyColumn(tableName, sourceColumn, targetColumn, migrationSql) {
+  const columns = await database.select(`PRAGMA table_info(${tableName})`);
+  const names = new Set(columns.map((column) => column.name));
+  if (names.has(sourceColumn) && !names.has(targetColumn)) await database.execute(migrationSql);
+}
+
+async function renameLegacyTables() {
+  // Rename legacy tables before canonical DDL creates learning_units; otherwise
+  // the old study_records data would remain invisible beside an empty new table.
+  const tables = await database.select("SELECT name FROM sqlite_master WHERE type='table'");
+  const names = new Set(tables.map((table) => table.name));
+  // These SQL statements are shared with the Rust integration test via the migration plan.
+  const [renameUnits, renameTasks, renameExercises] = migrationPlan.preMigration;
+  if (!names.has('learning_units') && names.has('study_records')) {
+    await database.execute(renameUnits);
+    names.add('learning_units');
+  }
+  if (names.has('review_tasks')) await renameLegacyColumn('review_tasks', 'study_record_id', 'unit_id', renameTasks);
+  if (names.has('exercises')) await renameLegacyColumn('exercises', 'study_record_id', 'unit_id', renameExercises);
+  return names;
+}
+
+async function resolveLegacySources(tableNames) {
+  if (!tableNames.has('sources')) return;
+  const columns = await database.select('PRAGMA table_info(learning_units)');
+  if (columns.some((column) => column.name === 'source_id')) {
+    await database.execute(migrationPlan.sourceResolution);
+  }
+}
+
+async function ensureMainSchema(tableNames) {
+  for (const statement of schemaStatements) {
+    if (statement.trimStart().toUpperCase().startsWith('INSERT')) continue;
+    await database.execute(statement, []);
+  }
+  await database.execute(
+    "INSERT OR IGNORE INTO settings (key, app_version, review_schedule) VALUES ('main', '2.0.0', $1)",
+    [JSON.stringify(REVIEW_SCHEDULE)],
+  );
+  await DB.subjects.ensureColumns();
+  await DB.learningUnits.ensureColumns();
+  await resolveLegacySources(tableNames);
+  await DB.reviewTasks.ensureColumns();
+  await DB.exercises.ensureColumns();
+  await DB.learningEvidence.ensureColumns();
+  await DB.ensureLearningEvidenceMigration();
+}
+
+async function importDevelopmentDataset() {
+  if (import.meta.env?.VITE_SEED_UAT_DATASET === '1') {
+    const { getUatMedicalDataset } = await import('./fixtures/uat-medical-dataset.js');
+    await DB.importAll(getUatMedicalDataset());
+    return;
+  }
+  const { getDevDataset } = await import('./fixtures/dev-dataset.js');
+  await DB.importAll(getDevDataset());
+}
+
+async function seedDevelopmentDatabase() {
+  // The bootstrap marker survives importAll/clearAll; production builds never seed.
+  if (!import.meta.env?.DEV) return;
+  const rows = await database.select("SELECT dev_seed_version FROM _bootstrap WHERE id = 1");
+  if (rows.length !== 0 && rows[0].dev_seed_version) return;
+  const [{ count }] = await database.select("SELECT COUNT(*) AS count FROM subjects");
+  if (Number(count) === 0) await importDevelopmentDataset();
+  await database.execute(
+    "INSERT OR REPLACE INTO _bootstrap (id, dev_seed_version, seeded_at) VALUES (1, '1', ?)",
+    [nowIso()],
+  );
+}
+
+async function initializeBrowserDatabase() {
+  browserStore = createBrowserStore();
+  await browserStore.init();
+  Object.assign(DB, browserStore);
+  return DB;
+}
+
+async function initializeTauriDatabase() {
+  database = await Database.load(DATABASE_URL);
+  await database.execute('PRAGMA foreign_keys = ON');
+  const tableNames = await renameLegacyTables();
+  await ensureMainSchema(tableNames);
+  await seedDevelopmentDatabase();
+  return DB;
+}
+
 export const DB = {
   async init() {
     if (!initialization) {
-      initialization = (async () => {
-        if (!hasTauriRuntime()) {
-          browserStore = createBrowserStore();
-          await browserStore.init();
-          Object.assign(DB, browserStore);
-          return DB;
-        }
-
-        database = await Database.load(DATABASE_URL);
-        await database.execute('PRAGMA foreign_keys = ON');
-
-        // PRE-MIGRATION: rename old-schema tables BEFORE schemaStatements runs.
-        // Without this, CREATE TABLE IF NOT EXISTS learning_units creates an empty table
-        // alongside the real study_records data, making the rename check permanently false
-        // and leaving all existing user studies invisible after upgrade.
-        const preMigTables = await database.select(
-          "SELECT name FROM sqlite_master WHERE type='table'",
-        );
-        const preMigNames = new Set(preMigTables.map((t) => t.name));
-
-        // PRE-MIGRATION: SQL from canonical shared authority (migration-main-to-vnext.json).
-        // Same strings consumed by the Rust integration test — neither duplicates them.
-        const [sqlRenameStudyRecords, sqlRenameReviewTaskCol, sqlRenameExercisesCol] =
-          migrationPlan.preMigration;
-        if (!preMigNames.has('learning_units') && preMigNames.has('study_records')) {
-          await database.execute(sqlRenameStudyRecords);
-          preMigNames.add('learning_units');
-        }
-        if (preMigNames.has('review_tasks')) {
-          const cols = await database.select('PRAGMA table_info(review_tasks)');
-          const colNames = new Set(cols.map((c) => c.name));
-          if (colNames.has('study_record_id') && !colNames.has('unit_id')) {
-            await database.execute(sqlRenameReviewTaskCol);
-          }
-        }
-        if (preMigNames.has('exercises')) {
-          const cols = await database.select('PRAGMA table_info(exercises)');
-          const colNames = new Set(cols.map((c) => c.name));
-          if (colNames.has('study_record_id') && !colNames.has('unit_id')) {
-            await database.execute(sqlRenameExercisesCol);
-          }
-        }
-
-        for (const statement of schemaStatements) {
-          if (statement.trimStart().toUpperCase().startsWith('INSERT')) continue;
-          await database.execute(statement, []);
-        }
-        await database.execute(
-          "INSERT OR IGNORE INTO settings (key, app_version, review_schedule) VALUES ('main', '2.0.0', $1)",
-          [JSON.stringify(REVIEW_SCHEDULE)],
-        );
-        await DB.subjects.ensureColumns();
-        await DB.learningUnits.ensureColumns();
-        // Resolve source_id → source_text for rows migrated from main-era DB.
-        // The sources table and source_id column exist only in main-era (pre-vNext) databases.
-        if (preMigNames.has('sources')) {
-          const luCols = await database.select('PRAGMA table_info(learning_units)');
-          const luColNames = new Set(luCols.map((c) => c.name));
-          if (luColNames.has('source_id')) {
-            // SQL from canonical migration authority (migration-main-to-vnext.json)
-            await database.execute(migrationPlan.sourceResolution);
-          }
-        }
-        await DB.reviewTasks.ensureColumns();
-        await DB.exercises.ensureColumns();
-        await DB.learningEvidence.ensureColumns();
-        await DB.ensureLearningEvidenceMigration();
-
-        // DEV-only seed: _bootstrap table survives importAll/clearAll/subject deletes.
-        // Production build: import.meta.env.DEV = false → never runs; app opens empty (correct).
-        // P0 (PR #6 audit): same VITE_SEED_UAT_DATASET opt-in as the
-        // BrowserStore path above (see that comment for the full rationale)
-        // — `npm run dev:uat` seeds the rich UAT fixture here too, so the
-        // Tauri/local-authority dev path shows the same rich data.
-        if (import.meta.env?.DEV) {
-          const rows = await database.select(
-            "SELECT dev_seed_version FROM _bootstrap WHERE id = 1",
-          );
-          if (rows.length === 0 || !rows[0].dev_seed_version) {
-            const [{ count }] = await database.select("SELECT COUNT(*) AS count FROM subjects");
-            if (Number(count) === 0) {
-              if (import.meta.env?.VITE_SEED_UAT_DATASET === '1') {
-                const { getUatMedicalDataset } = await import('./fixtures/uat-medical-dataset.js');
-                await DB.importAll(getUatMedicalDataset());
-              } else {
-                const { getDevDataset } = await import('./fixtures/dev-dataset.js');
-                await DB.importAll(getDevDataset());
-              }
-            }
-            await database.execute(
-              "INSERT OR REPLACE INTO _bootstrap (id, dev_seed_version, seeded_at) VALUES (1, '1', ?)",
-              [nowIso()],
-            );
-          }
-        }
-
-        return DB;
-      })().catch((error) => {
+      const initializeStore = hasTauriRuntime()
+        ? initializeTauriDatabase()
+        : initializeBrowserDatabase();
+      initialization = initializeStore.catch((error) => {
         database = undefined;
         initialization = undefined;
         throw error;
@@ -1689,7 +1691,8 @@ export const DB = {
           task.createdAt ?? timestamp,
           task.updatedAt ?? timestamp,
         );
-        return `(${Array.from({ length: 12 }, (_, fieldIndex) => `$${offset + fieldIndex + 1}`).join(", ")})`;
+        const placeholders = Array.from({ length: 12 }, (_, fieldIndex) => '$' + (offset + fieldIndex + 1)).join(', ');
+        return '(' + placeholders + ')';
       });
 
       await requireDatabase().execute(

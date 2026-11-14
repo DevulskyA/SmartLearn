@@ -4376,24 +4376,6 @@ label.select-control:has(> .ui-select) {
   }
 }
 
-/* Materiais: proposals are cards (they were bare bullets with a ~190px title box that cut the title being edited). */
-.sources-proposals-list {
-  list-style: none;
-  margin: 1rem 0 0;
-  padding: 0;
-  display: grid;
-  gap: 0.75rem;
-}
-
-.source-proposal-item {
-  display: grid;
-  gap: 0.5rem;
-  padding: 0.85rem 1rem;
-  border: 1px solid var(--color-border);
-  border-radius: 0.85rem;
-  background: var(--color-surface);
-}
-
 .source-proposal-range {
   margin: 0;
   color: var(--color-muted);
@@ -4401,44 +4383,6 @@ label.select-control:has(> .ui-select) {
   font-weight: 700;
   letter-spacing: 0.03em;
   text-transform: uppercase;
-}
-
-.source-proposal-title-input {
-  width: 100%;
-  box-sizing: border-box;
-  min-height: 2.5rem;
-}
-
-.source-proposal-title-input:focus-visible {
-  outline: 3px solid var(--color-primary-soft);
-  outline-offset: 2px;
-}
-
-/* The source text keeps the line breaks the extraction kept (sentence ends, headings, list items): without this a
-   real textbook trecho collapses into one wall of text with headings glued to the body. */
-.source-proposal-excerpt {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.source-proposal-item > .small-button,
-.source-proposal-item > .text-button {
-  justify-self: start;
-}
-
-/* "Título salvo": a live region next to the field. Empty, it takes no grid row (absolute, 1px, clipped) but stays in the accessibility tree. */
-.source-proposal-saved {
-  margin: 0;
-  color: var(--color-muted);
-  font-size: 0.85rem;
-  font-weight: 700;
-}
-.source-proposal-saved:empty {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
 }
 
 /* ---- Materiais: topic search, generation progress and the LESSON EDITOR ------------------------------------------------ */
@@ -4506,10 +4450,6 @@ label.select-control:has(> .ui-select) {
   padding: 0.35rem 0;
 }
 
-.source-proposal-item.is-editorial {
-  background: var(--color-surface-sunken);
-}
-
 .sources-generation {
   margin-top: 1rem;
   padding: 1rem 1.25rem;
@@ -4535,6 +4475,47 @@ label.select-control:has(> .ui-select) {
   font-weight: 600;
 }
 
+.sources-generation-live {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.5rem;
+  color: var(--color-muted);
+}
+
+.sources-generation-pulse {
+  flex: none;
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: var(--color-border);
+}
+
+.sources-generation-pulse.is-alive {
+  background: var(--color-success, #2f9e6b);
+  animation: sources-generation-beat 1.6s ease-in-out infinite;
+}
+
+@keyframes sources-generation-beat {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.75); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sources-generation-pulse.is-alive { animation: none; }
+}
+
+/* a lost connection is the one thing here that is an error: the generation is fine, the student's screen cannot see it */
+.sources-generation-connection {
+  margin: 0 0 0.5rem;
+  color: var(--color-danger, #c0392b);
+  font-weight: 600;
+}
+
+.sources-generation-connection:empty {
+  display: none;
+}
+
 /* silence is a warning to read calmly, not an error: no alarm colour, and nothing at all while there is nothing to say */
 .sources-generation-stalled:empty {
   display: none;
@@ -4545,11 +4526,6 @@ label.select-control:has(> .ui-select) {
   flex-wrap: wrap;
   gap: 0.5rem;
   margin-top: 0.75rem;
-}
-
-/* what a trecho does now lives in one slot that is redrawn when the server moves its job; it must not change the item's layout */
-.source-proposal-slot {
-  display: contents;
 }
 
 .source-job-status {
@@ -4755,7 +4731,8 @@ label.select-control:has(> .ui-select) {
   color: var(--status-overdue-text);
 }
 
-.lesson-message {
+.lesson-message,
+.lesson-versions-message {
   min-height: 1.25rem;
   margin: 0.25rem 0;
 }
@@ -5003,6 +4980,9 @@ label.select-control:has(> .ui-select) {
   .lesson-accept-new-subject .inline-form {
     grid-template-columns: minmax(0, 1fr);
   }
+  .lesson-accept-actions > button {
+    flex: 1 1 100%;
+  }
   .lesson-accept-new-subject .color-picker {
     grid-template-columns: repeat(auto-fill, 44px);
   }
@@ -5108,6 +5088,21 @@ label.select-control:has(> .ui-select) {
 .lesson-summary-read {
   max-width: 46rem;
   line-height: 1.65;
+}
+
+/* Reading view = text + table of contents in the left margin (like a PDF reader's navigation pane); stacked above the text on narrow screens. */
+.lesson-summary-reading { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+.lesson-summary-read[hidden] + .summary-outline,
+.summary-outline[hidden] { display: none; }
+.summary-outline { font-size: 0.875rem; max-height: 12rem; overflow-y: auto; border-bottom: 1px solid var(--line, rgba(128, 128, 128, 0.3)); padding-bottom: 0.5rem; }
+.summary-outline-title { margin: 0 0 0.35rem; font-weight: 600; opacity: 0.75; text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.75rem; }
+.summary-outline-list { list-style: none; margin: 0; padding: 0; }
+.summary-outline-list li { padding-left: calc(var(--outline-level, 0) * 0.85rem); }
+.summary-outline-item { display: block; width: 100%; text-align: left; padding: 0.25rem 0.35rem; line-height: 1.35; }
+@media (min-width: 62rem) {
+  .lesson-summary-reading { grid-template-columns: 15rem minmax(0, 1fr); align-items: start; }
+  .lesson-summary-reading > .summary-outline { grid-column: 1; grid-row: 1; position: sticky; top: 1rem; max-height: calc(100vh - 2rem); border-bottom: 0; border-right: 1px solid var(--line, rgba(128, 128, 128, 0.3)); padding: 0 0.75rem 0 0; }
+  .lesson-summary-reading > .lesson-summary-read { grid-column: 2; grid-row: 1; }
 }
 
 .lesson-summary-heading {
@@ -6483,11 +6478,25 @@ label.select-control:has(> .ui-select) {
 /* "Remover" na biblioteca: o vermelho fixo de .small-button.is-danger não atingia 4,5:1 sobre a superfície de 4 temas claros (catppuccin-latte, gruvbox-light, solarized-light, dracula-light); escurece com a cor de texto do tema. */
 .source-existing-item .small-button.is-danger { color: color-mix(in oklab, var(--color-danger, #dc2626) 62%, var(--color-text)); }
 
-/* Settings > "Compartilhar conteúdo revisado": one row per material, and the discreet "Reaproveitado" mark on a draft */
-.reuse-sources-title { margin: 1rem 0 0.25rem; font-size: 1rem; }
-.reuse-source-row { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; padding: 0.5rem 0; border-top: 1px solid var(--color-border); }
-.reuse-source-name { overflow-wrap: anywhere; flex: 1 1 14rem; }
-.lesson-reuse { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin: 0.25rem 0 0; font-size: 0.85rem; color: var(--color-muted); }
+/* translate: its own labelled block under the text it is about (it makes a second version; it does not edit the text above) */
+.lesson-translate {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.lesson-translate-title {
+  margin: 0 0 0.25rem;
+  font-size: 1rem;
+}
+
+.lesson-translate-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
 
 /* summary history: earlier texts, one shown beside the current text */
 .lesson-versions > summary { cursor: pointer; font-weight: 600; }
@@ -6503,3 +6512,9 @@ label.select-control:has(> .ui-select) {
 .lesson-correction p { margin: 0 0 0.35rem; overflow-wrap: anywhere; }
 .lesson-correction-reason { font-weight: 600; }
 .lesson-correction-before { text-decoration: line-through; text-decoration-thickness: 1px; }
+
+/* Settings > "Compartilhar conteúdo revisado": one row per material, and the discreet "Reaproveitado" mark on a draft */
+.reuse-sources-title { margin: 1rem 0 0.25rem; font-size: 1rem; }
+.reuse-source-row { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; padding: 0.5rem 0; border-top: 1px solid var(--color-border); }
+.reuse-source-name { overflow-wrap: anywhere; flex: 1 1 14rem; }
+.lesson-reuse { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin: 0.25rem 0 0; font-size: 0.85rem; color: var(--color-muted); }

@@ -91,7 +91,7 @@ $env:SMARTLEARN_SOURCES_DIR = $devSources
 # The preserved DEV datastore is at schema 038; these are the reviewed pending
 # migrations needed by the current application. The snapshot above is created
 # before the backend is allowed to apply them.
-$env:SMARTLEARN_AUTHORIZE_MIGRATIONS = '39,40,41'
+$env:SMARTLEARN_AUTHORIZE_MIGRATIONS = '39,40,41,42,43'
 
 # A verified snapshot of the human's data (once per day) exists BEFORE the app can touch it; a snapshot that cannot be verified stops the launch.
 $snapshotOutput = (node scripts/dev-snapshot.mjs 2>&1 | Out-String).Trim()

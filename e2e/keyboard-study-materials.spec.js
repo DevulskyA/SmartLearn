@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { test, expect } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -39,7 +40,7 @@ test.beforeEach(async ({ page }) => {
     window.__SMARTLEARN_REMOTE_MODE__ = true;
     window.__SMARTLEARN_LOCAL_AUTHORITY__ = true;
   }, API_BASE);
-  const email = `kbd-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+  const email = `kbd-${Date.now()}-${randomUUID()}@example.com`;
   const password = 'a genuinely long test password 1';
   await page.goto('/');
   await page.waitForLoadState('networkidle');
@@ -165,8 +166,9 @@ test('ACCESS-2 Materiais: generate a draft, review it and accept it with the key
   await page.setInputFiles('#sources-file-input', { name: 'farmaco.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf(['Farmacocinética: absorção e distribuição']) });
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
 
-  const item = page.locator('.source-proposal-item').first();
-  await item.locator('[data-action="generate-draft"]').focus();
+  await page.locator('#sources-range-start').fill('1');
+  await page.locator('#sources-range-end').fill('1');
+  await page.locator('#sources-range-form [type="submit"]').focus();
   await page.keyboard.press('Enter');
   const panel = page.locator('.lesson-editor');
   await expect(panel).toBeVisible({ timeout: 10000 });
@@ -202,40 +204,4 @@ test('ACCESS-2 Materiais: generate a draft, review it and accept it with the key
   await expect(study).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(page.locator('#study-now-reveal-btn')).toBeFocused();
-});
-
-test('ACCESS-5 Materiais: a proposal title is named, renamed and its source excerpt toggled with the keyboard, and focus stays put', async ({ page }) => {
-  await page.locator('[data-screen="materials"]').click();
-  await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
-  await page.setInputFiles('#sources-file-input', { name: 'farmaco.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf(['Farmacocinética: absorção e distribuição']) });
-  await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
-  const item = page.locator('.source-proposal-item').first();
-
-  // the title field says what it is and which proposal it belongs to (several rows have one)
-  const input = item.locator('.source-proposal-title-input');
-  const name = await input.evaluate((el) => el.getAttribute('aria-label'));
-  expect(name).toMatch(/^Título do trecho/);
-  expect(name).toMatch(/página 1/i);
-
-  await input.focus();
-  await page.keyboard.press('Control+A');
-  await page.keyboard.type('Absorção e distribuição de fármacos');
-  await page.keyboard.press('Tab');
-  await expect(item.locator('[data-action="save-proposal-title"]')).toBeFocused();
-  await page.keyboard.press('Enter');
-  await expect(item.getByRole('status')).toHaveText('Título salvo', { timeout: 8000 });
-  await expect(item.locator('[data-action="save-proposal-title"]')).toBeFocused(); // not lost while the button was disabled
-
-  // the excerpt is a disclosure: its state is exposed and it works with Enter
-  await page.keyboard.press('Tab');
-  const toggle = item.locator('[data-action="toggle-proposal-excerpt"]');
-  await expect(toggle).toBeFocused();
-  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-  await page.keyboard.press('Enter');
-  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-  await expect(item.locator('.source-proposal-excerpt')).toBeVisible();
-  await expect(toggle).toBeFocused();
-  await page.keyboard.press('Enter');
-  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-  await expect(item.locator('.source-proposal-excerpt')).toBeHidden();
 });

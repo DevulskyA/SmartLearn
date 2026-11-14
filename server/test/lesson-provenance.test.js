@@ -164,7 +164,11 @@ test('accepting a draft does not depend on origin: GENERATED, HUMAN_EDITED, HUMA
     drafts.addQuestion(db, userId, draftId, { question: 'Pergunta nova?', answer: 'Resposta nova', explanation: null, hint: null, sourceSpans: SPANS });
     const row = db.prepare('SELECT draft_json FROM generated_drafts WHERE id = ?').get(draftId);
     const stored = JSON.parse(row.draft_json);
-    const { origin: _o, generatedBy: _g, editedAt: _e, legacy: _l, ...legacyShape } = stored.questions[2]; // the third question reads as legacy
+    const legacyShape = { ...stored.questions[2] }; // the third question reads as legacy
+    delete legacyShape.origin;
+    delete legacyShape.generatedBy;
+    delete legacyShape.editedAt;
+    delete legacyShape.legacy;
     stored.questions[2] = legacyShape;
     db.prepare('UPDATE generated_drafts SET draft_json = ? WHERE id = ?').run(JSON.stringify(stored), draftId);
     const current = drafts.getDraft(db, userId, draftId);

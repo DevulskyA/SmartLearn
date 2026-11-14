@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { spawn } from 'node:child_process';
+import { once } from 'node:events';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -10,6 +11,7 @@ import { waitForServerReady } from './support/wait-for-server.js';
 import { signInRegistered } from './support/session.js';
 import { startEditingSummary } from './support/summary-editing.js';
 
+import { generateByPages, openDraftInProgress } from './support/materials-flow.js';
 // SMOKE: the shortest honest answer to "does the main thing still work?". ONE server, ONE browser page, ONE sign-in and ONE draft shared by
 // short steps that follow each other (the way a student uses it), instead of every check paying for its own sign-in + upload + generation.
 // A failed step stops the rest (serial): the step name says where the line broke. It does not replace the isolated specs, which stay the
@@ -49,8 +51,11 @@ test.beforeAll(async ({ browser }) => {
 
 test.afterAll(async () => {
   await context?.close();
-  serverProcess?.kill();
-  await new Promise((r) => setTimeout(r, 300));
+  if (serverProcess && serverProcess.exitCode === null && serverProcess.signalCode === null) {
+    const exited = once(serverProcess, 'exit');
+    serverProcess.kill();
+    await exited;
+  }
   rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 });
 
@@ -62,13 +67,14 @@ const saveSummary = async () => { await editor().locator('[data-action="save-sum
 
 test('1. the app boots and the student signs in', async () => {
   await signInRegistered(page, { email: `smoke-${Date.now()}@example.com`, password: 'a genuinely long test password 1' });
+  await expect(page.locator('#account-logged-in-view')).toBeVisible();
 });
 
 test('2. a PDF becomes a draft and the lesson editor opens on the Resumo', async () => {
   await page.locator('[data-screen="materials"]').click();
   await page.setInputFiles('#sources-file-input', { name: 'aula.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf(['Fisiologia renal: filtração glomerular', 'Barreira de filtração e podócitos', 'Clearance de inulina mede a TFG']) });
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
-  await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
+  await generateByPages(page);
   await expect(editor()).toBeVisible({ timeout: 10000 });
   await expect(editor().locator('.lesson-summary-read')).toBeVisible(); // the lesson opens as a page to read, not as a form
   await startEditingSummary(page);
@@ -77,7 +83,8 @@ test('2. a PDF becomes a draft and the lesson editor opens on the Resumo', async
 
 test('3. a summary with a formula, a list and a table is saved from the text editor', async () => {
   await input().fill(SUMMARY);
-  await saveSummary();
+  await editor().locator('[data-action=save-summary]').click();
+  await expect(savedMessage()).toContainText('Resumo salvo');
 });
 
 test('4. the visual editor opens it without changing one byte, and draws the formulas, the list and the table-as-text', async () => {
@@ -145,7 +152,7 @@ test('8. after a reload and reopening, the very same text comes back in both edi
   await page.locator('[data-screen="materials"]').click();
   await page.locator('#sources-existing-list .source-existing-item', { hasText: 'aula.pdf' }).locator('[data-action="open-source"]').click();
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 15000 });
-  await page.locator('.source-proposal-item').first().locator('[data-action="open-draft"]').click();
+  await openDraftInProgress(page);
   await expect(editor()).toBeVisible({ timeout: 10000 });
   await startEditingSummary(page);
   await expect(surface().locator('figure.summary-figure img')).toHaveAttribute('alt', 'Esquema da barreira'); // the visual mode is remembered

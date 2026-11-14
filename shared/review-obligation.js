@@ -10,7 +10,11 @@
 
 export const RECOVERY = Object.freeze({ NONE: 'NONE', SUPERSEDE_OVERDUE: 'SUPERSEDE_OVERDUE' });
 
-const byDue = (a, b) => (a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : a.id - b.id);
+const byDue = (a, b) => {
+  if (a.dueDate < b.dueDate) return -1;
+  if (a.dueDate > b.dueDate) return 1;
+  return a.id - b.id;
+};
 
 /**
  * One entry per unit: `required` is the single review the student owes today (the OLDEST pending one that is due), `collapsed` are the

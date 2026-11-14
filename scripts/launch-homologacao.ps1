@@ -28,7 +28,9 @@ $exe = Join-Path $base 'app\smartlearn.exe'
 if (-not (Test-Path $exe)) { Fail "Executavel ausente: $exe. Nada foi aberto." }
 
 # What is about to open must be what was installed.
-$sha = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+$sha256 = [System.Security.Cryptography.SHA256]::Create()
+try { $sha = [BitConverter]::ToString($sha256.ComputeHash([System.IO.File]::ReadAllBytes($exe))).Replace('-', '').ToLowerInvariant() }
+finally { $sha256.Dispose() }
 if ($sha -ne $manifest.exeSha256) { Fail "O executavel mudou desde a instalacao (sha256 $sha, esperado $($manifest.exeSha256)). Nada foi aberto." }
 $infoPath = Join-Path $base 'app\dist-runtime\build-info.json'
 $served = if (Test-Path $infoPath) { try { Get-Content $infoPath -Raw | ConvertFrom-Json } catch { $null } } else { $null }

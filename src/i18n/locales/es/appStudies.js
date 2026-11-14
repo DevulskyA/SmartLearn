@@ -1,6 +1,7 @@
 // Pantallas de estudios y asignaturas.
 export default Object.freeze({
   'subjects.card.archived': 'Archivada',
+  'subjects.card.empty': 'Aún no hay resúmenes — agrega uno en Materiales',
   'subjects.card.lessons.one': '{count} clase',
   'subjects.card.lessons.other': '{count} clases',
   'subjects.card.average': 'Promedio: {accuracy}',

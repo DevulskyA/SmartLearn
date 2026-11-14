@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -199,7 +199,10 @@ test('the real sampler sees CPU of the whole process tree: an idle child with a 
     assert.equal(await sampleProcessTree(2 ** 30), null, 'a process that does not exist is "no signal", never a crash');
   } finally {
     for (const c of [idle, busy]) { try { process.kill(c.pid, 'SIGKILL'); } catch { /* gone */ } }
-    spawn('taskkill', ['/pid', String(busy.pid), '/T', '/F'], { stdio: 'ignore' }).on('error', () => {});
+    if (process.platform === 'win32' && process.env.SystemRoot) {
+      const taskkill = join(process.env.SystemRoot, 'System32', 'taskkill.exe');
+      if (existsSync(taskkill)) spawn(taskkill, ['/pid', String(busy.pid), '/T', '/F'], { stdio: 'ignore' }).on('error', () => {});
+    }
   }
 });
 

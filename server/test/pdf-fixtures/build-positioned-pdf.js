@@ -9,7 +9,8 @@
  */
 export function buildPositionedPdf(lines, { width = 612, height = 783 } = {}) {
   const esc = (s) => s.replace(/[\()]/g, '\$&');
-  const stream = `BT /F1 10 Tf ${lines.map((l) => `1 0 0 1 ${l.x} ${l.y} Tm (${esc(l.text)}) Tj`).join(' ')} ET`;
+  const positionedLines = lines.map((line) => `1 0 0 1 ${line.x} ${line.y} Tm (${esc(line.text)}) Tj`).join(' ');
+  const stream = `BT /F1 10 Tf ${positionedLines} ET`;
   const objects = [
     '<< /Type /Catalog /Pages 2 0 R >>',
     '<< /Type /Pages /Kids [4 0 R] /Count 1 >>',

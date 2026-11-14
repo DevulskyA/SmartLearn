@@ -296,53 +296,65 @@ function synthesizeEvidenceFromReviewTasks(rawTasks, unitsByLegacyId) {
   return out;
 }
 
-function normalizeExplicitEvidence(rawEvidence, unitsByLegacyId, tasksByLegacyId, issues) {
-  const out = [];
-  const seenReviewTaskLinks = new Set();
-  for (const row of rawEvidence) {
-    const legacyUnitId = row.unitId ?? row.unit_id;
-    if (!unitsByLegacyId.has(legacyUnitId)) {
-      pushIssue(issues, 'DANGLING_UNIT_REF', 'Evidência de aprendizagem referencia unidade inexistente na origem: ' + legacyUnitId + '.');
-      continue;
-    }
-    const context = row.context;
-    if (!EVIDENCE_CONTEXT_VALUES.includes(context)) {
-      pushIssue(issues, 'INVALID_CONTEXT', 'Evidência de aprendizagem tem context inválido: ' + context + '.');
-      continue;
-    }
-    const q = Number(row.questionsCount ?? row.questions_count);
-    const c = Number(row.correctCount ?? row.correct_count);
-    if (!Number.isFinite(q) || q <= 0 || !Number.isFinite(c) || c < 0 || c > q) {
-      pushIssue(issues, 'INVALID_COUNTS', 'Evidência de aprendizagem da unidade ' + legacyUnitId + ' tem questionsCount/correctCount inválidos.');
-      continue;
-    }
-    const legacyReviewTaskId = row.reviewTaskId ?? row.review_task_id ?? null;
-    if (context === 'REVIEW' && legacyReviewTaskId == null) {
-      pushIssue(issues, 'MISSING_REVIEW_TASK_LINK', 'Evidência REVIEW da unidade ' + legacyUnitId + ' não referencia uma revisão de origem.');
-      continue;
-    }
-    if (context !== 'REVIEW' && legacyReviewTaskId != null) {
-      pushIssue(issues, 'UNEXPECTED_REVIEW_TASK_LINK', 'Evidência ' + context + ' da unidade ' + legacyUnitId + ' não deveria referenciar uma revisão.');
-      continue;
-    }
-    if (legacyReviewTaskId != null) {
-      if (!tasksByLegacyId.has(legacyReviewTaskId)) {
-        pushIssue(issues, 'DANGLING_REVIEW_TASK_REF', 'Evidência referencia revisão inexistente na origem: ' + legacyReviewTaskId + '.');
-        continue;
-      }
-      if (seenReviewTaskLinks.has(legacyReviewTaskId)) {
-        pushIssue(issues, 'MULTIPLE_EVIDENCE_FOR_TASK', 'Revisão ' + legacyReviewTaskId + ' tem mais de uma evidência de aprendizagem na origem (ambíguo).');
-        continue;
-      }
-      seenReviewTaskLinks.add(legacyReviewTaskId);
-    }
-    const evidenceDate = row.evidenceDate ?? row.evidence_date;
-    if (!isValidIsoDate(evidenceDate)) {
-      pushIssue(issues, 'INVALID_DATE', 'Evidência de aprendizagem da unidade ' + legacyUnitId + ' tem evidenceDate inválida: ' + evidenceDate + '.');
-      continue;
-    }
-    out.push({ legacyUnitId, legacyReviewTaskId, context, questionsCount: q, correctCount: c, evidenceDate });
+function normalizeEvidenceCounts(row, legacyUnitId, issues) {
+  const questionsCount = Number(row.questionsCount ?? row.questions_count);
+  const correctCount = Number(row.correctCount ?? row.correct_count);
+  if (!Number.isFinite(questionsCount) || questionsCount <= 0 || !Number.isFinite(correctCount) || correctCount < 0 || correctCount > questionsCount) {
+    pushIssue(issues, 'INVALID_COUNTS', 'Evidência de aprendizagem da unidade ' + legacyUnitId + ' tem questionsCount/correctCount inválidos.');
+    return null;
   }
+  return { questionsCount, correctCount };
+}
+
+function normalizeEvidenceReviewLink(row, legacyUnitId, context, tasksByLegacyId, seenReviewTaskLinks, issues) {
+  const legacyReviewTaskId = row.reviewTaskId ?? row.review_task_id ?? null;
+  if (context === 'REVIEW' && legacyReviewTaskId == null) {
+    pushIssue(issues, 'MISSING_REVIEW_TASK_LINK', 'Evidência REVIEW da unidade ' + legacyUnitId + ' não referencia uma revisão de origem.');
+    return { valid: false };
+  }
+  if (context !== 'REVIEW' && legacyReviewTaskId != null) {
+    pushIssue(issues, 'UNEXPECTED_REVIEW_TASK_LINK', 'Evidência ' + context + ' da unidade ' + legacyUnitId + ' não deveria referenciar uma revisão.');
+    return { valid: false };
+  }
+  if (legacyReviewTaskId != null) {
+    if (!tasksByLegacyId.has(legacyReviewTaskId)) {
+      pushIssue(issues, 'DANGLING_REVIEW_TASK_REF', 'Evidência referencia revisão inexistente na origem: ' + legacyReviewTaskId + '.');
+      return { valid: false };
+    }
+    if (seenReviewTaskLinks.has(legacyReviewTaskId)) {
+      pushIssue(issues, 'MULTIPLE_EVIDENCE_FOR_TASK', 'Revisão ' + legacyReviewTaskId + ' tem mais de uma evidência de aprendizagem na origem (ambíguo).');
+      return { valid: false };
+    }
+    seenReviewTaskLinks.add(legacyReviewTaskId);
+  }
+  return { valid: true, legacyReviewTaskId };
+}
+
+function normalizeExplicitEvidenceRow(row, unitsByLegacyId, tasksByLegacyId, seenReviewTaskLinks, issues) {
+  const legacyUnitId = row.unitId ?? row.unit_id;
+  if (!unitsByLegacyId.has(legacyUnitId)) {
+    pushIssue(issues, 'DANGLING_UNIT_REF', 'Evidência de aprendizagem referencia unidade inexistente na origem: ' + legacyUnitId + '.');
+    return null;
+  }
+  const context = row.context;
+  if (!EVIDENCE_CONTEXT_VALUES.includes(context)) {
+    pushIssue(issues, 'INVALID_CONTEXT', 'Evidência de aprendizagem tem context inválido: ' + context + '.');
+    return null;
+  }
+  const counts = normalizeEvidenceCounts(row, legacyUnitId, issues);
+  if (!counts) return null;
+  const reviewLink = normalizeEvidenceReviewLink(row, legacyUnitId, context, tasksByLegacyId, seenReviewTaskLinks, issues);
+  if (!reviewLink.valid) return null;
+  const { legacyReviewTaskId } = reviewLink;
+  const evidenceDate = row.evidenceDate ?? row.evidence_date;
+  if (!isValidIsoDate(evidenceDate)) {
+    pushIssue(issues, 'INVALID_DATE', 'Evidência de aprendizagem da unidade ' + legacyUnitId + ' tem evidenceDate inválida: ' + evidenceDate + '.');
+    return null;
+  }
+  return { legacyUnitId, legacyReviewTaskId, context, questionsCount: counts.questionsCount, correctCount: counts.correctCount, evidenceDate };
+}
+
+function reportMissingEvidenceRows(tasksByLegacyId, seenReviewTaskLinks, issues) {
   // Detects the "single missing evidence row" case (design.md §6 /
   // acceptance evidence): a v3 source where a reviewTask was completed and
   // scored but never got its own explicit learningEvidence row is an
@@ -357,6 +369,16 @@ function normalizeExplicitEvidence(rawEvidence, unitsByLegacyId, tasksByLegacyId
       pushIssue(issues, 'MISSING_EVIDENCE_ROW', 'Revisão ' + legacyId + ' foi concluída com nota mas não tem evidência de aprendizagem correspondente na origem.');
     }
   }
+}
+
+function normalizeExplicitEvidence(rawEvidence, unitsByLegacyId, tasksByLegacyId, issues) {
+  const out = [];
+  const seenReviewTaskLinks = new Set();
+  for (const row of rawEvidence) {
+    const normalized = normalizeExplicitEvidenceRow(row, unitsByLegacyId, tasksByLegacyId, seenReviewTaskLinks, issues);
+    if (normalized) out.push(normalized);
+  }
+  reportMissingEvidenceRows(tasksByLegacyId, seenReviewTaskLinks, issues);
   return out;
 }
 

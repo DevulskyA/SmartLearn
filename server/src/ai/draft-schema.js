@@ -32,7 +32,7 @@ const ALLOWED_QUESTION_KEYS = new Set(['question', 'answer', 'explanation', 'que
 
 // Editorial orientation for the reviewer and the auditor, not a scoring model. A provider that
 // says something outside the menu is not rejected — the label is simply dropped (null).
-export const QUESTION_TYPES = new Set(['RECALL', 'CONCEPT', 'MECHANISM', 'APPLICATION', 'DISCRIMINATION', 'CLINICAL_REASONING', 'TRANSFER']);
+const QUESTION_TYPES = new Set(['RECALL', 'CONCEPT', 'MECHANISM', 'APPLICATION', 'DISCRIMINATION', 'CLINICAL_REASONING', 'TRANSFER']);
 
 function requireString(value, field, maxLength) {
   if (typeof value !== 'string' || value.trim().length === 0) {
@@ -53,6 +53,89 @@ function validSourceSpans(rawSpans, validPageIndexes) {
   });
 }
 
+function assertDraftShape(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new DraftValidationError('INVALID_DRAFT', 'A resposta do provedor não é um objeto JSON válido.');
+  }
+  for (const key of Object.keys(raw)) {
+    if (!ALLOWED_DRAFT_KEYS.has(key)) {
+      throw new DraftValidationError('INVALID_DRAFT', `Campo não suportado no rascunho: ${key}.`, key);
+    }
+  }
+}
+
+function assertQuestionList(questions) {
+  if (!Array.isArray(questions) || questions.length === 0) {
+    throw new DraftValidationError('INVALID_DRAFT', 'questions deve ser uma lista não vazia.', 'questions');
+  }
+  if (questions.length > MAX_QUESTIONS) {
+    throw new DraftValidationError('INVALID_DRAFT', `questions excede o máximo de ${MAX_QUESTIONS} itens.`, 'questions');
+  }
+}
+
+function assertQuestionShape(rawQuestion) {
+  if (!rawQuestion || typeof rawQuestion !== 'object' || Array.isArray(rawQuestion)) {
+    throw new DraftValidationError('INVALID_DRAFT', 'Cada item de questions deve ser um objeto.', 'questions');
+  }
+  for (const key of Object.keys(rawQuestion)) {
+    if (!ALLOWED_QUESTION_KEYS.has(key)) {
+      throw new DraftValidationError('INVALID_DRAFT', `Campo não suportado em uma questão: ${key}.`, key);
+    }
+  }
+}
+
+function validateQuestionFields(rawQuestion) {
+  requireString(rawQuestion.question, 'question', MAX_QUESTION_LENGTH);
+  requireString(rawQuestion.answer, 'answer', MAX_ANSWER_LENGTH);
+  if (rawQuestion.hint !== null && rawQuestion.hint !== undefined && typeof rawQuestion.hint !== 'string') {
+    throw new DraftValidationError('INVALID_DRAFT', 'hint deve ser uma string ou nulo.', 'hint');
+  }
+
+  const rawExplanation = rawQuestion.explanation;
+  if (rawExplanation !== null && rawExplanation !== undefined) {
+    if (typeof rawExplanation !== 'string') {
+      throw new DraftValidationError('INVALID_DRAFT', 'explanation deve ser uma string ou nulo.', 'explanation');
+    }
+    if (rawExplanation.length > MAX_EXPLANATION_LENGTH) {
+      throw new DraftValidationError('INVALID_DRAFT', `explanation excede o tamanho máximo de ${MAX_EXPLANATION_LENGTH}.`, 'explanation');
+    }
+  }
+  return typeof rawExplanation === 'string' && rawExplanation.trim().length > 0 ? rawExplanation : null;
+}
+
+function normalizeQuestion(rawQuestion, validPageIndexes) {
+  assertQuestionShape(rawQuestion);
+  const explanation = validateQuestionFields(rawQuestion);
+  const spans = validSourceSpans(rawQuestion.sourceSpans, validPageIndexes);
+  const rawSpanCount = Array.isArray(rawQuestion.sourceSpans) ? rawQuestion.sourceSpans.length : 0;
+  const quarantinedCount = rawSpanCount - spans.length;
+
+  // A question left with zero real citations after quarantine is not
+  // "unattributed content we kept anyway" — it is dropped entirely.
+  if (spans.length === 0) return { question: null, quarantinedCount: quarantinedCount + 1 };
+
+  return {
+    question: {
+      question: rawQuestion.question,
+      answer: rawQuestion.answer,
+      explanation,
+      questionType: QUESTION_TYPES.has(rawQuestion.questionType) ? rawQuestion.questionType : null,
+      hint: rawQuestion.hint ?? null,
+      sourceSpans: spans,
+    },
+    quarantinedCount,
+  };
+}
+
+function summaryProvenance(raw, segments, validPageIndexes) {
+  const rawSpans = Array.isArray(raw.summarySourceSpans) ? raw.summarySourceSpans : [];
+  const spans = validSourceSpans(rawSpans, validPageIndexes);
+  return {
+    summarySourceSpans: spans.length > 0 ? spans : segments.map((seg) => ({ pageIndex: seg.pageIndex })),
+    quarantinedCount: rawSpans.length - spans.length,
+  };
+}
+
 /**
  * @param {unknown} raw the provider's raw output (fake or real, untrusted
  *   either way).
@@ -63,88 +146,27 @@ function validSourceSpans(rawSpans, validPageIndexes) {
  *   promptVersion:string, quarantinedCount:number}}
  */
 export function validateDraft(raw, { segments, allowNoQuestions = false }) {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-    throw new DraftValidationError('INVALID_DRAFT', 'A resposta do provedor não é um objeto JSON válido.');
-  }
-  for (const key of Object.keys(raw)) {
-    if (!ALLOWED_DRAFT_KEYS.has(key)) {
-      throw new DraftValidationError('INVALID_DRAFT', `Campo não suportado no rascunho: ${key}.`, key);
-    }
-  }
-
+  assertDraftShape(raw);
   requireString(raw.summary, 'summary', MAX_SUMMARY_LENGTH);
   requireString(raw.modelVersion, 'modelVersion');
   requireString(raw.promptVersion, 'promptVersion');
   // A summary-only generation (the questions are deliberately not part of it) has an empty list; every other draft still needs questions.
   const summaryOnly = allowNoQuestions && Array.isArray(raw.questions) && raw.questions.length === 0;
-  if (!Array.isArray(raw.questions) || (raw.questions.length === 0 && !summaryOnly)) {
-    throw new DraftValidationError('INVALID_DRAFT', 'questions deve ser uma lista não vazia.', 'questions');
-  }
-  if (raw.questions.length > MAX_QUESTIONS) {
-    throw new DraftValidationError('INVALID_DRAFT', `questions excede o máximo de ${MAX_QUESTIONS} itens.`, 'questions');
-  }
+  if (!summaryOnly) assertQuestionList(raw.questions);
 
   const validPageIndexes = new Set(segments.map((s) => s.pageIndex));
-  let quarantinedCount = 0;
 
   // The summary's own provenance: the real pages it drew from. Optional in the provider's output
   // (a provider that cannot say gets the whole proposal range — the honest default, never a guess),
   // quarantined exactly like a question citation when it points at a page that was never sent.
-  const rawSummarySpans = Array.isArray(raw.summarySourceSpans) ? raw.summarySourceSpans : [];
-  const summarySpans = validSourceSpans(rawSummarySpans, validPageIndexes);
-  quarantinedCount += rawSummarySpans.length - summarySpans.length;
-  const summarySourceSpans = summarySpans.length > 0
-    ? summarySpans
-    : segments.map((seg) => ({ pageIndex: seg.pageIndex }));
+  const summary = summaryProvenance(raw, segments, validPageIndexes);
+  let quarantinedCount = summary.quarantinedCount;
   const acceptedQuestions = [];
 
   for (const rawQuestion of raw.questions) {
-    if (!rawQuestion || typeof rawQuestion !== 'object' || Array.isArray(rawQuestion)) {
-      throw new DraftValidationError('INVALID_DRAFT', 'Cada item de questions deve ser um objeto.', 'questions');
-    }
-    for (const key of Object.keys(rawQuestion)) {
-      if (!ALLOWED_QUESTION_KEYS.has(key)) {
-        throw new DraftValidationError('INVALID_DRAFT', `Campo não suportado em uma questão: ${key}.`, key);
-      }
-    }
-    requireString(rawQuestion.question, 'question', MAX_QUESTION_LENGTH);
-    requireString(rawQuestion.answer, 'answer', MAX_ANSWER_LENGTH);
-    if (rawQuestion.hint !== null && rawQuestion.hint !== undefined && typeof rawQuestion.hint !== 'string') {
-      throw new DraftValidationError('INVALID_DRAFT', 'hint deve ser uma string ou nulo.', 'hint');
-    }
-    // The explanation is WHY the answer is right (teaching feedback). Optional: drafts made before
-    // it existed, and providers that cannot say, simply have none — never an invented one.
-    const rawExplanation = rawQuestion.explanation;
-    if (rawExplanation !== null && rawExplanation !== undefined) {
-      if (typeof rawExplanation !== 'string') {
-        throw new DraftValidationError('INVALID_DRAFT', 'explanation deve ser uma string ou nulo.', 'explanation');
-      }
-      if (rawExplanation.length > MAX_EXPLANATION_LENGTH) {
-        throw new DraftValidationError('INVALID_DRAFT', `explanation excede o tamanho máximo de ${MAX_EXPLANATION_LENGTH}.`, 'explanation');
-      }
-    }
-    const explanation = typeof rawExplanation === 'string' && rawExplanation.trim().length > 0 ? rawExplanation : null;
-    const questionType = QUESTION_TYPES.has(rawQuestion.questionType) ? rawQuestion.questionType : null;
-
-    const spans = validSourceSpans(rawQuestion.sourceSpans, validPageIndexes);
-    const rawSpanCount = Array.isArray(rawQuestion.sourceSpans) ? rawQuestion.sourceSpans.length : 0;
-    quarantinedCount += rawSpanCount - spans.length;
-
-    // A question left with zero real citations after quarantine is not
-    // "unattributed content we kept anyway" — it is dropped entirely.
-    if (spans.length === 0) {
-      quarantinedCount += 1;
-      continue;
-    }
-
-    acceptedQuestions.push({
-      question: rawQuestion.question,
-      answer: rawQuestion.answer,
-      explanation,
-      questionType,
-      hint: rawQuestion.hint ?? null,
-      sourceSpans: spans,
-    });
+    const normalized = normalizeQuestion(rawQuestion, validPageIndexes);
+    quarantinedCount += normalized.quarantinedCount;
+    if (normalized.question) acceptedQuestions.push(normalized.question);
   }
 
   if (acceptedQuestions.length === 0 && !summaryOnly) {
@@ -156,7 +178,7 @@ export function validateDraft(raw, { segments, allowNoQuestions = false }) {
 
   return {
     summary: raw.summary,
-    summarySourceSpans,
+    summarySourceSpans: summary.summarySourceSpans,
     summaryEvidence: evidence.kept,
     evidenceRejectedCount: evidence.rejected,
     questions: acceptedQuestions,

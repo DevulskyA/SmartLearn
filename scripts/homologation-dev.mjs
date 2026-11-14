@@ -19,6 +19,7 @@ const SOURCES_DIR = path.join(DATA_DIR, 'sources');
 const API_PORT = 3000; // the front end calls http://localhost:3000 directly (src/auth-ui.js API_BASE)
 const WEB_PORT = 5183;
 const EXE = path.join('C:', 'Projetos', 'SmartLearn-Homologacao', 'app', 'smartlearn.exe');
+const POWERSHELL = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
 
 if (spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'work-target-guard.mjs')], { stdio: 'inherit' }).status !== 0) process.exit(1);
 if (!existsSync(DB_PATH)) { console.error(`Banco da Homologacao nao encontrado: ${DB_PATH}`); process.exit(1); }
@@ -26,7 +27,7 @@ mkdirSync(SOURCES_DIR, { recursive: true });
 
 // Two writers on one SQLite file is the one thing that corrupts data: close the installed Homologation app (only that exact exe) first.
 const closeInstalled = `$p = Get-Process smartlearn -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq '${EXE}' }; foreach ($x in $p) { [void]$x.CloseMainWindow(); if (-not $x.WaitForExit(15000)) { $x.Kill() } }; @($p).Count`;
-const closed = spawnSync('powershell', ['-NoProfile', '-Command', closeInstalled], { encoding: 'utf8' });
+const closed = spawnSync(POWERSHELL, ['-NoProfile', '-Command', closeInstalled], { encoding: 'utf8' });
 if (closed.stdout?.trim() && closed.stdout.trim() !== '0') console.log('Homologacao instalada estava aberta: fechada para liberar o banco.');
 
 const children = [];
@@ -47,4 +48,11 @@ run('web', [path.join(ROOT, 'node_modules', 'vite', 'bin', 'vite.js'), '--port',
   VITE_REMOTE_MODE: '1',
   SMARTLEARN_API_PROXY_TARGET: `http://localhost:${API_PORT}`,
 });
-for (const s of ['SIGINT', 'SIGTERM']) process.on(s, () => { for (const c of children) if (!c.killed) c.kill(); process.exit(0); });
+for (const s of ['SIGINT', 'SIGTERM']) {
+  process.on(s, () => {
+    for (const c of children) {
+      if (!c.killed) c.kill();
+    }
+    process.exit(0);
+  });
+}

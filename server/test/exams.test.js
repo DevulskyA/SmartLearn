@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -35,7 +36,7 @@ function makeUser(db, email) {
 }
 
 function unitWithExercises(db, userId, count = 3) {
-  const { unit } = learningUnits.create(db, userId, { newSubjectName: `Disc ${Math.random()}`, title: 'Aula prova', summaryBody: 'r', studyDate: '2026-03-01' });
+  const { unit } = learningUnits.create(db, userId, { newSubjectName: `Disc ${randomUUID()}`, title: 'Aula prova', summaryBody: 'r', studyDate: '2026-03-01' });
   for (let i = 1; i <= count; i += 1) {
     exercises.create(db, userId, {
       unitId: unit.id, question: `Pergunta ${i}?`, answer: `GABARITO-UNICO-${i}`, explanation: `EXPLICACAO-UNICA-${i}`, hint: `DICA-UNICA-${i}`, provenance: 'MANUAL',

@@ -5,7 +5,7 @@ export const LIBRARY_PAGE_SIZE = 12;
 /** The approved V6 design shows the search and order controls as soon as there is a library to search (one document or more). */
 export const LIBRARY_TOOLS_FROM = 1;
 
-export const LIBRARY_SORTS = Object.freeze(["original", "name-asc", "name-desc", "pages-desc"]);
+const LIBRARY_SORTS = Object.freeze(["original", "name-asc", "name-desc", "pages-desc"]);
 
 const collator = new Intl.Collator("pt-BR", { sensitivity: "base", numeric: true });
 const fold = (text) => String(text ?? "").normalize("NFD").replace(/\p{M}+/gu, "").toLowerCase().trim();

@@ -1,6 +1,7 @@
 // A figure occurrence may carry its display width (`[[fig:UUID|w=420]]`). Everything that asks "is this figure still used / is this reference valid /
 // does it survive an export, a backup and a restore" must understand the sized marker exactly like the legacy one.
 import { test } from 'node:test';
+import { randomUUID } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -28,10 +29,13 @@ const makeUser = (db, email) => {
     VALUES (?, ?, 'h', 's', 'scrypt', '{}', ?, ?)`).run(email, email, now, now).lastInsertRowid);
 };
 const png = () => sharp({ create: { width: 40, height: 30, channels: 3, background: '#2563eb' } }).png().toBuffer();
-const input = (buffer) => ({ buffer, alt: 'Esquema', caption: 'Figura 1', operationKey: `k-${Math.random().toString(36).slice(2)}` });
+const input = (buffer) => ({ buffer, alt: 'Esquema', caption: 'Figura 1', operationKey: `k-${randomUUID()}` });
 const filesIn = (dir) => (existsSync(dir) ? readdirSync(dir) : []);
 let counter = 0;
-const unitWith = (db, userId, summaryBody) => learningUnits.create(db, userId, { newSubjectName: `Fisiologia ${counter += 1}`, title: 'Aula', studyDate: '2026-09-01', summaryBody }).unit;
+const unitWith = (db, userId, summaryBody) => {
+  counter += 1;
+  return learningUnits.create(db, userId, { newSubjectName: `Fisiologia ${counter}`, title: 'Aula', studyDate: '2026-09-01', summaryBody }).unit;
+};
 
 test('a figure whose marker carries a width is still "in use": it is listed as referenced and cannot be deleted until the marker leaves the text', async () => {
   const e = env();

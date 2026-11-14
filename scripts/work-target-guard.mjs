@@ -6,8 +6,8 @@
 //   2. LINE OF WORK: the current branch must be named in scripts/work-branches.json. A detached HEAD has no line of work and is refused.
 // CI is skipped exactly as before (fresh checkout of the ref under test, detached by design).
 import { execFileSync } from 'node:child_process';
-import { readFileSync, realpathSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const scriptRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -29,14 +29,32 @@ export function evaluate({ env, toplevel, branch, root, allowed, rootIsRepo = tr
   return { ok: true, code: 'OK' };
 }
 
+function resolveGitExecutable() {
+  const candidates = process.platform === 'win32'
+    ? [
+      join(process.env.ProgramW6432 ?? 'C:\\Program Files', 'Git', 'cmd', 'git.exe'),
+      join(process.env.ProgramFiles ?? 'C:\\Program Files', 'Git', 'cmd', 'git.exe'),
+      join(process.env['ProgramFiles(x86)'] ?? 'C:\\Program Files (x86)', 'Git', 'cmd', 'git.exe'),
+    ]
+    : ['/usr/bin/git', '/usr/local/bin/git', '/opt/homebrew/bin/git', '/opt/local/bin/git', '/bin/git'];
+  return candidates.find((candidate) => existsSync(candidate)) ?? null;
+}
+
 function main() {
-  const git = (args) => execFileSync('git', args, { cwd: process.cwd(), encoding: 'utf8' }).trim();
+  const gitExecutable = resolveGitExecutable();
+  const git = (args) => {
+    if (!gitExecutable) throw new Error('Git not found in a fixed system installation path');
+    return execFileSync(gitExecutable, args, { cwd: process.cwd(), encoding: 'utf8' }).trim();
+  };
   let toplevel = null; let branch = '';
   try { toplevel = git(['rev-parse', '--show-toplevel']); branch = git(['branch', '--show-current']); } catch { toplevel = null; }
   let allowed = [];
   try { allowed = JSON.parse(readFileSync(resolve(scriptRoot, 'scripts', 'work-branches.json'), 'utf8')).allowed ?? []; } catch { allowed = []; }
   let rootIsRepo = true;
-  try { execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd: scriptRoot, stdio: 'ignore' }); } catch { rootIsRepo = false; }
+  try {
+    if (!gitExecutable) throw new Error('Git not found in a fixed system installation path');
+    execFileSync(gitExecutable, ['rev-parse', '--show-toplevel'], { cwd: scriptRoot, stdio: 'ignore' });
+  } catch { rootIsRepo = false; }
   const r = evaluate({ env: process.env, toplevel, branch, root: scriptRoot, allowed, rootIsRepo });
   console.log(`SMARTLEARN_ROOT=${toplevel ?? '(none)'}`);
   console.log(`SMARTLEARN_BRANCH=${branch || '(detached HEAD)'}`);

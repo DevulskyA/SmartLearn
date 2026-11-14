@@ -1,6 +1,7 @@
 import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { resolveGitExecutable } from './system-executables.mjs';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,7 +22,7 @@ test('a known key returns the pt-BR text; an unknown key returns the key itself 
 
 test('the older form t(key, locale) still works', () => {
   assert.equal(t('auth.login.title', 'pt-BR'), 'Entrar');
-  assert.equal(t('auth.login.title', 'es'), 'Entrar', 'es has no catalog yet: falls back to pt-BR');
+  assert.equal(t('auth.login.title', 'es'), 'Iniciar sesión');
 });
 
 test('placeholders are filled; a missing parameter stays visible as written, never "undefined"', () => {
@@ -54,7 +55,7 @@ test('tn picks the plural category of the active locale and fills {count}', () =
 });
 
 test('every literal key used as t(...) or tn(...) in src/ exists in the pt-BR catalog (a missing key is a visible bug)', () => {
-  const files = execFileSync('git', ['ls-files', 'src'], { cwd: root, encoding: 'utf8' }).split('\n').filter((f) => f.endsWith('.js') && !f.startsWith('src/i18n/'));
+  const files = execFileSync(resolveGitExecutable(), ['ls-files', 'src'], { cwd: root, encoding: 'utf8' }).split('\n').filter((f) => f.endsWith('.js') && !f.startsWith('src/i18n/'));
   const missing = [];
   let calls = 0;
   for (const f of files) {

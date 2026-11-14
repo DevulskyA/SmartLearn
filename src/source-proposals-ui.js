@@ -85,6 +85,14 @@ export async function listProposals(sourceId) {
   } catch (err) { return fail(err); }
 }
 
+/** How the page numbers of this source work: { mode: 'printed', segments } (the numbers printed in the book) or { mode: 'pdf' }. */
+export async function getPageNumbering(sourceId) {
+  try {
+    const { numbering } = await apiRequest(`/v1/sources/${sourceId}/page-numbering`);
+    return { ok: true, numbering };
+  } catch (err) { return fail(err); }
+}
+
 /** Full, untruncated excerpt for real inspection before any future
  * acceptance step exists (AC-19/AC-21: the user must be able to see
  * exactly what a proposal is attributable to). */
@@ -116,8 +124,8 @@ export async function searchTopics(sourceId, query) {
  * whose spans are the only text a provider may ever receive. */
 export async function approveScope(sourceId, scope) {
   try {
-    const { proposal } = await apiRequest(`/v1/sources/${sourceId}/scopes`, { method: 'POST', body: scope });
-    return { ok: true, proposal };
+    const { proposal, parts } = await apiRequest(`/v1/sources/${sourceId}/scopes`, { method: 'POST', body: scope });
+    return { ok: true, proposal, partCount: parts?.length ?? 1 };
   } catch (err) { return fail(err); }
 }
 

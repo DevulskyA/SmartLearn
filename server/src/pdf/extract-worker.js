@@ -15,12 +15,14 @@ import { pageTextFromItems, dehyphenatePages, stripRunningHeaders, decodeShifted
 import { orderItemsByColumns } from './column-order.js';
 import { readOutline } from './outline.js';
 import { detectHeadings, keepPresentHeadings } from './headings.js';
+import { pageTextLooksBad, ocrPages } from './ocr-fallback.js';
 
 async function run() {
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
   // The caller passes the bytes it already verified against the source checksum; the path is only a fallback.
   const data = workerData.data ? new Uint8Array(workerData.data) : new Uint8Array(readFileSync(workerData.filePath));
 
+  const ocrBytes = data.slice(); // pdf.js may take ownership of data; OCR gets its own copy
   let doc;
   try {
     doc = await pdfjs.getDocument({
@@ -57,6 +59,16 @@ async function run() {
       pages.push({ index: i, text, status: text.trim().length > 0 ? 'OK' : 'EMPTY' });
     } catch (err) {
       pages.push({ index: i, text: '', status: 'FAILED', errorMessage: String((err && err.message) || err) });
+    }
+  }
+
+  // LEITURA-1: pages whose text layer failed the quality check (scan, broken font) are re-read by OCR, invisibly.
+  const suspect = pages.filter((p) => pageTextLooksBad(p.text)).map((p) => p.index);
+  if (suspect.length > 0) {
+    const read = await ocrPages(ocrBytes, suspect);
+    for (const p of pages) {
+      const t = read.get(p.index);
+      if (t) { p.text = t; p.status = 'OK'; }
     }
   }
 

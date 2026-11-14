@@ -1,7 +1,8 @@
+import { randomUUID } from 'node:crypto';
 import { test, expect } from '@playwright/test';
 import { spawn, execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { serverPort } from './support/ports.js';
@@ -24,6 +25,13 @@ import { waitForServerReady } from './support/wait-for-server.js';
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
 const DIST_DIR = fileURLToPath(new URL('../dist', import.meta.url));
 const MAIN_JS = fileURLToPath(new URL('../server/src/main.js', import.meta.url));
+// npm's CLI script lives next to node on a Windows install and under ../lib on nvm/Homebrew/Linux layouts; npm_execpath wins when set.
+const NPM_CLI_CANDIDATES = [
+  process.env.npm_execpath,
+  join(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+  join(dirname(process.execPath), '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+];
+const NPM_CLI = NPM_CLI_CANDIDATES.find((candidate) => candidate && existsSync(candidate)) ?? NPM_CLI_CANDIDATES[1];
 const SERVER_PORT = serverPort(13961);
 const SERVER_ORIGIN = `http://localhost:${SERVER_PORT}`;
 
@@ -38,11 +46,7 @@ async function waitForReady() {
 test.beforeAll(async () => {
   // Real production artifact, built fresh from this exact candidate — not
   // reused/assumed from a possibly-stale prior build.
-  // shell:true is required for npm.cmd resolution on Windows; args are
-  // static constants (no interpolated/user-controlled input), so the
-  // unescaped-argument concern the Node deprecation warning flags does
-  // not apply here.
-  execFileSync('npm', ['exec', '--', 'vite', 'build'], { cwd: REPO_ROOT, stdio: 'inherit', shell: true });
+  execFileSync(process.execPath, [NPM_CLI, 'exec', '--', 'vite', 'build'], { cwd: REPO_ROOT, stdio: 'inherit' });
   if (!existsSync(DIST_DIR)) {
     throw new Error(`production-build E2E: expected build output at ${DIST_DIR}, none found`);
   }
@@ -75,7 +79,7 @@ test.afterAll(async () => {
 });
 
 function uniqueEmail(label) {
-  return `pb-${label}-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+  return `pb-${label}-${Date.now()}-${randomUUID()}@example.com`;
 }
 
 test('the real production build, served single-origin with no Vite involved, completes register -> create unit -> reload -> still there', async ({ page }) => {

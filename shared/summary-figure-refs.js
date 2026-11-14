@@ -10,7 +10,7 @@
 // over thousands of generated documents. Change one, change the other.
 
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
-export const FIGURE_REF_LINE = new RegExp(`^\\[\\[fig:(${UUID})(?:\\|w=(\\d{1,4}))?\\]\\]$`, 'i');
+const FIGURE_REF_LINE = new RegExp(`^\\[\\[fig:(${UUID})(?:\\|w=(\\d{1,4}))?\\]\\]$`, 'i');
 export const FIGURE_WIDTH_MIN = 40;
 export const FIGURE_WIDTH_MAX = 1600;
 export const UUID_PATTERN = new RegExp(`^${UUID}$`, 'i');
@@ -30,10 +30,31 @@ export function parseFigureLine(line) {
   return isFigureWidth(width) && String(width) === m[2] ? { id: m[1].toLowerCase(), width } : null;
 }
 
-const FENCE_OPEN = /^ {0,3}(`{3,}|~{3,})(.*)$/;
 const FENCE_CLOSE = /^ {0,3}(`+|~+)[ \t]*$/;
 const LIST_MARKER = /^( {0,3})([-+*]|\d{1,9}[.)])( +|$)/;
-const CONTAINER_PREFIX = /^(?: {0,3}>[ ]?|(?: {0,3})(?:[-+*]|\d{1,9}[.)])[ ]+| )*/;
+const LIST_PREFIX = /^(?:[-+*]|\d{1,9}[.)]) +/;
+
+function containerPrefixLength(line) {
+  let index = 0;
+  while (index < line.length) {
+    const start = index;
+    while (index < line.length && index - start < 3 && line[index] === ' ') index += 1;
+    if (line[index] === '>') {
+      index += 1;
+      if (line[index] === ' ') index += 1;
+      continue;
+    }
+    const list = LIST_PREFIX.exec(line.slice(index));
+    if (list) {
+      index += list[0].length;
+      continue;
+    }
+    index = start;
+    if (line[index] === ' ') index += 1;
+    else break;
+  }
+  return index;
+}
 
 /** Width of the leading whitespace, tabs counting to the next multiple of four (as markdown-it does). */
 function indentOf(line) {
@@ -49,7 +70,7 @@ function indentOf(line) {
 /** Index of the last line of the formula block (`\[ ... \]`) that starts at `lines[at]`, or -1 when it is not a formula block. Same rule as summary-markdown.js. */
 function mathBlockEnd(lines, at) {
   const line = lines[at];
-  const first = line.slice(CONTAINER_PREFIX.exec(line)[0].length).replace(/^[ \t]+/, '');
+  const first = line.slice(containerPrefixLength(line)).replace(/^[ \t]+/, '');
   if (!first.startsWith('\\[')) return -1;
   const sameLine = first.indexOf('\\]', 2);
   if (sameLine !== -1) {
@@ -76,38 +97,66 @@ export function scanFigureLines(text) {
   let fence = null; // { char, length } while inside a fenced code block that starts at the document's own level
   const items = []; // content offsets of the list items that are open at this point
   let blankBefore = true;
-  for (let at = 0; at < lines.length; at += 1) {
+  let at = 0;
+  while (at < lines.length) {
     const line = lines[at];
     if (fence) {
-      const close = FENCE_CLOSE.exec(line);
-      if (close && close[1][0] === fence.char && close[1].length >= fence.length) fence = null;
+      fence = closeFenceIfMatched(line, fence);
+      at += 1;
       continue;
     }
-    if (line.trim() === '') { blankBefore = true; continue; }
+    if (line.trim() === '') { blankBefore = true; at += 1; continue; }
     const mathEnd = mathBlockEnd(lines, at);
-    if (mathEnd !== -1) { at = mathEnd; blankBefore = false; continue; }
-    const indent = indentOf(line);
-    const marker = LIST_MARKER.exec(line);
-    // a line that cannot belong to an open list item ends it (a lazy continuation of a paragraph keeps it)
-    const interrupts = marker !== null || FENCE_OPEN.test(line) || parseFigureLine(line.trimEnd()) !== null;
-    while (items.length > 0 && items[items.length - 1] > indent && (blankBefore || interrupts)) items.pop();
-    const open = FENCE_OPEN.exec(line);
-    if (open && !(open[1][0] === '`' && open[2].includes('`'))) {
-      // inside a list item the fence belongs to the item: a left-margin line ends the item and the fence with it
-      if (!(items.length > 0 && items[items.length - 1] <= indent)) fence = { char: open[1][0], length: open[1].length };
-      blankBefore = false;
-      continue;
-    }
-    if (marker) {
-      const spaces = marker[3].length;
-      items.push(indent + marker[2].length + (spaces === 0 || spaces > 4 ? 1 : spaces));
-    } else if (indent === 0) {
-      const ref = parseFigureLine(line.trimEnd());
-      if (ref) found.push({ line: at, id: ref.id, width: ref.width });
-    }
+    if (mathEnd !== -1) { at = mathEnd + 1; blankBefore = false; continue; }
+    fence = processContentLine(line, at, items, blankBefore, found);
     blankBefore = false;
+    at += 1;
   }
   return found;
+}
+
+function trimOpenListItems(items, indent, shouldClose) {
+  while (items.length > 0 && items[items.length - 1] > indent && shouldClose) items.pop();
+}
+
+function openingFence(open, items, indent) {
+  if (open.char === '`' && open.info.includes('`')) return null;
+  // Inside a list item the fence belongs to the item; a left-margin line ends the item and the fence with it.
+  if (items.length > 0 && items[items.length - 1] <= indent) return null;
+  return open;
+}
+
+function parseFenceOpen(line) {
+  let index = 0;
+  while (index < 3 && line[index] === ' ') index += 1;
+  const char = line[index];
+  if (char !== '`' && char !== '~') return null;
+  const start = index;
+  while (line[index] === char) index += 1;
+  if (index - start < 3) return null;
+  return { char, length: index - start, info: line.slice(index) };
+}
+
+function closeFenceIfMatched(line, fence) {
+  const close = FENCE_CLOSE.exec(line);
+  return close && close[1][0] === fence.char && close[1].length >= fence.length ? null : fence;
+}
+
+function processContentLine(line, at, items, blankBefore, found) {
+  const indent = indentOf(line);
+  const marker = LIST_MARKER.exec(line);
+  const interrupts = marker !== null || parseFenceOpen(line) !== null || parseFigureLine(line.trimEnd()) !== null;
+  trimOpenListItems(items, indent, blankBefore || interrupts);
+  const open = parseFenceOpen(line);
+  if (open) return openingFence(open, items, indent);
+  if (marker) {
+    const spaces = marker[3].length;
+    items.push(indent + marker[2].length + (spaces === 0 || spaces > 4 ? 1 : spaces));
+  } else if (indent === 0) {
+    const ref = parseFigureLine(line.trimEnd());
+    if (ref) found.push({ line: at, id: ref.id, width: ref.width });
+  }
+  return null;
 }
 
 /** The figure ids a summary text points at, in order of appearance, without repeats. Lines inside code, formulas, lists and quotes do not count. */

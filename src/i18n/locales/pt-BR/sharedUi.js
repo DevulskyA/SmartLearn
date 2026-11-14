@@ -52,6 +52,7 @@ export default {
   'summary.visual.cannotWrite': 'Esta edição não pode ser gravada com fidelidade no texto do resumo. O texto salvo continua o da última edição válida. Ajuste o trecho ou use o modo Texto.',
   'summary.visual.cannotSave': 'Há uma edição visual que não pôde ser gravada com fidelidade, então nada foi salvo. Ajuste o trecho ou use o modo Texto.',
   'summary.math.invalid': 'Fórmula inválida',
+  'summary.outline.title': 'Índice do resumo',
   'summary.math.edit': 'Editar fórmula',
   'summary.math.fix': 'Corrigir',
   'summary.math.dialog.insert': 'Inserir fórmula',

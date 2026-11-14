@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import Ajv from 'ajv';
+import { dm } from './api-error-messages.js';
 import { originIsAllowed, requiresCsrfCheck, csrfTokensMatch } from './auth/csrf.js';
 
 // T07: strict /v1 domain envelope.
@@ -28,6 +29,14 @@ function errorBody(code, requestId, field) {
   const error = { code, requestId };
   if (field) error.field = field;
   return { error };
+}
+
+/** The sentence for a schema refusal: which limit a text or number broke, in the same coded form as the domain messages. */
+function rejectionMessage(violation, field) {
+  const name = field || 'valor';
+  if (violation?.keyword === 'maxLength') return dm('INPUT_TOO_LONG', { field: name, limit: violation.params?.limit });
+  if (violation?.keyword === 'minimum' || violation?.keyword === 'maximum') return dm('INPUT_OUT_OF_RANGE', { field: name, limit: violation.params?.limit, bound: violation.keyword });
+  return dm('INPUT_INVALID', { field: name });
 }
 
 const ajv = new Ajv({ allErrors: false, removeAdditional: false, coerceTypes: false, useDefaults: false });
@@ -97,7 +106,12 @@ export function applyDomainEnvelope(app, { resolveActor = denyAllActorResolver, 
     if (err.validation) {
       const first = err.validation[0];
       const field = first?.instancePath?.replace(/^\//, '') || first?.params?.additionalProperty;
-      reply.status(400).send(errorBody(ERROR_CODES.VALIDATION_FAILED, requestId, field || undefined));
+      const body = errorBody(ERROR_CODES.VALIDATION_FAILED, requestId, field || undefined);
+      // say WHAT was refused (too long / out of range / invalid) so the screen shows a sentence, never the bare code
+      const reason = rejectionMessage(first, field);
+      body.error.message = reason.text;
+      body.error.msg = { code: reason.code, params: reason.params };
+      reply.status(400).send(body);
       return;
     }
     if (err.statusCode === 401) {

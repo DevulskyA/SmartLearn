@@ -7,7 +7,7 @@ import { t } from "./i18n/index.js";
 import { validateNamingField } from "./naming-validation.js";
 import { colorVarForKey, firstUnusedSubjectColor, SUBJECT_COLOR_KEYS } from "./performance-thresholds.js";
 
-export const DEFAULT_SUBJECT_COLOR = "DISC-BLUE";
+const DEFAULT_SUBJECT_COLOR = "DISC-BLUE";
 
 export function buildColorPicker(container, selectedKey, onSelect) {
   if (!container) return;

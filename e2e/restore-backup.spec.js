@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -39,7 +40,7 @@ test.afterAll(async () => {
 });
 
 async function registerAndLogin(page) {
-  const email = `restore-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+  const email = `restore-${Date.now()}-${randomUUID()}@example.com`;
   const password = 'a genuinely long test password 1';
   await page.addInitScript((base) => {
     window.__SMARTLEARN_API_BASE__ = base;
@@ -85,8 +86,8 @@ test('a student restores their own exported backup into a new, empty account —
   await giveAccountStudyData(page);
   const backup = await downloadBackup(page);
   const exportA = await exportViaApi(page);
-  expect(exportA.learningUnits.length).toBe(1);
-  expect(exportA.reviewTasks.length).toBe(2);
+  expect(exportA.learningUnits).toHaveLength(1);
+  expect(exportA.reviewTasks).toHaveLength(2);
 
   const contextB = await browser.newContext();
   const pageB = await contextB.newPage();
@@ -106,7 +107,7 @@ test('a student restores their own exported backup into a new, empty account —
     await expect(pageB.locator('#migration-conflicts li')).toHaveCount(0);
 
     // Preview wrote nothing.
-    expect((await exportViaApi(pageB)).subjects.length).toBe(0);
+    expect((await exportViaApi(pageB)).subjects).toHaveLength(0);
 
     await pageB.locator('#migration-confirm-btn').click();
     await pageB.locator('#confirm-dialog-ok').click();
@@ -165,5 +166,5 @@ test('import preview warnings are written by the client from code + params: the 
   await expect(page.locator('#migration-preview-panel')).toBeVisible({ timeout: 5000 });
   await expect(page.locator('#migration-warnings')).toContainText('Disciplina 1 sem cor na origem — usando cor padrão.');
   await expect(page.locator('#migration-warnings')).not.toContainText('TEXTO DO SERVIDOR');
-  expect((await exportViaApi(page)).subjects.length).toBe(0);
+  expect((await exportViaApi(page)).subjects).toHaveLength(0);
 });

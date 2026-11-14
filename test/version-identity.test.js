@@ -4,6 +4,7 @@ import { readFileSync, readdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
+import { resolveGitExecutable } from './system-executables.mjs';
 import { fileURLToPath } from 'node:url';
 import { readBuildIdentity } from '../scripts/build-identity.mjs';
 
@@ -23,7 +24,7 @@ test('readBuildIdentity derives version from package.json and the commit from gi
   const dev = readBuildIdentity({ env: { SMARTLEARN_BUILD_MODE: 'DEV' } });
   assert.equal(dev.version, rootVersion);
   assert.equal(dev.channel, 'DEV');
-  assert.equal(dev.commit, execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim());
+  assert.equal(dev.commit, execFileSync(resolveGitExecutable(), ['rev-parse', '--short', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim());
   assert.ok(dev.id === dev.commit || dev.id === `${dev.commit}+local`);
   assert.equal(readBuildIdentity({ env: {} }).channel, 'RELEASE', 'a build nobody stamped as DEV never claims to be DEV');
   assert.equal(readBuildIdentity({ env: {}, command: 'serve' }).channel, 'DEV');

@@ -347,6 +347,10 @@ export function reinforcementByUnit(db, userId) {
     ORDER BY ex.unit_id, ex.order_index, ex.id
   `).all(userId);
   const byUnit = {};
-  for (const row of rows) (byUnit[row.unit_id] ??= []).push(row.exercise_id);
+  for (const row of rows) {
+    const unitRows = byUnit[row.unit_id] ?? [];
+    byUnit[row.unit_id] = unitRows;
+    unitRows.push(row.exercise_id);
+  }
   return byUnit;
 }

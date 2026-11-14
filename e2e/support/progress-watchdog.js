@@ -67,10 +67,13 @@ export function waitForProgress({
 
     const fail = async (reason, error) => {
       const details = diagnostics(reason, error);
+      const reasonText = reason === 'no-progress'
+        ? 'sem progresso observável'
+        : 'tempo limite excedido';
       const failure = error instanceof ProgressWatchdogError
         ? error
         : new ProgressWatchdogError(
-          `[${label}] ${reason === 'no-progress' ? 'sem progresso observável' : 'tempo limite excedido'}`,
+          `[${label}] ${reasonText}`,
           details,
         );
       failure.details = details;

@@ -9,7 +9,12 @@ import { join } from 'node:path';
 const driver = new URL('./zz-ui-driver.mjs', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
 const run = (args, env = {}) => { const t = Date.now(); const r = spawnSync(process.execPath, [driver, ...args], { encoding: 'utf8', env: { ...process.env, ...env } }); return { ms: Date.now() - t, code: r.status, out: `${r.stdout}${r.stderr}` }; };
 const results = [];
-const check = (name, ok, detail = '') => { results.push({ name, ok }); console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail ? ` (${detail})` : ''}`); };
+const check = (name, ok, detail = '') => {
+  results.push({ name, ok });
+  const status = ok ? 'PASS' : 'FAIL';
+  const detailText = detail ? ` (${detail})` : '';
+  console.log(`${status} ${name}${detailText}`);
+};
 const pace = join(tmpdir(), 'sl-ui-driver-pace.json');
 const file = join(tmpdir(), 'sl-ui-selftest-batch.txt');
 

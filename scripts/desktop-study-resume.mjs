@@ -25,9 +25,13 @@ const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const targetDir = process.env.CARGO_TARGET_DIR ? resolve(process.env.CARGO_TARGET_DIR) : join(root, 'src-tauri', 'target');
 const exe = resolve(process.env.SL_JOURNEY_EXE ?? join(targetDir, 'debug', 'smartlearn.exe'));
 const FORCED = process.env.SL_RESUME_KILL === '1';
-const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
+const GIT_EXE = resolve(process.env.SL_GIT_EXE ?? join(process.env.ProgramFiles ?? 'C:\\Program Files', 'Git', 'cmd', 'git.exe'));
+const SYSTEM_ROOT = process.env.SystemRoot ?? 'C:\\Windows';
+const POWERSHELL_EXE = join(SYSTEM_ROOT, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+const TASKKILL_EXE = join(SYSTEM_ROOT, 'System32', 'taskkill.exe');
+const git = (...args) => execFileSync(GIT_EXE, args, { cwd: root, encoding: 'utf8' }).trim();
 const head = git('rev-parse', '--short', 'HEAD');
-const identity = JSON.parse(execFileSync('node', ['scripts/build-identity.mjs'], { cwd: root, encoding: 'utf8', env: { ...process.env, SMARTLEARN_BUILD_MODE: 'DEV' } }));
+const identity = JSON.parse(execFileSync(process.execPath, ['scripts/build-identity.mjs'], { cwd: root, encoding: 'utf8', env: { ...process.env, SMARTLEARN_BUILD_MODE: 'DEV' } }));
 const expectedTitle = `SmartLearn DEV - v${identity.version} - ${head}`;
 
 const freePort = () => new Promise((ok, fail) => {
@@ -36,7 +40,7 @@ const freePort = () => new Promise((ok, fail) => {
   s.on('error', fail);
 });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const ps = (command) => execFileSync('powershell', ['-NoProfile', '-Command', `${command}; exit 0`], { encoding: 'utf8' }).trim();
+const ps = (command) => execFileSync(POWERSHELL_EXE, ['-NoProfile', '-Command', `${command}; exit 0`], { encoding: 'utf8' }).trim();
 const squash = (text) => String(text ?? '').replace(/\s+/g, ' ').trim();
 
 if (!existsSync(exe)) throw new Error(`debug executable missing: ${exe} (run cargo build in src-tauri)`);
@@ -73,7 +77,7 @@ function placeWindowOnSmallDisplay(pid) {
   if (process.env.SL_JOURNEY_NO_MOVE) return Promise.resolve({ moved: false, reason: 'SL_JOURNEY_NO_MOVE' });
   return new Promise((done) => {
     let out = '';
-    const child = spawn('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(root, 'scripts', 'move-window-to-small-display.ps1'), '-ProcessId', String(pid)], { stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true });
+    const child = spawn(POWERSHELL_EXE, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(root, 'scripts', 'move-window-to-small-display.ps1'), '-ProcessId', String(pid)], { stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true });
     child.stdout.on('data', (chunk) => { out += chunk; });
     child.on('error', (error) => done({ moved: false, reason: String(error.message) }));
     child.on('close', () => { try { done(JSON.parse(out.trim().split('\n').pop())); } catch { done({ moved: false, reason: `unreadable: ${out.slice(0, 120)}` }); } });
@@ -108,32 +112,49 @@ async function launch() {
   return placed;
 }
 
+function taskKill(pid, { tree = false, force = false } = {}) {
+  const args = ['/PID', String(pid)];
+  if (tree) args.push('/T');
+  if (force) args.push('/F');
+  try { execFileSync(TASKKILL_EXE, args, { stdio: 'ignore' }); } catch { /* process already gone or window refused */ }
+}
+
+async function waitForAppExit(timeoutMs, intervalMs) {
+  const until = Date.now() + timeoutMs;
+  while (app.exitCode === null && Date.now() < until) await sleep(intervalMs);
+  return app.exitCode !== null;
+}
+
+async function closeMainApp(pid, forced) {
+  if (forced) {
+    taskKill(pid, { tree: true, force: true });
+    await waitForAppExit(20000, 200);
+    return 'forced kill of the process tree (no graceful close, no flush hook)';
+  }
+
+  taskKill(pid);
+  const exited = await waitForAppExit(20000, 300);
+  if (!exited) taskKill(pid, { tree: true, force: true });
+  return exited ? 'graceful window close, process exited by itself' : 'forced after the graceful close did not exit in 20 s';
+}
+
+async function killBackendLeftovers(children) {
+  const leftovers = children.filter((child) => ps(`Get-Process -Id ${child} -ErrorAction SilentlyContinue | ForEach-Object { $_.Id }`));
+  for (const child of leftovers) taskKill(child, { tree: true, force: true });
+  return leftovers.length;
+}
+
 async function shutdown({ forced }) {
   closing = true;
   const pid = app.pid;
   const children = ps(`Get-CimInstance Win32_Process -Filter "ParentProcessId=${pid}" | ForEach-Object { $_.ProcessId }`).split(/\r?\n/).filter(Boolean);
   await browser?.close().catch(() => {});
   browser = undefined;
-  let how = 'already gone';
-  if (app.exitCode === null) {
-    if (forced) {
-      try { execFileSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore' }); } catch { /* gone */ }
-      const until = Date.now() + 20000;
-      while (app.exitCode === null && Date.now() < until) await sleep(200);
-      how = 'forced kill of the process tree (no graceful close, no flush hook)';
-    } else {
-      try { execFileSync('taskkill', ['/PID', String(pid)], { stdio: 'ignore' }); } catch { /* window may refuse */ }
-      const until = Date.now() + 20000;
-      while (app.exitCode === null && Date.now() < until) await sleep(300);
-      how = app.exitCode === null ? 'forced after the graceful close did not exit in 20 s' : 'graceful window close, process exited by itself';
-      if (app.exitCode === null) { try { execFileSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore' }); } catch { /* gone */ } }
-    }
-  }
+  const how = app.exitCode === null ? await closeMainApp(pid, forced) : 'already gone';
   await sleep(2000);
-  const leftovers = children.filter((child) => ps(`Get-Process -Id ${child} -ErrorAction SilentlyContinue | ForEach-Object { $_.Id }`));
-  for (const child of leftovers) { try { execFileSync('taskkill', ['/PID', child, '/T', '/F'], { stdio: 'ignore' }); } catch { /* gone */ } }
+  const backendLeftoversKilled = await killBackendLeftovers(children);
   await sleep(1000);
-  return { how, backendChildren: children.length, backendLeftoversKilled: leftovers.length };
+  return { how, backendChildren: children.length, backendLeftoversKilled };
 }
 
 const api = (method, path, body) => page.evaluate(async ({ method, path, body }) => {
@@ -284,7 +305,7 @@ try {
   result.fatal = String(error?.message ?? error);
 } finally {
   try { if (browser) await browser.close().catch(() => {}); } catch { /* ignore */ }
-  try { if (app && app.exitCode === null) execFileSync('taskkill', ['/PID', String(app.pid), '/T', '/F'], { stdio: 'ignore' }); } catch { /* gone */ }
+  if (app && app.exitCode === null) taskKill(app.pid, { tree: true, force: true });
   await sleep(1500);
   rmSync(work, { recursive: true, force: true, maxRetries: 8, retryDelay: 300 });
 }

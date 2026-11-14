@@ -17,7 +17,7 @@ const SORT_KEYS = {
 };
 const DESCENDING_FIRST = new Set(["accuracy", "studyDate"]);
 
-export const tableState = {
+const tableState = {
   tab: "subject", page: 1, perPage: 12, query: "", subjectId: 0, band: "all", trend: "all",
   sortKey: "accuracy", sortAsc: true, advanced: false,
 };
@@ -106,7 +106,7 @@ export function buildTableModel({ subjectRows, evidence, units, subjects, period
   return { subjects: subjectsOut, contents, lessons };
 }
 
-export function filterRows(rows, { subjectId = 0, band = "all", trend = "all", query = "" } = {}) {
+function filterRows(rows, { subjectId = 0, band = "all", trend = "all", query = "" } = {}) {
   const needle = normalize(query);
   return rows.filter((r) => (!subjectId || Number(r.subjectId) === Number(subjectId))
     && (band === "all" || r.band === band)
@@ -122,7 +122,11 @@ export function sortRows(rows, key, ascending = true) {
     const y = b.row[key];
     const missingX = x == null || x === "";
     const missingY = y == null || y === "";
-    if (missingX || missingY) return missingX === missingY ? a.index - b.index : missingX ? 1 : -1;
+    if (missingX || missingY) {
+      if (missingX === missingY) return a.index - b.index;
+      if (missingX) return 1;
+      return -1;
+    }
     const delta = typeof x === "number" && typeof y === "number" ? x - y : collator.compare(String(x), String(y));
     return (ascending ? delta : -delta) || a.index - b.index;
   }).map((entry) => entry.row);
@@ -136,7 +140,11 @@ export function paginate(items, requestedPage = 1, size = 12) {
   return { items: items.slice(offset, offset + size), page, pageCount, total: items.length, first: items.length ? offset + 1 : 0, last: Math.min(items.length, offset + size) };
 }
 
-const rowsOf = (tab, m = model) => (tab === "subject" ? m.subjects : tab === "unit" ? m.contents : m.lessons);
+const rowsOf = (tab, m = model) => {
+  if (tab === "subject") return m.subjects;
+  if (tab === "unit") return m.contents;
+  return m.lessons;
+};
 
 // ---- Row builders -------------------------------------------------------------------------------------------------
 
@@ -161,15 +169,46 @@ function trendTitle(trend, kind) {
   });
 }
 
-const priorityText =(row) => t(`screens.stats.table.priority.${row.band === "critical" ? "high" : row.band === "attention" ? "medium" : row.band === "insufficient" ? "none" : "follow"}`);
+function priorityKey(band) {
+  if (band === "critical") return "high";
+  if (band === "attention") return "medium";
+  if (band === "insufficient") return "none";
+  return "follow";
+}
+
+const priorityText = (row) => t(`screens.stats.table.priority.${priorityKey(row.band)}`);
+
+function rowLabelHtml(row, tab) {
+  if (tab === "subject") {
+    const key = row.unitsCount === 1 ? "screens.stats.table.lessonRegistered" : "screens.stats.table.lessonsRegistered";
+    const registeredLabel = esc(t(key, { count: number(row.unitsCount) }));
+    const contentsLabel = esc(t("screens.stats.table.seeContents"));
+    return `<strong>${registeredLabel}</strong><small>${contentsLabel}</small>`;
+  }
+  let linkedLessons = "";
+  if (row.unitCount > 1) {
+    linkedLessons = `<small>${esc(t("screens.stats.table.linkedLessons", { count: row.unitCount }))}</small>`;
+  }
+  return `<strong>${esc(row.title)}</strong>${linkedLessons}`;
+}
 
 function rowHtml(row, tab) {
-  const label = tab === "subject"
-    ? `<strong>${esc(t(row.unitsCount === 1 ? "screens.stats.table.lessonRegistered" : "screens.stats.table.lessonsRegistered", { count: number(row.unitsCount) }))}</strong><small>${esc(t("screens.stats.table.seeContents"))}</small>`
-    : `<strong>${esc(row.title)}</strong>${row.unitCount > 1 ? `<small>${esc(t("screens.stats.table.linkedLessons", { count: row.unitCount }))}</small>` : ""}`;
+  const label = rowLabelHtml(row, tab);
   const date = row.studyDate ? brDate(row.studyDate) : t("screens.stats.table.noDate");
   const name = tab === "subject" ? row.subjectName : row.title;
   return `<tr data-v5-row="${row.kind}" data-key="${esc(row.id)}"><td>${subjectChip(row)}</td><td><span class="v5-content-name">${label}</span></td><td class="v5-data-muted">${esc(date)}</td><td class="v5-number">${number(row.questions)}</td><td class="v5-number">${number(row.correct)}</td><td>${badge(row)}</td><td><span class="v5-trend" data-trend="${row.trend?.direction ?? "INSUFFICIENT"}" title="${esc(trendTitle(row.trend, tab))}">${esc(trendText(row.trend))}</span></td><td><span class="v5-priority" data-band="${row.band}">${esc(priorityText(row))}</span></td><td><button type="button" class="v5-row-action" data-v5="inspect" data-kind="${row.kind}" data-id="${esc(row.id)}" aria-label="${esc(t("screens.stats.table.inspectLabel", { name }))}" title="${esc(t("screens.stats.table.inspect"))}">${icon("search")}</button></td></tr>`;
+}
+
+function sortHeaderPresentation(key) {
+  if (tableState.sortKey !== key) return { ariaSort: "none", glyph: "↕" };
+  if (tableState.sortAsc) return { ariaSort: "ascending", glyph: "↑" };
+  return { ariaSort: "descending", glyph: "↓" };
+}
+
+function sortableHeaderHtml(label, key) {
+  const presentation = sortHeaderPresentation(key);
+  const buttonHtml = `<button type="button" data-v5="sort" data-value="${key}" class="v5-th-sort" aria-label="${esc(t("screens.stats.table.sortBy", { label }))}">${esc(label)}<span aria-hidden="true">${presentation.glyph}</span></button>`;
+  return `<th scope="col" aria-sort="${presentation.ariaSort}">${buttonHtml}</th>`;
 }
 
 function headerHtml(tab) {
@@ -184,24 +223,47 @@ function headerHtml(tab) {
     [t("screens.stats.table.col.priority"), null],
     [t("screens.stats.table.col.actions"), null],
   ];
-  return `<tr>${columns.map(([label, key]) => (key
-    ? `<th scope="col" aria-sort="${tableState.sortKey === key ? (tableState.sortAsc ? "ascending" : "descending") : "none"}"><button type="button" data-v5="sort" data-value="${key}" class="v5-th-sort" aria-label="${esc(t("screens.stats.table.sortBy", { label }))}">${esc(label)}<span aria-hidden="true">${tableState.sortKey === key ? (tableState.sortAsc ? "↑" : "↓") : "↕"}</span></button></th>`
-    : `<th scope="col">${esc(label)}</th>`)).join("")}</tr>`;
+  const headers = columns.map(([label, key]) => {
+    if (key) return sortableHeaderHtml(label, key);
+    return `<th scope="col">${esc(label)}</th>`;
+  }).join("");
+  return `<tr>${headers}</tr>`;
 }
 
-export function tableHtml(tab, items) {
+function tableHtml(tab, items) {
   const body = items.map((row) => rowHtml(row, tab)).join("")
     || `<tr><td colspan="9" class="v5-empty">${esc(t("screens.stats.table.empty"))}</td></tr>`;
   return `<div class="v5-table-scroll table-scroll" tabindex="0" role="region" aria-label="${esc(t("screens.stats.table.scrollLabel"))}"><table class="v5-data-table stats-table matrix-table"><thead>${headerHtml(tab)}</thead><tbody id="${tab === "subject" ? "subject-kpi-list" : "unit-stats-list"}">${body}</tbody></table></div>`;
 }
 
-export function footerHtml(tab, page) {
-  const unit = t(`screens.stats.table.unit.${tab}`);
-  const numbers = [...new Set([1, page.page - 1, page.page, page.page + 1, page.pageCount].filter((n) => n >= 1 && n <= page.pageCount))].sort((a, b) => a - b);
-  return `<span>${esc(t("screens.stats.table.range", { first: page.first, last: page.last, total: "\u0000", unit, page: page.page, pages: page.pageCount })).replace("\u0000", `<strong>${number(page.total)}</strong>`)}</span><div class="v5-pages"><button type="button" data-v5="page-prev" aria-label="${esc(t("screens.stats.table.prevPage"))}" ${page.page <= 1 ? "disabled" : ""}>‹</button>${numbers.map((n) => `<button type="button" class="${n === page.page ? "is-current" : ""}" data-v5="page-go" data-value="${n}" aria-label="${esc(t("screens.stats.table.goPage", { page: n }))}" ${n === page.page ? 'aria-current="page"' : ""}>${n}</button>`).join("")}<button type="button" data-v5="page-next" aria-label="${esc(t("screens.stats.table.nextPage"))}" ${page.page >= page.pageCount ? "disabled" : ""}>›</button></div>`;
+function footerRangeHtml(page, unit) {
+  const placeholder = "\u0000";
+  const range = t("screens.stats.table.range", { first: page.first, last: page.last, total: placeholder, unit, page: page.page, pages: page.pageCount });
+  const total = `<strong>${number(page.total)}</strong>`;
+  return `<span>${esc(range.replace(placeholder, total))}</span>`;
 }
 
-export function distributionHtml(subjects) {
+function footerPageButtonHtml(numberValue, currentPage) {
+  const current = numberValue === currentPage;
+  const className = current ? "is-current" : "";
+  const ariaCurrent = current ? 'aria-current="page"' : "";
+  const label = esc(t("screens.stats.table.goPage", { page: numberValue }));
+  return `<button type="button" class="${className}" data-v5="page-go" data-value="${numberValue}" aria-label="${label}" ${ariaCurrent}>${numberValue}</button>`;
+}
+
+function footerHtml(tab, page) {
+  const unit = t(`screens.stats.table.unit.${tab}`);
+  const numbers = [...new Set([1, page.page - 1, page.page, page.page + 1, page.pageCount].filter((n) => n >= 1 && n <= page.pageCount))].sort((a, b) => a - b);
+  const previousDisabled = page.page <= 1 ? "disabled" : "";
+  const nextDisabled = page.page >= page.pageCount ? "disabled" : "";
+  const previousLabel = esc(t("screens.stats.table.prevPage"));
+  const nextLabel = esc(t("screens.stats.table.nextPage"));
+  const pageButtons = numbers.map((numberValue) => footerPageButtonHtml(numberValue, page.page)).join("");
+  const range = footerRangeHtml(page, unit);
+  return `${range}<div class="v5-pages"><button type="button" data-v5="page-prev" aria-label="${previousLabel}" ${previousDisabled}>‹</button>${pageButtons}<button type="button" data-v5="page-next" aria-label="${nextLabel}" ${nextDisabled}>›</button></div>`;
+}
+
+function distributionHtml(subjects) {
   const counts = Object.fromEntries(BANDS.map((band) => [band, subjects.filter((s) => s.band === band).length]));
   return `<h3>${esc(t("screens.stats.table.distribution.title", { count: subjects.length }))}</h3><p class="v5-chart-note">${esc(t("screens.stats.table.distribution.note"))}</p><div class="v5-band-grid">${BANDS.map((band) => {
     const label = t(`screens.stats.table.distribution.${band}`);
@@ -209,24 +271,34 @@ export function distributionHtml(subjects) {
   }).join("")}</div>`;
 }
 
-export function detailHtml(row, lessons) {
+function detailHtml(row, lessons) {
   const list = lessons.slice().sort((a, b) => (b.studyDate ?? "").localeCompare(a.studyDate ?? ""));
-  const items = list.map((u) => `<div><span><strong>${esc(u.title)}</strong><small>${esc(`${u.studyDate ? brDate(u.studyDate) : t("screens.stats.table.noDate")} · ${t("screens.stats.table.questionsCount", { count: number(u.questions) })} · ${percent(u.accuracy)}`)}</small></span><button type="button" class="v5-link-button" data-v5="open-unit" data-id="${u.id}">${esc(t("screens.stats.table.openSummary"))} ${icon("arrow")}</button></div>`).join("")
+  const items = list.map(detailLessonHtml).join("")
     || `<p>${esc(t("screens.stats.table.noLessons"))}</p>`;
   return `<div class="v5-detail-top">${subjectChip(row)}${badge(row)}<span>${esc(t("screens.stats.table.questionsCorrect", { questions: number(row.questions), correct: number(row.correct) }))}</span></div><p class="v5-detail-explain">${esc(t("screens.stats.table.detail.explain"))}</p><dl class="v5-detail-kpis"><div><dt>${esc(t("screens.stats.table.detail.lastAnswer"))}</dt><dd>${esc(row.lastEvidenceDate ? brDate(row.lastEvidenceDate) : t("screens.stats.table.detail.none"))}</dd></div><div><dt>${esc(t("screens.stats.col.trend"))}</dt><dd>${esc(trendText(row.trend))}</dd></div><div><dt>${esc(t("screens.stats.table.detail.linked"))}</dt><dd>${list.length}</dd></div></dl><h3>${esc(t("screens.stats.table.detail.heading"))}</h3><div class="v5-detail-lessons">${items}</div>`;
+}
+
+function detailLessonHtml(unit) {
+  const date = unit.studyDate ? brDate(unit.studyDate) : t("screens.stats.table.noDate");
+  const questionCount = t("screens.stats.table.questionsCount", { count: number(unit.questions) });
+  const summary = `${date} · ${questionCount} · ${percent(unit.accuracy)}`;
+  const title = esc(unit.title);
+  const openSummary = esc(t("screens.stats.table.openSummary"));
+  return `<div><span><strong>${title}</strong><small>${esc(summary)}</small></span><button type="button" class="v5-link-button" data-v5="open-unit" data-id="${unit.id}">${openSummary} ${icon("arrow")}</button></div>`;
 }
 
 // ---- CSV ----------------------------------------------------------------------------------------------------------
 
 export function csvFrom(lines) {
+  const safeText = (text) => (/^\s*[=+@-]/.test(text) ? `'${text}` : text);
   const cell = (value) => {
     const text = String(value ?? "");
-    return `"${(/^[\s]*[=+@-]/.test(text) ? `'${text}` : text).replace(/"/g, '""')}"`;
+    return `"${safeText(text).replace(/"/g, '""')}"`;
   };
   return `﻿${lines.map((line) => line.map(cell).join(";")).join("\r\n")}`;
 }
 
-export function csvText(rows, tab) {
+function csvText(rows, tab) {
   const heading = ["subject", "contentLesson", "studyDate", "lastAnswer", "questions", "correct", "performance", "trend", "lessons"].map((key) => t(`screens.stats.table.csv.${key}`));
   return csvFrom([heading, ...rows.map((r) => [r.subjectName ?? "", tab === "subject" ? "" : r.title ?? "", r.studyDate ?? "", r.lastEvidenceDate ?? "", r.questions ?? 0, r.correct ?? 0, r.accuracy == null ? "" : r.accuracy.toFixed(2), r.trend?.direction ?? "INSUFFICIENT", r.unitCount ?? r.unitsCount ?? ""])]);
 }
@@ -257,23 +329,19 @@ function fillSubjectFilter() {
   const wanted = model.subjects.length + 1;
   if (select.options.length !== wanted || select.dataset.count !== String(model.subjects.length)) {
     select.dataset.count = String(model.subjects.length);
-    select.innerHTML = `<option value="0">${esc(t("screens.stats.table.allSubjects", { count: model.subjects.length }))}</option>${model.subjects.map((s) => `<option value="${s.id}">${esc(s.subjectName)}</option>`).join("")}`;
+    select.innerHTML = subjectFilterOptionsHtml(model.subjects);
   }
   select.value = String(tableState.subjectId);
   syncSelect(select);
 }
 
-export function renderStatsTable() {
-  const body = $("#stats-body");
-  if (!body) return;
-  if (!SORT_KEYS[tableState.tab].has(tableState.sortKey)) {
-    tableState.sortKey = "accuracy";
-    tableState.sortAsc = true;
-  }
-  visibleRows = sortRows(filterRows(rowsOf(tableState.tab), tableState), tableState.sortKey, tableState.sortAsc);
-  const page = paginate(visibleRows, tableState.page, tableState.perPage);
-  tableState.page = page.page;
-  fillSubjectFilter();
+function subjectFilterOptionsHtml(subjects) {
+  const allSubjects = esc(t("screens.stats.table.allSubjects", { count: subjects.length }));
+  const options = subjects.map((subject) => `<option value="${subject.id}">${esc(subject.subjectName)}</option>`).join("");
+  return `<option value="0">${allSubjects}</option>${options}`;
+}
+
+function syncFilterControls() {
   for (const [selector, value] of [["#stats-filter-band", tableState.band], ["#stats-filter-trend", tableState.trend], ["#stats-page-size", String(tableState.perPage)]]) {
     const select = $(selector);
     if (select && select.value !== value) {
@@ -285,14 +353,32 @@ export function renderStatsTable() {
     const input = $(id);
     if (input && input.value !== tableState.query) input.value = tableState.query;
   }
-  body.innerHTML = tableHtml(tableState.tab, page.items);
-  body.setAttribute("aria-labelledby", `tab-stats-${tableState.tab}`);
+}
+
+function syncTableTabs() {
   for (const tab of document.querySelectorAll('#screen-stats [data-v5="tab"]')) {
     const active = tab.dataset.value === tableState.tab;
     tab.setAttribute("aria-selected", String(active));
     tab.tabIndex = active ? 0 : -1;
     tab.classList.toggle("is-active", active);
   }
+}
+
+function renderStatsTable() {
+  const body = $("#stats-body");
+  if (!body) return;
+  if (!SORT_KEYS[tableState.tab].has(tableState.sortKey)) {
+    tableState.sortKey = "accuracy";
+    tableState.sortAsc = true;
+  }
+  visibleRows = sortRows(filterRows(rowsOf(tableState.tab), tableState), tableState.sortKey, tableState.sortAsc);
+  const page = paginate(visibleRows, tableState.page, tableState.perPage);
+  tableState.page = page.page;
+  fillSubjectFilter();
+  syncFilterControls();
+  syncTableTabs();
+  body.innerHTML = tableHtml(tableState.tab, page.items);
+  body.setAttribute("aria-labelledby", `tab-stats-${tableState.tab}`);
   const footer = $("#stats-table-footer");
   if (footer) footer.innerHTML = footerHtml(tableState.tab, page);
   const feedback = $("#stats-global-search-count");
@@ -309,13 +395,24 @@ export function renderStatsTable() {
 
 const scrollToCard = () => $("#stats-analysis-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
 
+function detailTab(kind) {
+  if (kind === "subject") return "subject";
+  if (kind === "content") return "unit";
+  return "lesson";
+}
+
+function detailLessons(kind, row) {
+  if (kind === "subject") return model.lessons.filter((lesson) => lesson.subjectId === row.id);
+  if (kind === "content") return model.lessons.filter((lesson) => row.unitIds.includes(lesson.id));
+  return [row];
+}
+
 function openDetail(kind, id) {
-  const tab = kind === "subject" ? "subject" : kind === "content" ? "unit" : "lesson";
+  const tab = detailTab(kind);
   const row = rowsOf(tab).find((r) => String(r.id) === String(id));
   const dialog = $("#stats-detail-dialog");
   if (!row || !dialog) return;
-  const lessons = kind === "subject" ? model.lessons.filter((l) => l.subjectId === row.id)
-    : kind === "content" ? model.lessons.filter((l) => row.unitIds.includes(l.id)) : [row];
+  const lessons = detailLessons(kind, row);
   $("#stats-detail-title").textContent = kind === "subject" ? row.subjectName : row.title;
   $("#stats-detail-body").innerHTML = detailHtml(row, lessons);
   dialog.showModal();

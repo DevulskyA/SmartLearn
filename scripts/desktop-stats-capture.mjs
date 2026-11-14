@@ -11,7 +11,7 @@
 // PNGs go to %TEMP%\sl-stats-aaa-shots (SL_STATS_SHOTS overrides): <theme>-<WxH>.png (top of the page) and <theme>-<WxH>-scrollN.png (the same page scrolled down screen by screen).
 import { spawn, execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, rmSync, existsSync, statSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { isAbsolute, join, resolve } from 'node:path';
 import { tmpdir, homedir } from 'node:os';
 import { createServer } from 'node:net';
 import { fileURLToPath } from 'node:url';
@@ -20,13 +20,26 @@ import { chromium } from '@playwright/test';
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const targetDir = process.env.CARGO_TARGET_DIR ? resolve(process.env.CARGO_TARGET_DIR) : join(root, 'src-tauri', 'target');
 const exe = resolve(process.env.SL_JOURNEY_EXE ?? join(targetDir, 'debug', 'smartlearn.exe'));
-const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
+const systemRoot = process.env.SystemRoot ?? 'C:\\Windows';
+const powershell = join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+const taskkill = join(systemRoot, 'System32', 'taskkill.exe');
+if (!existsSync(powershell) || !existsSync(taskkill)) throw new Error('Required Windows system executables are missing');
+const gitCandidates = process.platform === 'win32'
+  ? [
+    join(process.env.ProgramW6432 ?? 'C:\\Program Files', 'Git', 'cmd', 'git.exe'),
+    join(process.env.ProgramFiles ?? 'C:\\Program Files', 'Git', 'cmd', 'git.exe'),
+    join(process.env['ProgramFiles(x86)'] ?? 'C:\\Program Files (x86)', 'Git', 'cmd', 'git.exe'),
+  ]
+  : ['/usr/bin/git', '/usr/local/bin/git', '/opt/homebrew/bin/git', '/opt/local/bin/git', '/bin/git'];
+const gitExecutable = gitCandidates.find((candidate) => isAbsolute(candidate) && existsSync(candidate));
+if (!gitExecutable) throw new Error('Git executable not found in a validated absolute path');
+const git = (...args) => execFileSync(gitExecutable, args, { cwd: root, encoding: 'utf8' }).trim();
 const head = git('rev-parse', '--short', 'HEAD');
-const identity = JSON.parse(execFileSync('node', ['scripts/build-identity.mjs'], { cwd: root, encoding: 'utf8', env: { ...process.env, SMARTLEARN_BUILD_MODE: 'DEV' } }));
+const identity = JSON.parse(execFileSync(process.execPath, ['scripts/build-identity.mjs'], { cwd: root, encoding: 'utf8', env: { ...process.env, SMARTLEARN_BUILD_MODE: 'DEV' } }));
 const expectedTitle = `SmartLearn DEV - v${identity.version} - ${head}`;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const ps = (command) => execFileSync('powershell', ['-NoProfile', '-Command', `${command}; exit 0`], { encoding: 'utf8' }).trim();
+const ps = (command) => execFileSync(powershell, ['-NoProfile', '-Command', `${command}; exit 0`], { encoding: 'utf8' }).trim();
 const freePort = () => new Promise((ok, fail) => {
   const s = createServer();
   s.listen(0, '127.0.0.1', () => { const { port } = s.address(); s.close(() => ok(port)); });
@@ -85,12 +98,12 @@ let app; let browser; let page;
 function windowRect(pid, set = null) {
   const args = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(root, 'scripts', 'window-rect.ps1'), '-ProcessId', String(pid)];
   if (set) args.push('-X', String(set.x), '-Y', String(set.y), '-W', String(set.w), '-H', String(set.h));
-  return JSON.parse(execFileSync('powershell', args, { encoding: 'utf8' }).trim().split('\n').pop()).rect;
+  return JSON.parse(execFileSync(powershell, args, { encoding: 'utf8' }).trim().split('\n').pop()).rect;
 }
 function moveToSmallDisplay(pid) {
   return new Promise((done) => {
     let out = '';
-    const child = spawn('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(root, 'scripts', 'move-window-to-small-display.ps1'), '-ProcessId', String(pid)], { stdio: ['ignore', 'pipe', 'ignore'] });
+    const child = spawn(powershell, ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(root, 'scripts', 'move-window-to-small-display.ps1'), '-ProcessId', String(pid)], { stdio: ['ignore', 'pipe', 'ignore'] });
     child.stdout.on('data', (c) => { out += c; });
     child.on('error', () => done(null));
     child.on('close', () => { try { done(JSON.parse(out.trim().split('\n').pop())); } catch { done(null); } });
@@ -249,7 +262,7 @@ try {
   result.fatal = String(error?.message ?? error).split('\n').slice(0, 4).join(' | ');
 } finally {
   try { await browser?.close().catch(() => {}); } catch { /* ignore */ }
-  try { if (app && app.exitCode === null) execFileSync('taskkill', ['/PID', String(app.pid), '/T', '/F'], { stdio: 'ignore' }); } catch { /* gone */ }
+  try { if (app && app.exitCode === null) execFileSync(taskkill, ['/PID', String(app.pid), '/T', '/F'], { stdio: 'ignore' }); } catch { /* gone */ }
   await sleep(1500);
   rmSync(work, { recursive: true, force: true, maxRetries: 8, retryDelay: 300 });
 }

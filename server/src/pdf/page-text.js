@@ -16,7 +16,30 @@ export function pageTextFromItems(items) {
     if (item.hasEOL) { text += '\n'; base = null; }
     previous = item;
   }
-  return text.replace(/[ \t]+\n/g, '\n').replace(/\n+$/, '');
+  return trimPageLineEnds(text);
+}
+
+function trimPageLineEnds(text) {
+  let result = '';
+  for (let at = 0; at < text.length;) {
+    if (text[at] !== ' ' && text[at] !== '\t') {
+      result += text[at];
+      at += 1;
+      continue;
+    }
+    let end = at + 1;
+    while (text[end] === ' ' || text[end] === '\t') end += 1;
+    if (text[end] === '\n') {
+      result += '\n';
+      at = end + 1;
+      continue;
+    }
+    result += text.slice(at, end);
+    at = end;
+  }
+  let end = result.length;
+  while (end > 0 && result[end - 1] === '\n') end -= 1;
+  return result.slice(0, end);
 }
 
 // pdf.js reports an exponent as its own item: smaller and raised above the baseline of the text it belongs to. Joined as
@@ -109,6 +132,14 @@ const FURNITURE_MIN_SHARE = 0.6;
 const FURNITURE_LONG_RUN = 8;
 const PAGE_NUMBER = /(?<![\d.,/%-])\d{1,4}(?![\d.,/%])/g;
 
+function stripOuterLineBreaks(text) {
+  let start = 0;
+  let end = text.length;
+  while (text[start] === '\n') start += 1;
+  while (end > start && text[end - 1] === '\n') end -= 1;
+  return text.slice(start, end);
+}
+
 function edgeNumbers(line) {
   const text = line.trim();
   if (text.length === 0 || text.length > FURNITURE_MAX_CHARS || /[.!?;:]$/.test(text)) return [];
@@ -155,7 +186,7 @@ function stripNumberedEdges(texts) {
 
     chained.forEach((yes, i) => { if (yes) result[i][picked[i].index] = null; });
   }
-  return result.map((lines) => lines.filter((l) => l !== null).join('\n').replace(/^\n+|\n+$/g, ''));
+  return result.map((lines) => stripOuterLineBreaks(lines.filter((l) => l !== null).join('\n')));
 }
 
 // A line repeated VERBATIM at the same edge of many pages (a course title, "Seccion XII Gastroenterologia", a copyright
@@ -182,7 +213,7 @@ function stripRepeatedEdges(texts) {
     const needed = Math.max(FURNITURE_MIN_PAGES, Math.ceil(texts.length * REPEAT_MIN_SHARE));
     edge.forEach((e, i) => { if (e && counts.get(e.key) >= needed) result[i][e.index] = null; });
   }
-  return result.map((lines) => lines.filter((l) => l !== null).join('\n').replace(/^\n+|\n+$/g, ''));
+  return result.map((lines) => stripOuterLineBreaks(lines.filter((l) => l !== null).join('\n')));
 }
 
 /**
@@ -301,7 +332,8 @@ const CAPTION = /^(?:Fig(?:ure)?\.?|Box|Table|Tab\.)\s*\d/iu;
 const NEXT_CONTINUES = /^(?:\p{Ll}|\d+(?:[.,]\d+)?\s+\p{Ll})/u;
 const FULL_WIDTH = 0.7;
 // A line that ends in one of these cannot be the end of a sentence: the next line continues it, whatever its case.
-const CONTINUES_AFTER = /(?:^|\s)(?:the|a|an|of|and|or|as|to|in|by|for|with|from|that|which|such|is|are|was|were|on|at|be|than|into|between|its|their)$/iu;
+const CONTINUES_AFTER_WORDS = ['the', 'a', 'an', 'of', 'and', 'or', 'as', 'to', 'in', 'by', 'for', 'with', 'from', 'that', 'which', 'such', 'is', 'are', 'was', 'were', 'on', 'at', 'be', 'than', 'into', 'between', 'its', 'their'];
+const CONTINUES_AFTER = CONTINUES_AFTER_WORDS.map((word) => new RegExp(`(?:^|\\s)${word}$`, 'iu'));
 
 function isAllCaps(line) {
   const letters = line.replace(/[^\p{L}]/gu, '');
@@ -317,7 +349,7 @@ function isSoftBreak(above, below, width) {
   if (LIST_ITEM.test(b) || CAPTION.test(b)) return false;
   if (isAllCaps(a)) return isAllCaps(b);              // a heading wraps onto its own next line, and stays apart from the body
   if (NEXT_CONTINUES.test(b)) return true;            // lowercase (or "10 individuals"): the sentence goes on
-  if (CONTINUES_AFTER.test(a) && !isAllCaps(b)) return true; // "... such as" / "... the": the sentence cannot end here
+  if (CONTINUES_AFTER.some((word) => word.test(a)) && !isAllCaps(b)) return true; // "... such as" / "... the": the sentence cannot end here
   // A capital that starts the next line (acronym, proper noun): only when the line above ran the full width
   return width !== null && a.length >= FULL_WIDTH * width && !isAllCaps(b);
 }

@@ -17,7 +17,9 @@ import { SUITES, createParser, artifactDir, writeArtifact, readArtifacts, effect
 import { createPlanbanPublisher, findPlanbanCli, makeCliExec } from './test-live-planban.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const git = (args) => { try { return execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim(); } catch { return ''; } };
+const GIT_EXECUTABLE = process.platform === 'win32' ? 'C:\\Program Files\\Git\\cmd\\git.exe' : '/usr/bin/git';
+const TASKKILL_EXECUTABLE = 'C:\\Windows\\System32\\taskkill.exe';
+const git = (args) => { try { return execFileSync(GIT_EXECUTABLE, args, { cwd: root, encoding: 'utf8' }).trim(); } catch { return ''; } };
 const dir = artifactDir(root);
 // The heartbeat must stay well under HEARTBEAT_STALE_MS (15 s in test-live-core) so a live runner is never shown as "sem sinal".
 const HEARTBEAT_MS = 5000;
@@ -40,7 +42,8 @@ if (suiteName === 'status') {
   for (const a of readArtifacts(dir)) {
     const docsOnlySince = (from, to, suite) => unaffectedBy(git(['diff', '--name-only', from, to]).split('\n'), suite);
     const eff = effectiveState(a, { currentHead: head, docsOnlySince });
-    console.log(`${a.suite.padEnd(7)} ${eff.state.padEnd(8)} ${a.counts.done}/${a.counts.total ?? '?'} ok=${a.counts.passed} fail=${a.counts.failed} skip=${a.counts.skipped} exit=${a.exitCode ?? '-'} head=${a.headTested.slice(0, 7)}${eff.note ? ` (${eff.note})` : ''}`);
+    const note = eff.note ? ` (${eff.note})` : '';
+    console.log(`${a.suite.padEnd(7)} ${eff.state.padEnd(8)} ${a.counts.done}/${a.counts.total ?? '?'} ok=${a.counts.passed} fail=${a.counts.failed} skip=${a.counts.skipped} exit=${a.exitCode ?? '-'} head=${a.headTested.slice(0, 7)}${note}`);
   }
   process.exit(0);
 }
@@ -54,8 +57,9 @@ if (!suite) {
 const cwd = join(root, suite.cwd);
 const args = [...suite.args, ...extra];
 const logPath = join(dir, `${suiteName}.log`);
+const workingDirectoryLabel = suite.cwd !== '.' ? `  (em ${suite.cwd}/)` : '';
 const artifact = {
-  schema: 1, suite: suiteName, cmd: `node ${args.join(' ')}${suite.cwd !== '.' ? `  (em ${suite.cwd}/)` : ''}`,
+  schema: 1, suite: suiteName, cmd: `node ${args.join(' ')}${workingDirectoryLabel}`,
   headTested: git(['rev-parse', 'HEAD']), runnerPid: process.pid, pid: null, state: 'RUNNING',
   startedAt: new Date().toISOString(), updatedAt: new Date().toISOString(), durationMs: null, exitCode: null,
   counts: { total: null, done: 0, passed: 0, failed: 0, skipped: 0 }, lastTest: null, log: logPath,
@@ -95,7 +99,7 @@ const refreshTimer = setInterval(() => { refreshBoard(); planban?.update(snapsho
 function killTree() {
   if (!child.pid || child.exitCode !== null) return;
   try {
-    if (process.platform === 'win32') execFileSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+    if (process.platform === 'win32') execFileSync(TASKKILL_EXECUTABLE, ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
     else child.kill('SIGKILL');
   } catch { /* already gone */ }
 }

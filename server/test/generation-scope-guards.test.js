@@ -141,7 +141,10 @@ test('POST /proposals/:id/drafts refuses a request that tries to widen the scope
 
 // Inventory sensor: a new path to the provider must be a conscious change that also updates this list.
 function sourceFilesUnder(dir) {
-  return readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? sourceFilesUnder(join(dir, e.name)) : e.name.endsWith('.js') ? [join(dir, e.name)] : []));
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    if (entry.isDirectory()) return sourceFilesUnder(join(dir, entry.name));
+    return entry.name.endsWith('.js') ? [join(dir, entry.name)] : [];
+  });
 }
 
 test('inventory: the ONLY code that calls a provider is the single-unit generation (generated-drafts.js), and the only route that triggers it is POST /proposals/:id/drafts', () => {

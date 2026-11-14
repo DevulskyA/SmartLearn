@@ -335,3 +335,21 @@ test('normal-density pages keep the 10-page chunks; a single page above the limi
     assert.deepEqual(proposals.chunkSource(db, userId, huge.id, { maxCharsPerChunk: 1000 }).map((c) => [c.pageStart, c.pageEnd]), [[1, 1], [2, 2], [3, 3]]);
   } finally { cleanup(); }
 });
+
+test('the default title of a downloaded book drops the site tag and format word, and an already stored raw default is shown cleaned', async () => {
+  const { db, sourcesDir, cleanup } = tmpDb();
+  try {
+    const userId = makeUser(db, 'title@example.com');
+    const originalName = '[Medicalstudyzone.com] Costanzo Physiology, 7th edition PDF.pdf';
+    const source = sourceStorage.acceptUpload(db, userId, { buffer: buildFixturePdf(['page one']), originalName, contentType: 'application/pdf', sourcesDir, ...UPLOAD_DEFAULTS });
+    await extractSource(db, userId, source.id, { sourcesDir });
+
+    const [first] = proposals.chunkSource(db, userId, source.id);
+    assert.equal(first.title, 'Costanzo Physiology, 7th edition — página 1');
+
+    // a title stored before this fix (raw name) is shown cleaned; the stored row is not rewritten
+    db.prepare('UPDATE content_proposals SET title = ? WHERE id = ?').run('[Medicalstudyzone.com] Costanzo Physiology, 7th edition PDF — página 1', first.id);
+    assert.equal(proposals.listProposals(db, userId, source.id)[0].title, 'Costanzo Physiology, 7th edition — página 1');
+    assert.equal(db.prepare('SELECT title FROM content_proposals WHERE id = ?').get(first.id).title, '[Medicalstudyzone.com] Costanzo Physiology, 7th edition PDF — página 1');
+  } finally { cleanup(); }
+});

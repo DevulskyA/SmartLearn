@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -41,7 +42,7 @@ test.beforeEach(async ({ page }) => {
     window.__SMARTLEARN_API_BASE__ = base;
     window.__SMARTLEARN_REMOTE_MODE__ = true;
   }, API_BASE);
-  const email = `exam-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+  const email = `exam-${Date.now()}-${randomUUID()}@example.com`;
   const password = 'a genuinely long test password 1';
   await signInRegistered(page, { email: email, password: password });
 });
@@ -404,7 +405,7 @@ test('UX-1: Plano action buttons are spaced apart (also at 375), and once the re
 
   const gaps = async () => {
     const boxes = await page.locator('.plan-row', { hasText: 'Aula visual' }).locator('.plan-exercise-actions button').evaluateAll((els) => els.map((e) => e.getBoundingClientRect()).map((r) => ({ l: r.left, r: r.right, t: r.top, b: r.bottom })));
-    expect(boxes.length).toBe(4); // was 3 before B03 added "Editar questões"
+    expect(boxes).toHaveLength(4); // was 3 before B03 added "Editar questões"
     for (let i = 1; i < boxes.length; i += 1) {
       const horizontal = boxes[i].l - boxes[i - 1].r; // same line: needs a visible gap
       const vertical = boxes[i].t - boxes[i - 1].b;   // wrapped to a new line: needs a gap too

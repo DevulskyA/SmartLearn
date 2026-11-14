@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { test, expect } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -11,6 +12,7 @@ import { signInRegistered } from './support/session.js';
 import { startForwarder } from './support/forwarder.js';
 import { startEditingSummary } from './support/summary-editing.js';
 
+import { generateByPages, openDraftInProgress } from './support/materials-flow.js';
 // Autosave of the lesson draft (summary and each question): 2.5 s without typing, a recoverable local copy written at every keystroke, no old
 // answer over new text, no blind retry after a conflict, recovery after a lost connection or a window closed in the middle, and saving is
 // never accepting. Real server, throwaway database.
@@ -46,7 +48,7 @@ test.beforeEach(async ({ page, context }) => {
     window.__SMARTLEARN_REMOTE_MODE__ = true;
     window.__SMARTLEARN_LOCAL_AUTHORITY__ = true;
   }, API_BASE);
-  await signInRegistered(page, { email: `autosave-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`, password: 'a genuinely long test password 1' });
+  await signInRegistered(page, { email: `autosave-${Date.now()}-${randomUUID()}@example.com`, password: 'a genuinely long test password 1' });
 });
 
 async function openDraft(page) {
@@ -54,7 +56,7 @@ async function openDraft(page) {
   await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
   await page.setInputFiles('#sources-file-input', { name: 'aula.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf(['Fisiologia renal: filtração glomerular', 'Barreira de filtração e podócitos', 'Clearance de inulina mede a TFG']) });
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
-  await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
+  await generateByPages(page);
   const editor = page.locator('.lesson-editor');
   await expect(editor).toBeVisible({ timeout: 10000 });
   await startEditingSummary(page);
@@ -67,7 +69,7 @@ async function reopenDraft(page) {
   await page.locator('[data-screen="materials"]').click();
   await page.locator('#sources-existing-list .source-existing-item', { hasText: 'aula.pdf' }).locator('[data-action="open-source"]').click();
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 15000 });
-  await page.locator('.source-proposal-item').first().locator('[data-action="open-draft"]').click();
+  await openDraftInProgress(page);
   const editor = page.locator('.lesson-editor');
   await expect(editor).toBeVisible({ timeout: 10000 });
   await startEditingSummary(page);
@@ -114,6 +116,16 @@ const patchCounter = (page, pattern) => {
   page.on('requestfailed', done);
   return seen;
 };
+async function expectNoPatchWithin(page, pattern, timeout) {
+  const observed = await page.waitForRequest((request) => request.method() === 'PATCH' && pattern.test(request.url()), { timeout }).then(
+    () => true,
+    (error) => {
+      if (error?.name === 'TimeoutError') return false;
+      throw error;
+    },
+  );
+  expect(observed).toBe(false);
+}
 const PROXY_PORT = serverPort(13976);
 let forwarder = null;
 
@@ -131,12 +143,11 @@ async function throughForwarder(page, context) {
 test.afterEach(async () => { await forwarder?.close(); forwarder = null; });
 
 /**
- * The connection is lost and the window closed in the middle of an edit: the server never gets the text. A short pause first: the browser hands
- * writes to disk in a few milliseconds (IndexedDB, strict durability); what the student typed a moment before is what the recovery has to find. Returns the page the student opens afterwards, with the connection back.
+ * The connection is lost and the window closed in the middle of an edit: the server never gets the text. No pause is needed: the browser hands
+ * writes to disk in a few milliseconds (IndexedDB, strict durability), so callers copy first (copyWhen); what the student typed a moment before is what the recovery has to find. Returns the page the student opens afterwards, with the connection back.
  */
 async function closeWithServerUnreachable(page, context, after = async () => {}) {
   await after();
-  await page.waitForTimeout(300);
   forwarder.cut();
   await page.close({ runBeforeUnload: false });
   // the closing page may still run its last-chance save a moment AFTER close() has returned: the server stays unreachable until it is surely gone
@@ -158,7 +169,7 @@ test('the summary saves itself 2.5 s after the last keystroke, not before, and t
   const patches = patchCounter(page, /\/summary$/);
   await input.click();
   await input.press('End');
-  for (const ch of ' abcd') { await input.pressSequentially(ch); await page.waitForTimeout(900); } // 4.5 s of continuous typing, never idle for 2.5 s
+  for (const ch of ' abcd') { await input.pressSequentially(ch); await expectNoPatchWithin(page, /\/summary$/, 900); } // 4.5 s of continuous typing, never idle for 2.5 s
   expect(patches.count).toBe(0);
   await expect.poll(async () => (await serverDraft(page, editor)).summary, { timeout: 8000 }).toBe('Base. abcd');
   expect(patches.count).toBe(1);
@@ -198,7 +209,7 @@ test('a slow answer never overwrites newer text, and two requests are never in f
   await input.pressSequentially(' A');
   await expect.poll(() => patches.count, { timeout: 6000 }).toBe(1); // the first autosave is on its way and held
   await input.pressSequentially('B');
-  await page.waitForTimeout(3500); // longer than the autosave wait: still only the first request exists
+  await expectNoPatchWithin(page, /\/summary$/, 3500); // longer than the autosave wait: still only the first request exists
   expect(patches.count).toBe(1);
   release();
   await expect.poll(async () => (await serverDraft(page, editor)).summary, { timeout: 9000 }).toBe('Base. AB');
@@ -255,13 +266,14 @@ test('the student can discard the recovered copy: the saved text stays and nothi
     await input.click();
     await input.press('End');
     await input.pressSequentially(' descartável');
+    await copyWhen(page, editor, (copy) => copy.summary?.text === 'Base. descartável');
   });
   const editor2 = await reopenDraft(again);
   const patches = patchCounter(again, /\/summary$/);
   await editor2.locator('.lesson-recovery [data-action="discard"]').click();
   await expect(editor2.locator('.lesson-recovery')).toBeHidden();
   await expect(editor2.locator('.lesson-summary-input')).toHaveValue('Base.');
-  await again.waitForTimeout(3500);
+  await expectNoPatchWithin(again, /\/summary$/, 3500);
   expect(patches.count).toBe(0);
   expect(await localCopy(again, editor2)).toBeNull();
 });
@@ -280,7 +292,7 @@ test('a conflict (the lesson was changed somewhere else) is never overwritten an
   await input.press('End');
   await input.pressSequentially(' meu texto');
   await expect(summaryMessage(editor)).toContainText('alterada em outro lugar', { timeout: 7000 });
-  await page.waitForTimeout(6000);
+  await expectNoPatchWithin(page, /\/summary$/, 6000);
   expect(patches.count).toBe(1); // one attempt, no retry loop
   expect((await serverDraft(page, editor)).summary).toBe('Outro dispositivo.');
   await expect(input).toHaveValue('Base. meu texto');
@@ -295,7 +307,7 @@ test('a refusal by the server (a figure that is not yours) keeps the text and th
   await input.press('End');
   await input.pressSequentially(`\n\n[[fig:${FOREIGN_FIGURE}]]`);
   await expect(summaryMessage(editor)).toContainText('Não foi possível salvar sozinho', { timeout: 7000 });
-  await page.waitForTimeout(4000);
+  await expectNoPatchWithin(page, /\/summary$/, 4000);
   expect(patches.count).toBe(1);
   await expect(input).toHaveValue(`Base.\n\n[[fig:${FOREIGN_FIGURE}]]`);
   await copyWhen(page, editor, (c) => c.summary?.text.includes(FOREIGN_FIGURE));
@@ -314,7 +326,7 @@ test('the visual editor autosaves through the same path, and an edit it cannot w
   await page.keyboard.press('Control+b');
   await page.keyboard.type('(a)'); // "Um dois**(a)**" cannot be written back faithfully
   await expect(editor.locator('.summary-visual-notice')).toBeVisible();
-  await page.waitForTimeout(4000);
+  await expectNoPatchWithin(page, /\/summary$/, 4000);
   expect(patches.count).toBe(1); // nothing was sent for the unwritable edit
   expect((await serverDraft(page, editor)).summary).toBe('Um dois');
 });

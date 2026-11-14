@@ -27,15 +27,33 @@ const TITLE_RULES = [
   [UNIT_KIND.DEDICATION, /^(dedication|dedicatoria|dedicatorias)( page| to)?$/],
   [UNIT_KIND.ACKNOWLEDGMENTS, /^(acknowledg(e)?ments?|agradecimentos?|agradecimientos?)( page)?$/],
   [UNIT_KIND.PREFACE, /^(preface|prefacio|foreword|prologo|prologue)( to the \w+ edition)?$/],
-  [UNIT_KIND.ANSWER_KEY, /\b(answers?|answer key|gabarito|respostas?|respuestas?|solutions?|solucoes)\s*$|^(answers?|answer key|gabarito|respostas?|respuestas?)\b/],
-  [UNIT_KIND.EXERCISE, /^(challenge yourself|review questions?|practice (questions?|problems?|exercises?)|self[- ]?(test|assessment)|quiz|exercises?|exercicios?|questoes|questions|problemas? (de pratica|propuestos)|test yourself|study questions?)\b/],
+  [UNIT_KIND.ANSWER_KEY, [
+    /\banswers?\s*$/, /\banswer key\s*$/, /\bgabarito\s*$/, /\brespostas?\s*$/, /\brespuestas?\s*$/, /\bsolutions?\s*$/, /\bsolucoes\s*$/,
+    /^answers?\b/, /^answer key\b/, /^gabarito\b/, /^respostas?\b/, /^respuestas?\b/,
+  ]],
+  [UNIT_KIND.EXERCISE, [
+    /^challenge yourself\b/, /^review questions?\b/, /^practice (questions?|problems?|exercises?)\b/, /^self[- ]?(test|assessment)\b/,
+    /^quiz\b/, /^exercises?\b/, /^exercicios?\b/, /^questoes\b/, /^questions\b/, /^problemas? (de pratica|propuestos)\b/,
+    /^test yourself\b/, /^study questions?\b/,
+  ]],
   [UNIT_KIND.SUMMARY, /^((chapter|section|unit) )?(summary|key (points|concepts|terms)|resumo( do capitulo)?|resumen|sumario do capitulo)$/],
-  [UNIT_KIND.REFERENCE, /^(references?|bibliograph\w*|further reading|suggested readings?|referencias?|leituras? (adicionais|recomendadas)|index|indice remissivo|glossary|glossario|abbreviations?)$/],
+  [UNIT_KIND.REFERENCE, [
+    /^references?$/, /^bibliograph\w*$/, /^further reading$/, /^suggested readings?$/, /^referencias?$/,
+    /^leituras? (adicionais|recomendadas)$/, /^index$/, /^indice remissivo$/, /^glossary$/, /^glossario$/, /^abbreviations?$/,
+  ]],
   [UNIT_KIND.APPENDIX, /^(appendix|appendices|apendices?|anexos?|apendice)\b/],
-  [UNIT_KIND.FRONT_MATTER, /^(title page|half[- ]?title|cover|front matter|table of contents|contents|sumario|indice|about the authors?|about this book|list of contributors|contributors|series (page|editors?)|editorial board|sobre (o|os) autor(es)?|abbreviations and symbols)\b/],
+  [UNIT_KIND.FRONT_MATTER, [
+    /^title page\b/, /^half[- ]?title\b/, /^cover\b/, /^front matter\b/, /^table of contents\b/, /^contents\b/, /^sumario\b/, /^indice\b/,
+    /^about the authors?\b/, /^about this book\b/, /^list of contributors\b/, /^contributors\b/, /^series (page|editors?)\b/,
+    /^editorial board\b/, /^sobre (o|os) autor(es)?\b/, /^abbreviations and symbols\b/,
+  ]],
 ];
 
-const EDITORIAL_MARKERS = /(all rights reserved|todos os direitos reservados|todos los derechos reservados|\bisbn\b|library of congress|printed in the united states|^\s*©|\bcopyright\s+©|\bcopyright\s+\d{4}|permission (is|was) (not )?granted|reproduced in any form)/i;
+const EDITORIAL_MARKERS = [
+  /all rights reserved/i, /todos os direitos reservados/i, /todos los derechos reservados/i, /\bisbn\b/i,
+  /library of congress/i, /printed in the united states/i, /^\s*©/i, /\bcopyright\s+©/i,
+  /\bcopyright\s+\d{4}/i, /permission (is|was) (not )?granted/i, /reproduced in any form/i,
+];
 const SHORT_TEXT_CHARS = 2500;
 
 /**
@@ -47,7 +65,10 @@ export function classifyUnit(title, text = '') {
   const parts = String(title ?? '').split(' · ').map(norm).filter((p) => p.length > 0 && p !== '…');
   if (parts.length > 0) {
     const kinds = parts.map((part) => {
-      for (const [kind, re] of TITLE_RULES) if (re.test(part)) return kind;
+      for (const [kind, matchers] of TITLE_RULES) {
+        const matches = Array.isArray(matchers) ? matchers.some((matcher) => matcher.test(part)) : matchers.test(part);
+        if (matches) return kind;
+      }
       return UNIT_KIND.CONTENT;
     });
     // A merged unit ("Vitamins · Calcium", "Menopause · Summary") that carries any real content stays content.
@@ -55,7 +76,7 @@ export function classifyUnit(title, text = '') {
     return verdict(kinds[0], 'title');
   }
   const body = String(text ?? '');
-  if (body.length <= SHORT_TEXT_CHARS && EDITORIAL_MARKERS.test(body)) return verdict(UNIT_KIND.COPYRIGHT, 'editorial-markers');
+  if (body.length <= SHORT_TEXT_CHARS && EDITORIAL_MARKERS.some((marker) => marker.test(body))) return verdict(UNIT_KIND.COPYRIGHT, 'editorial-markers');
   return verdict(UNIT_KIND.CONTENT, 'default');
 }
 

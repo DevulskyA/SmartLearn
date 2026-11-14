@@ -4,7 +4,7 @@
 //   $env:CARGO_TARGET_DIR="$env:LOCALAPPDATA\Temp\sl-fw-target"; node scripts/zz-native-shots.mjs
 import { spawn, execFileSync } from 'node:child_process';
 import { mkdtempSync, existsSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { isAbsolute, join, resolve } from 'node:path';
 import { tmpdir, homedir } from 'node:os';
 import { createServer } from 'node:net';
 import { fileURLToPath } from 'node:url';
@@ -15,15 +15,23 @@ const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const target = process.env.CARGO_TARGET_DIR ?? join(process.env.LOCALAPPDATA, 'Temp', 'sl-fw-target');
 const exe = resolve(join(target, 'debug', 'smartlearn.exe'));
 if (!existsSync(exe)) throw new Error(`executable missing: ${exe}`);
+const systemRoot = process.env.SystemRoot ?? 'C:\\Windows';
+const powershell = join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+if (!existsSync(powershell)) throw new Error('Windows PowerShell executable not found under SystemRoot');
+const gitCandidates = process.platform === 'win32'
+  ? [join(process.env.ProgramW6432 ?? 'C:\\Program Files', 'Git', 'cmd', 'git.exe'), join(process.env.ProgramFiles ?? 'C:\\Program Files', 'Git', 'cmd', 'git.exe'), join(process.env['ProgramFiles(x86)'] ?? 'C:\\Program Files (x86)', 'Git', 'cmd', 'git.exe')]
+  : ['/usr/bin/git', '/usr/local/bin/git', '/opt/homebrew/bin/git', '/opt/local/bin/git', '/bin/git'];
+const gitExecutable = gitCandidates.find((candidate) => isAbsolute(candidate) && existsSync(candidate));
+if (!gitExecutable) throw new Error('Git executable not found in a validated absolute path');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const freePort = () => new Promise((ok, fail) => { const s = createServer(); s.listen(0, '127.0.0.1', () => { const { port } = s.address(); s.close(() => ok(port)); }); s.on('error', fail); });
-const running = execFileSync('powershell', ['-NoProfile', '-Command', 'Get-Process -Name smartlearn -ErrorAction SilentlyContinue | ForEach-Object { $_.Path }; exit 0'], { encoding: 'utf8' }).toLowerCase();
+const running = execFileSync(powershell, ['-NoProfile', '-Command', 'Get-Process -Name smartlearn -ErrorAction SilentlyContinue | ForEach-Object { $_.Path }; exit 0'], { encoding: 'utf8' }).toLowerCase();
 if (running.includes(exe.toLowerCase())) throw new Error('a smartlearn.exe from this build is already running');
 const work = mkdtempSync(join(tmpdir(), 'sl-shots-desktop-'));
 if (work.toLowerCase().startsWith(join(homedir(), 'SmartLearn-DevData').toLowerCase())) throw new Error('refusing the human datastore');
-const identity = JSON.parse(execFileSync('node', ['scripts/build-identity.mjs'], { cwd: root, encoding: 'utf8', env: { ...process.env, SMARTLEARN_BUILD_MODE: 'DEV' } }));
-const head = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
-const branch = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim().replace('claude/', '');
+const identity = JSON.parse(execFileSync(process.execPath, ['scripts/build-identity.mjs'], { cwd: root, encoding: 'utf8', env: { ...process.env, SMARTLEARN_BUILD_MODE: 'DEV' } }));
+const head = execFileSync(gitExecutable, ['rev-parse', '--short', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
+const branch = execFileSync(gitExecutable, ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim().replace('claude/', '');
 const cdpPort = await freePort();
 const env = {
   ...process.env,
@@ -73,7 +81,9 @@ try {
   const PAGES = ['Helicobacter pylori é um bacilo Gram-negativo espiralado que coloniza o estômago humano e produz urease.','A urease quebra a ureia em amônia e dióxido de carbono; a bactéria adere ao epitélio gástrico por adesinas.','A infecção se associa a gastrite crônica, úlcera péptica e câncer gástrico; o tratamento dura 10 a 14 dias.'];
   await page.setInputFiles('#sources-file-input', { name: 'h-pylori.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf(PAGES) });
   await page.locator('#sources-message').getByText(/trechos? propostos?/).waitFor({ timeout: 20000 });
-  await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
+  await page.locator('#sources-range-start').fill('1');
+  await page.locator('#sources-range-end').fill(String(PAGES.length));
+  await page.locator('#sources-range-form [type="submit"]').click();
   const editor = page.locator('.lesson-editor');
   await editor.waitFor({ state: 'visible', timeout: 30000 });
   await editor.locator('.source-draft-subject-input').scrollIntoViewIfNeeded();

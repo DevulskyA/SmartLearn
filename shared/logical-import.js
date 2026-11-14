@@ -18,7 +18,7 @@ import { ImportNormalizationError } from './import-normalization.js';
 import { resolveSupportedLocale } from './locales.js';
 import { importWarning } from './import-warnings.js';
 
-export const LOGICAL_EXPORT_VERSION = 1;
+const LOGICAL_EXPORT_VERSION = 1;
 
 // Export key (camelCase) -> table, in dependency order: a row may only reference
 // sets that come BEFORE it (learning_events also references earlier events).
@@ -60,6 +60,7 @@ const SPECS = {
       { name: 'subject_id', type: 'int', ref: 'subjects' },
       { name: 'title', type: 'text', nonBlank: true },
       { name: 'source_text', type: 'text', nullable: true },
+      { name: 'source_kind', type: 'text', nullable: true, enum: ['APOSTILA', 'LIVRO', 'VIDEO', 'OUTRO'] }, // kind of material (migration 049); optional, older backups lack it
       { name: 'summary_body', type: 'text', nullable: true },
       { name: 'study_date', type: 'timestamp' },
       { name: 'lesson_date', type: 'timestamp', nullable: true }, // the day the class was given; optional, older backups simply lack it
@@ -223,6 +224,228 @@ export function isLogicalExport(raw) {
   return raw !== null && typeof raw === 'object' && !Array.isArray(raw) && 'exportVersion' in raw;
 }
 
+function columnTypeProblem(value, column) {
+  if (column.type === 'int' && !Number.isInteger(value)) return ['INVALID_TYPE', `${column.name} deve ser inteiro.`];
+  if (column.type === 'real' && (typeof value !== 'number' || !Number.isFinite(value))) return ['INVALID_TYPE', `${column.name} deve ser numérico.`];
+  if (column.type === 'text' && typeof value !== 'string') return ['INVALID_TYPE', `${column.name} deve ser texto.`];
+  if (column.type === 'timestamp' && !isTimestamp(value)) return ['INVALID_DATE', `${column.name} não é uma data válida.`];
+  return null;
+}
+
+function columnConstraintProblem(value, column) {
+  if (column.nonBlank && value.trim() === '') return ['BLANK_TEXT', `${column.name} está vazio.`];
+  if (column.enum && !column.enum.includes(value)) return ['INVALID_ENUM', `${column.name} fora dos valores permitidos (${JSON.stringify(value)}).`];
+  if (column.mustBeNull) return ['UNSUPPORTED_REFERENCE', `${column.name} referencia competências, que não fazem parte do backup.`];
+  return null;
+}
+
+function normalizeColumnValue(row, column, where, issue) {
+  let value = row[column.name];
+  if (value === undefined) {
+    if ('default' in column) value = column.default;
+    else if (column.nullable) value = null;
+  }
+  if (value === null) {
+    if (!column.nullable) { issue('NULL_NOT_ALLOWED', `${where}: ${column.name} não pode ser nulo.`); return { keep: false }; }
+    return { keep: true, value: null };
+  }
+  if (value === undefined) { issue('MISSING_FIELD', `${where}: ${column.name} ausente.`); return { keep: false }; }
+  const typeProblem = columnTypeProblem(value, column);
+  if (typeProblem) { issue(typeProblem[0], `${where}: ${typeProblem[1]}`); return { keep: false }; }
+  const constraintProblem = columnConstraintProblem(value, column);
+  if (constraintProblem) { issue(constraintProblem[0], `${where}: ${constraintProblem[1]}`); return { keep: false }; }
+  return { keep: true, value };
+}
+
+function normalizeLogicalRow(row, key, index, spec, ids, unknownColumns, issues) {
+  const where = describe(key, index, row);
+  if (row === null || typeof row !== 'object' || Array.isArray(row)) {
+    issues.push({ code: 'INVALID_ROW', message: `${where}: linha inválida.` });
+    return null;
+  }
+  const issuesBefore = issues.length;
+  const out = {};
+  if (spec.hasId) {
+    if (!Number.isInteger(row.id) || row.id < 1) { issues.push({ code: 'INVALID_ID', message: `${where}: id inválido.` }); return null; }
+    if (ids.has(row.id)) { issues.push({ code: 'DUPLICATE_ID', message: `${where}: id duplicado.` }); return null; }
+    ids.add(row.id);
+    out.id = row.id;
+  }
+  for (const column of spec.cols) {
+    const normalized = normalizeColumnValue(row, column, where, (code, message) => issues.push({ code, message }));
+    if (normalized.keep) out[column.name] = normalized.value;
+  }
+  for (const name of Object.keys(row)) {
+    // user_id is the exporting account's own key: never restored (rows get the new owner).
+    if (name !== 'id' && name !== 'user_id' && !spec.cols.some((column) => column.name === name)) unknownColumns.add(name);
+  }
+  // A row with problems is reported and kept out of the cross-row checks below; its id still counts for references.
+  return issues.length === issuesBefore ? out : null;
+}
+
+function normalizeLogicalSet(raw, key, issues, warnings) {
+  const source = raw[key];
+  if (source === undefined) {
+    // Tables added after the first logical export are optional in older files; the core learning tables are not.
+    const optional = ['exerciseAttempts', 'exerciseFlagEvents', 'learningEvents', 'exams', 'examItems', 'examEvidence'].includes(key);
+    if (!optional) issues.push({ code: 'MISSING_SET', message: `Conjunto obrigatório ausente: ${key}.` });
+    return { rows: [], ids: new Set() };
+  }
+  if (!Array.isArray(source)) {
+    issues.push({ code: 'INVALID_SET', message: `${key} deve ser uma lista.` });
+    return { rows: [], ids: new Set() };
+  }
+  const spec = SPECS[key];
+  const rows = [];
+  const ids = new Set();
+  const unknownColumns = new Set();
+  source.forEach((row, index) => {
+    const normalized = normalizeLogicalRow(row, key, index, spec, ids, unknownColumns, issues);
+    if (normalized) rows.push(normalized);
+  });
+  if (unknownColumns.size > 0) {
+    warnings.push(importWarning('UNKNOWN_FIELDS_IGNORED', { set: key, fields: [...unknownColumns].sort().join(', ') }, { set: key }));
+  }
+  rows.sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
+  return { rows, ids };
+}
+
+function normalizeLogicalSets(raw, issues, warnings) {
+  const sets = {};
+  const idsBySet = {};
+  for (const { key } of LOGICAL_SETS) {
+    const normalized = normalizeLogicalSet(raw, key, issues, warnings);
+    sets[key] = normalized.rows;
+    idsBySet[key] = normalized.ids;
+  }
+  return { sets, idsBySet };
+}
+
+function validateSubjectNames(sets, issue) {
+  const seenNames = new Map();
+  for (const subject of sets.subjects) {
+    const folded = asciiFold(subject.name);
+    if (seenNames.has(folded)) issue('DUPLICATE_SUBJECT_NAME', `subjects (id ${subject.id}): nome repetido, igual ao da disciplina ${seenNames.get(folded)}.`);
+    else seenNames.set(folded, subject.id);
+  }
+}
+
+function validateEvidenceRows(sets, issue) {
+  for (const evidence of sets.learningEvidence) {
+    const where = `learningEvidence (id ${evidence.id})`;
+    if (evidence.questions_count !== null && evidence.questions_count <= 0) issue('INVALID_COUNT', `${where}: questions_count deve ser maior que zero.`);
+    if (evidence.correct_count !== null && (evidence.correct_count < 0 || evidence.questions_count === null || evidence.correct_count > evidence.questions_count)) {
+      issue('INVALID_COUNT', `${where}: correct_count inconsistente com questions_count.`);
+    }
+  }
+}
+
+function validateLearningEvents(sets, issue) {
+  const sequences = new Set();
+  for (const event of sets.learningEvents) {
+    const where = `learningEvents (id ${event.id})`;
+    if (event.confidence !== null && (event.confidence < 0 || event.confidence > 1)) issue('INVALID_CONFIDENCE', `${where}: confidence fora de 0..1.`);
+    const isCorrection = event.kind === 'CORRECTION';
+    if (isCorrection !== (event.corrects_event_id !== null)) issue('INVALID_CORRECTION', `${where}: corrects_event_id só vale para kind CORRECTION.`);
+    if (event.corrects_event_id !== null && event.corrects_event_id >= event.id) issue('INVALID_CORRECTION', `${where}: uma correção deve apontar para um evento anterior.`);
+    const slot = `${event.attempt_id}:${event.sequence}`;
+    if (sequences.has(slot)) issue('DUPLICATE_SEQUENCE', `${where}: sequência repetida na mesma tentativa.`);
+    sequences.add(slot);
+  }
+}
+
+function validateExerciseFlags(sets, issue) {
+  for (const event of sets.exerciseFlagEvents) {
+    const where = `exerciseFlagEvents (id ${event.id})`;
+    const isFlag = event.action === 'FLAG';
+    if (isFlag !== (event.reason !== null && event.attempt_id !== null)) issue('INVALID_FLAG_EVENT', `${where}:FLAG_REASON_ATTEMPT_CONSTRAINT`);
+    if (!isFlag && event.comment !== null) issue('INVALID_FLAG_EVENT', `${where}:CLEAR_COMMENT_CONSTRAINT`);
+  }
+}
+
+function validateExamItems(sets, issue) {
+  const positions = new Set();
+  for (const item of sets.examItems) {
+    const where = `examItems (id ${item.id})`;
+    if (item.position < 0) issue('INVALID_POSITION', `${where}: position não pode ser negativa.`);
+    const slot = `${item.exam_id}:${item.position}`;
+    if (positions.has(slot)) issue('DUPLICATE_POSITION', `${where}: posição repetida na mesma prova.`);
+    positions.add(slot);
+  }
+}
+
+function validateExamEvidence(sets, issue) {
+  const pairs = new Set();
+  for (const link of sets.examEvidence) {
+    const slot = `${link.exam_id}:${link.evidence_id}`;
+    if (pairs.has(slot)) issue('DUPLICATE_LINK', `examEvidence: vínculo repetido (prova ${link.exam_id}, evidência ${link.evidence_id}).`);
+    pairs.add(slot);
+  }
+}
+
+function validateLogicalTables(sets, issue) {
+  // Table-level rules that mirror CHECK / UNIQUE constraints, in export validation order.
+  validateSubjectNames(sets, issue);
+  validateEvidenceRows(sets, issue);
+  validateLearningEvents(sets, issue);
+  validateExerciseFlags(sets, issue);
+  validateExamItems(sets, issue);
+  validateExamEvidence(sets, issue);
+}
+
+function validateReferenceColumn(key, column, sets, idsBySet, issue) {
+  for (const row of sets[key]) {
+    const value = row[column.name];
+    if (value === null || value === undefined) continue;
+    if (!idsBySet[column.ref].has(value)) {
+      const label = row.id !== undefined ? `${key} (id ${row.id})` : `${key} (${column.name} ${value})`;
+      issue('DANGLING_REFERENCE', `${label}: ${column.name} ${value} não existe em ${column.ref}.`);
+    }
+  }
+}
+
+function validateLogicalReferences(sets, idsBySet, issue) {
+  // Referential integrity: every reference must resolve inside the file.
+  for (const { key } of LOGICAL_SETS) {
+    for (const column of SPECS[key].cols) {
+      if (column.ref) validateReferenceColumn(key, column, sets, idsBySet, issue);
+    }
+  }
+}
+
+function normalizeSettingsLocales(rawSettings, issue) {
+  const locales = {};
+  for (const key of ['uiLocale', 'generationLocale']) {
+    const value = rawSettings[key];
+    if (value === undefined || value === null) { locales[key] = null; continue; }
+    locales[key] = resolveSupportedLocale(value);
+    if (locales[key] === null) issue('INVALID_SETTINGS', `settings.${key} não é um idioma suportado (${JSON.stringify(value)}).`);
+  }
+  return locales;
+}
+
+function normalizeSettingsObject(rawSettings, issue) {
+  const { timezone, updatedAt } = rawSettings;
+  if (typeof timezone !== 'string' || timezone.trim() === '') issue('INVALID_SETTINGS', 'settings.timezone ausente ou inválido.');
+  if (updatedAt !== null && updatedAt !== undefined && !isTimestamp(updatedAt)) issue('INVALID_SETTINGS', 'settings.updatedAt inválido.');
+  // The language the student CHOSE (null = not chosen yet; absent in exports older than migration 031). Never replaced by a near locale.
+  const locales = normalizeSettingsLocales(rawSettings, issue);
+  return { timezone: typeof timezone === 'string' ? timezone : null, updatedAt: updatedAt ?? null, ...locales };
+}
+
+function normalizeLogicalSettings(raw, issue) {
+  const defaults = { timezone: null, updatedAt: null, uiLocale: null, generationLocale: null };
+  if (raw.settings === undefined || raw.settings === null) {
+    issue('INVALID_SETTINGS', 'settings ausente.');
+    return defaults;
+  }
+  if (typeof raw.settings !== 'object' || Array.isArray(raw.settings)) {
+    issue('INVALID_SETTINGS', 'settings deve ser um objeto.');
+    return defaults;
+  }
+  return normalizeSettingsObject(raw.settings, issue);
+}
+
 /**
  * @param {object} raw parsed JSON of a logical export
  * @param {{ currentSchemaVersion: number }} options newest migration this server knows
@@ -250,168 +473,10 @@ export function normalizeLogicalExport(raw, { currentSchemaVersion }) {
   } else if (raw.schemaVersion > currentSchemaVersion) {
     issue('SCHEMA_TOO_NEW', `O arquivo foi exportado por uma versão mais nova do SmartLearn (schema ${raw.schemaVersion}; este servidor entende até ${currentSchemaVersion}).`);
   }
-
-  const sets = {};
-  const idsBySet = {};
-
-  for (const { key } of LOGICAL_SETS) {
-    const spec = SPECS[key];
-    const source = raw[key];
-    if (source === undefined) {
-      // Tables added after the first logical export are optional in older files;
-      // the core learning tables are not.
-      const optional = ['exerciseAttempts', 'exerciseFlagEvents', 'learningEvents', 'exams', 'examItems', 'examEvidence'].includes(key);
-      if (!optional) issue('MISSING_SET', `Conjunto obrigatório ausente: ${key}.`);
-      sets[key] = [];
-      idsBySet[key] = new Set();
-      continue;
-    }
-    if (!Array.isArray(source)) {
-      issue('INVALID_SET', `${key} deve ser uma lista.`);
-      sets[key] = [];
-      idsBySet[key] = new Set();
-      continue;
-    }
-
-    const rows = [];
-    const ids = new Set();
-    const unknownColumns = new Set();
-    source.forEach((row, index) => {
-      const where = describe(key, index, row);
-      if (row === null || typeof row !== 'object' || Array.isArray(row)) {
-        issue('INVALID_ROW', `${where}: linha inválida.`);
-        return;
-      }
-      const issuesBefore = issues.length;
-      const out = {};
-      if (spec.hasId) {
-        if (!Number.isInteger(row.id) || row.id < 1) { issue('INVALID_ID', `${where}: id inválido.`); return; }
-        if (ids.has(row.id)) { issue('DUPLICATE_ID', `${where}: id duplicado.`); return; }
-        ids.add(row.id);
-        out.id = row.id;
-      }
-      for (const col of spec.cols) {
-        let value = row[col.name];
-        if (value === undefined) {
-          if ('default' in col) value = col.default;
-          else if (col.nullable) value = null;
-        }
-        if (value === null) {
-          if (!col.nullable) { issue('NULL_NOT_ALLOWED', `${where}: ${col.name} não pode ser nulo.`); continue; }
-          out[col.name] = null;
-          continue;
-        }
-        if (value === undefined) { issue('MISSING_FIELD', `${where}: ${col.name} ausente.`); continue; }
-        if (col.type === 'int' && !Number.isInteger(value)) { issue('INVALID_TYPE', `${where}: ${col.name} deve ser inteiro.`); continue; }
-        if (col.type === 'real' && (typeof value !== 'number' || !Number.isFinite(value))) { issue('INVALID_TYPE', `${where}: ${col.name} deve ser numérico.`); continue; }
-        if (col.type === 'text' && typeof value !== 'string') { issue('INVALID_TYPE', `${where}: ${col.name} deve ser texto.`); continue; }
-        if (col.type === 'timestamp' && !isTimestamp(value)) { issue('INVALID_DATE', `${where}: ${col.name} não é uma data válida.`); continue; }
-        if (col.nonBlank && value.trim() === '') { issue('BLANK_TEXT', `${where}: ${col.name} está vazio.`); continue; }
-        if (col.enum && !col.enum.includes(value)) { issue('INVALID_ENUM', `${where}: ${col.name} fora dos valores permitidos (${JSON.stringify(value)}).`); continue; }
-        if (col.mustBeNull) { issue('UNSUPPORTED_REFERENCE', `${where}: ${col.name} referencia competências, que não fazem parte do backup.`); continue; }
-        out[col.name] = value;
-      }
-      for (const name of Object.keys(row)) {
-        // user_id is the exporting account's own key: never restored (rows get the new owner).
-        if (name !== 'id' && name !== 'user_id' && !spec.cols.some((c) => c.name === name)) unknownColumns.add(name);
-      }
-      // A row with problems is reported and kept out of the cross-row checks below
-      // (they assume well-typed values); its id still counts for reference resolution.
-      if (issues.length === issuesBefore) rows.push(out);
-    });
-    if (unknownColumns.size > 0) {
-      warnings.push(importWarning('UNKNOWN_FIELDS_IGNORED', { set: key, fields: [...unknownColumns].sort().join(', ') }, { set: key }));
-    }
-    rows.sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
-    sets[key] = rows;
-    idsBySet[key] = ids;
-  }
-
-  // ---- table-level rules that mirror CHECK / UNIQUE constraints ----
-  const seenNames = new Map();
-  for (const s of sets.subjects) {
-    const folded = asciiFold(s.name);
-    if (seenNames.has(folded)) issue('DUPLICATE_SUBJECT_NAME', `subjects (id ${s.id}): nome repetido, igual ao da disciplina ${seenNames.get(folded)}.`);
-    else seenNames.set(folded, s.id);
-  }
-  for (const e of sets.learningEvidence) {
-    const where = `learningEvidence (id ${e.id})`;
-    if (e.questions_count !== null && e.questions_count <= 0) issue('INVALID_COUNT', `${where}: questions_count deve ser maior que zero.`);
-    if (e.correct_count !== null) {
-      if (e.correct_count < 0 || e.questions_count === null || e.correct_count > e.questions_count) {
-        issue('INVALID_COUNT', `${where}: correct_count inconsistente com questions_count.`);
-      }
-    }
-  }
-  const sequences = new Set();
-  for (const ev of sets.learningEvents) {
-    const where = `learningEvents (id ${ev.id})`;
-    if (ev.confidence !== null && (ev.confidence < 0 || ev.confidence > 1)) issue('INVALID_CONFIDENCE', `${where}: confidence fora de 0..1.`);
-    const isCorrection = ev.kind === 'CORRECTION';
-    if (isCorrection !== (ev.corrects_event_id !== null)) issue('INVALID_CORRECTION', `${where}: corrects_event_id só vale para kind CORRECTION.`);
-    if (ev.corrects_event_id !== null && ev.corrects_event_id >= ev.id) issue('INVALID_CORRECTION', `${where}: uma correção deve apontar para um evento anterior.`);
-    const slot = `${ev.attempt_id}:${ev.sequence}`;
-    if (sequences.has(slot)) issue('DUPLICATE_SEQUENCE', `${where}: sequência repetida na mesma tentativa.`);
-    sequences.add(slot);
-  }
-  for (const event of sets.exerciseFlagEvents) {
-    const where = `exerciseFlagEvents (id ${event.id})`;
-    const isFlag = event.action === 'FLAG';
-    if (isFlag !== (event.reason !== null && event.attempt_id !== null)) issue('INVALID_FLAG_EVENT', `${where}:FLAG_REASON_ATTEMPT_CONSTRAINT`);
-    if (!isFlag && event.comment !== null) issue('INVALID_FLAG_EVENT', `${where}:CLEAR_COMMENT_CONSTRAINT`);
-  }
-  const positions = new Set();
-  for (const item of sets.examItems) {
-    const where = `examItems (id ${item.id})`;
-    if (item.position < 0) issue('INVALID_POSITION', `${where}: position não pode ser negativa.`);
-    const slot = `${item.exam_id}:${item.position}`;
-    if (positions.has(slot)) issue('DUPLICATE_POSITION', `${where}: posição repetida na mesma prova.`);
-    positions.add(slot);
-  }
-  const pairs = new Set();
-  for (const link of sets.examEvidence) {
-    const slot = `${link.exam_id}:${link.evidence_id}`;
-    if (pairs.has(slot)) issue('DUPLICATE_LINK', `examEvidence: vínculo repetido (prova ${link.exam_id}, evidência ${link.evidence_id}).`);
-    pairs.add(slot);
-  }
-
-  // ---- referential integrity: every reference must resolve inside the file ----
-  for (const { key } of LOGICAL_SETS) {
-    for (const col of SPECS[key].cols) {
-      if (!col.ref) continue;
-      for (const row of sets[key]) {
-        const value = row[col.name];
-        if (value === null || value === undefined) continue;
-        if (!idsBySet[col.ref].has(value)) {
-          const label = row.id !== undefined ? `${key} (id ${row.id})` : `${key} (${col.name} ${value})`;
-          issue('DANGLING_REFERENCE', `${label}: ${col.name} ${value} não existe em ${col.ref}.`);
-        }
-      }
-    }
-  }
-
-  // ---- settings: only the timezone is user-editable; the schedule is fixed ----
-  let settings = { timezone: null, updatedAt: null, uiLocale: null, generationLocale: null };
-  if (raw.settings !== undefined && raw.settings !== null) {
-    if (typeof raw.settings !== 'object' || Array.isArray(raw.settings)) {
-      issue('INVALID_SETTINGS', 'settings deve ser um objeto.');
-    } else {
-      const { timezone, updatedAt } = raw.settings;
-      if (typeof timezone !== 'string' || timezone.trim() === '') issue('INVALID_SETTINGS', 'settings.timezone ausente ou inválido.');
-      if (updatedAt !== null && updatedAt !== undefined && !isTimestamp(updatedAt)) issue('INVALID_SETTINGS', 'settings.updatedAt inválido.');
-      // The language the student CHOSE (null = not chosen yet; absent in exports older than migration 031). Never replaced by a near locale.
-      const locales = {};
-      for (const key of ['uiLocale', 'generationLocale']) {
-        const value = raw.settings[key];
-        if (value === undefined || value === null) { locales[key] = null; continue; }
-        locales[key] = resolveSupportedLocale(value);
-        if (locales[key] === null) issue('INVALID_SETTINGS', `settings.${key} não é um idioma suportado (${JSON.stringify(value)}).`);
-      }
-      settings = { timezone: typeof timezone === 'string' ? timezone : null, updatedAt: updatedAt ?? null, ...locales };
-    }
-  } else {
-    issue('INVALID_SETTINGS', 'settings ausente.');
-  }
+  const { sets, idsBySet } = normalizeLogicalSets(raw, issues, warnings);
+  validateLogicalTables(sets, issue);
+  validateLogicalReferences(sets, idsBySet, issue);
+  const settings = normalizeLogicalSettings(raw, issue);
 
   if (issues.length > 0) throw new ImportNormalizationError(issues);
 

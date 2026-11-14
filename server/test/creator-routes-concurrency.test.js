@@ -70,7 +70,8 @@ test('POST /learning-units/:unitId/exercises: the same operationKey twice create
     assert.equal(conflict.statusCode, 409);
     assert.equal(JSON.parse(conflict.body).error.code, 'IDEMPOTENCY_CONFLICT');
 
-    const { operationKey: _key, ...withoutKey } = payload;
+    const withoutKey = { ...payload };
+    delete withoutKey.operationKey;
     await post(url, withoutKey);
     await post(url, withoutKey);
     assert.equal(count('SELECT COUNT(*) AS n FROM exercises WHERE unit_id = ?', unit.id), 3, 'no key keeps the old behaviour: every call creates');
@@ -91,7 +92,8 @@ test('POST /learning-evidence (EXTERNAL): the same operationKey twice records ON
     assert.equal(JSON.parse(conflict.body).error.code, 'IDEMPOTENCY_CONFLICT');
     assert.equal(count('SELECT COUNT(*) AS n FROM learning_evidence WHERE unit_id = ?', unit.id), 1);
 
-    const { operationKey: _key, ...withoutKey } = payload;
+    const withoutKey = { ...payload };
+    delete withoutKey.operationKey;
     await post('/learning-evidence', withoutKey);
     assert.equal(count('SELECT COUNT(*) AS n FROM learning_evidence WHERE unit_id = ?', unit.id), 2, 'no key keeps the old behaviour: every call records');
   });

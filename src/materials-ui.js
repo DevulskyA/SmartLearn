@@ -8,6 +8,7 @@ import { formatNumber } from "./i18n/format.js";
 import { t, tn } from "./i18n/index.js";
 import * as DraftReviewUI from "./draft-review-ui.js";
 import { createTextElement } from "./dom-utils.js";
+import { MAX_PAGES_PER_LESSON, pageCountOf, estimateClassMinutes, splitIntoParts } from "../shared/lesson-limits.js";
 import { showConfirm } from "./confirm-dialog.js";
 import { createLessonEditor } from "./lesson-editor-ui.js";
 import * as GenerationJobsUI from "./generation-jobs-ui.js";
@@ -22,7 +23,6 @@ const sourcesChooseFileButton = document.querySelector("#sources-choose-file");
 const sourcesFileInput = document.querySelector("#sources-file-input");
 const sourcesMessage = document.querySelector("#sources-message");
 const sourcesProposalsPanel = document.querySelector("#sources-proposals-panel");
-const sourcesProposalsList = document.querySelector("#sources-proposals-list");
 const sourcesCoverageNote = document.querySelector("#sources-coverage-note");
 const topicForm = document.querySelector("#sources-topic-form");
 const topicInput = document.querySelector("#sources-topic-input");
@@ -32,11 +32,6 @@ const rangeStartInput = document.querySelector("#sources-range-start");
 const rangeEndInput = document.querySelector("#sources-range-end");
 const draftsBox = document.querySelector("#sources-drafts");
 const draftsList = document.querySelector("#sources-drafts-list");
-const indexDetails = document.querySelector("#sources-index");
-const indexSummary = document.querySelector("#sources-index-summary");
-const editorialDetails = document.querySelector("#sources-editorial");
-const editorialSummary = document.querySelector("#sources-editorial-summary");
-const editorialList = document.querySelector("#sources-editorial-list");
 const generationBox = document.querySelector("#sources-generation");
 const editorView = document.querySelector("#sources-editor-view");
 const existingBox = document.querySelector("#sources-existing");
@@ -118,8 +113,6 @@ const POLL_WATCHING_QUICK_MS = 400; // ...and right after it opens, a generation
 const POLL_QUICK_TICKS = 5;
 const POLL_BACKGROUND_MS = 3000; // only the list shows it
 const POLL_FIRST_MS = 250;
-// Index sections up to this size are shown open; a whole book stays collapsed behind the topic search.
-const INDEX_OPEN_UP_TO = 12;
 
 function setSourcesMessage(message = "", isError = false) {
   if (!sourcesMessage) return;
@@ -151,7 +144,7 @@ async function showBrowse() {
   await refreshProposals();
   // Focus goes back to the unit the student just left (its draft is listed in "Rascunhos em andamento" or in the index), not to a far-away button.
   const visible = (el) => Boolean(el) && el.getClientRects().length > 0;
-  const back = [draftsList?.querySelector(`[data-proposal-id="${leftProposalId}"] [data-action]`), sourcesProposalsList?.querySelector(`[data-proposal-id="${leftProposalId}"] [data-action="open-draft"]`)].find(visible);
+  const back = [draftsList?.querySelector(`[data-proposal-id="${leftProposalId}"] [data-action]`)].find(visible);
   (back ?? sourcesChooseFileButton)?.focus({ preventScroll: false });
 }
 
@@ -469,8 +462,8 @@ async function concludeWatched(job) {
 }
 
 function focusProposalAction(proposalId) {
-  const item = sourcesProposalsList?.querySelector(`[data-proposal-id="${proposalId}"]`);
-  (item?.querySelector('[data-action="generate-draft"], [data-action="open-draft"]') ?? topicInput)?.focus({ preventScroll: true });
+  const item = draftsList?.querySelector(`[data-proposal-id="${proposalId}"]`);
+  (item?.querySelector("[data-action]") ?? topicInput)?.focus({ preventScroll: true });
 }
 
 async function continueInBackground() {
@@ -479,7 +472,7 @@ async function continueInBackground() {
   closeProgressPanel();
   await refreshProposals();
   setSourcesMessage(t("materials.generation.inBackground"));
-  const item = sourcesProposalsList?.querySelector(`[data-proposal-id="${proposalId}"]`);
+  const item = draftsList?.querySelector(`[data-proposal-id="${proposalId}"]`);
   (item?.querySelector('[data-action="show-generation"]') ?? sourcesChooseFileButton)?.focus({ preventScroll: true });
 }
 
@@ -566,6 +559,26 @@ function createUseRangeButton(range) {
   button.textContent = t("materials.range.use");
   return button;
 }
+// One click per part: the section is cut into the fewest equal parts that each fit the lesson cap; each button fills the range form.
+function createPartButtons(candidate) {
+  const row = document.createElement("div");
+  row.className = "source-topic-parts";
+  splitIntoParts(candidate.pageStart, candidate.pageEnd).forEach((part, i) => {
+    const start = printedOfPdfPage(pageNumbering, part.pageStart);
+    const end = printedOfPdfPage(pageNumbering, part.pageEnd);
+    if (start === null || end === null) return;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "text-button";
+    button.dataset.action = "use-range";
+    button.dataset.part = String(i + 1);
+    button.dataset.start = String(start);
+    button.dataset.end = String(end);
+    button.textContent = t("screens.materials.topic.part", { part: i + 1, range: start === end ? String(start) : `${start}–${end}` });
+    row.append(button);
+  });
+  return row;
+}
 document.addEventListener("click", (event) => {
   const button = event.target.closest?.('[data-action="use-range"]');
   if (!button || !rangeStartInput || !rangeEndInput) return;
@@ -574,58 +587,6 @@ document.addEventListener("click", (event) => {
   rangeForm?.scrollIntoView({ block: "center", behavior: "auto" });
   rangeStartInput.focus({ preventScroll: true });
 });
-
-function createSourceProposalItem(proposal) {
-  const li = document.createElement("li");
-  li.className = "source-proposal-item";
-  li.dataset.proposalId = String(proposal.id);
-
-  const rangeText = bookRangeLabel(proposal);
-  const range = createTextElement("p", "source-proposal-range", rangeText);
-  range.id = `source-proposal-range-${proposal.id}`;
-
-  const titleInput = document.createElement("input");
-  titleInput.type = "text";
-  titleInput.className = "source-proposal-title-input";
-  titleInput.value = proposal.title;
-  // The field has no visible label: its accessible name says what it edits, and which trecho (the list repeats it).
-  titleInput.setAttribute("aria-label", t("materials.proposal.titleLabel", { range: rangeText.toLowerCase() }));
-
-  const saveBtn = document.createElement("button");
-  saveBtn.type = "button";
-  saveBtn.className = "small-button";
-  saveBtn.dataset.action = "save-proposal-title";
-  saveBtn.textContent = t("materials.proposal.saveTitle");
-
-  const toggleBtn = document.createElement("button");
-  toggleBtn.type = "button";
-  toggleBtn.className = "text-button";
-  toggleBtn.dataset.action = "toggle-proposal-excerpt";
-  toggleBtn.setAttribute("aria-expanded", "false"); // a disclosure: expose whether the excerpt is open
-  toggleBtn.textContent = t("materials.proposal.showExcerpt");
-
-  const excerpt = createTextElement("p", "source-proposal-excerpt", proposal.excerpt);
-  excerpt.hidden = true;
-  const useRangeBtn = createUseRangeButton(proposal);
-
-  // The same buttons repeat in every trecho: the pages of the trecho they belong to are their description.
-  for (const button of [saveBtn, toggleBtn, useRangeBtn].filter(Boolean)) button.setAttribute("aria-describedby", range.id);
-  // What comes after is what the trecho DOES now (generate / generating / ready / failed): it is redrawn when the server says its job moved.
-  const slot = document.createElement("div");
-  slot.className = "source-proposal-slot";
-  // The save confirmation lives next to the field it is about (the page-level line can be far off-screen). The live region exists
-  // empty BEFORE the save: a region inserted together with its text is not announced.
-  const saved = createTextElement("p", "source-proposal-saved", "");
-  saved.setAttribute("role", "status");
-  titleInput.addEventListener("input", () => { saved.textContent = ""; }); // an edit makes "Título salvo" stale
-  li.append(range, titleInput, saveBtn, saved, toggleBtn, ...(useRangeBtn ? [useRangeBtn] : []), excerpt, slot);
-  if (!proposal.generatable) li.classList.add("is-editorial");
-  renderActionSlot(li, proposal);
-  return li;
-}
-
-/** Everything that tells two states of a trecho apart on screen: when it changes, its slot is redrawn. */
-const proposalSignature = (p) => JSON.stringify([p.generatable, p.latestDraft?.id, p.latestDraft?.status, p.latestDraft?.lessonQuestions?.state, p.latestJob?.id, p.latestJob?.state, p.latestJob?.phase]);
 
 function statusLine(status) {
   const line = createTextElement("p", `source-job-status is-${status.kind}`, status.label);
@@ -665,60 +626,9 @@ function acceptedDraftParts(proposal, rangeId) {
   return parts;
 }
 
-function generatingDraftParts(job, status, rangeId) {
-  const parts = [statusLine(status)];
-  if (status.stalled) parts.push(createTextElement("p", "lesson-hint", t("materials.proposal.stalledHint")));
-  const show = actionButton(t("materials.action.showProgress"), "show-generation", rangeId);
-  show.dataset.jobId = String(job.id);
-  parts.push(show);
-  return parts;
-}
-
-function existingDraftParts(proposal, job, status, rangeId) {
-  const parts = [];
-  if (status?.kind === "ready" && job.draftId === proposal.latestDraft.id) parts.push(statusLine(status));
-  const open = actionButton(t("materials.action.openDraft"), "open-draft", rangeId);
-  open.dataset.draftId = String(proposal.latestDraft.id);
-  parts.push(open);
-  return parts;
-}
-
-function idleDraftParts(job, status, rangeId) {
-  const parts = [];
-  const failed = status?.kind === "failed";
-  if (failed) parts.push(statusLine(status), createTextElement("p", "lesson-hint", jobFailureMessage(job)));
-  parts.push(actionButton(t(failed ? "materials.action.retry" : "materials.action.generate"), "generate-draft", rangeId));
-  return parts;
-}
-
-function proposalActionParts(proposal, job, status, rangeId) {
-  if (!proposal.generatable) return [createTextElement("p", "lesson-hint", notStudyNote(proposal.kind))];
-  if (proposal.latestDraft?.status === "ACCEPTED") return acceptedDraftParts(proposal, rangeId);
-  if (status?.kind === "generating") return generatingDraftParts(job, status, rangeId);
-  if (proposal.latestDraft) return existingDraftParts(proposal, job, status, rangeId);
-  return idleDraftParts(job, status, rangeId);
-}
-
-function renderActionSlot(li, proposal) {
-  const slot = li.querySelector(".source-proposal-slot");
-  const rangeId = li.querySelector(".source-proposal-range")?.id;
-  const hadFocus = slot.contains(document.activeElement);
-  const job = proposal.latestJob ?? null;
-  const status = jobListStatus(job);
-  const parts = proposalActionParts(proposal, job, status, rangeId);
-  slot.replaceChildren(...parts);
-  li.dataset.signature = proposalSignature(proposal);
-  if (hadFocus) slot.querySelector("button")?.focus({ preventScroll: true }); // a redrawn button must not drop keyboard focus
-}
-
 /** The server moved a job: only the trechos whose state changed are redrawn (an open excerpt or an edited title elsewhere stays as it is). */
 function applyProposals(proposals) {
   currentProposals = proposals;
-  const byId = new Map(proposals.map((p) => [String(p.id), p]));
-  for (const li of sourcesProposalsPanel?.querySelectorAll(".source-proposal-item") ?? []) {
-    const proposal = byId.get(li.dataset.proposalId);
-    if (proposal && li.dataset.signature !== proposalSignature(proposal)) renderActionSlot(li, proposal);
-  }
   renderDraftsInProgress(proposals);
   if (watched) setBusy(true);
 }
@@ -726,7 +636,9 @@ function applyProposals(proposals) {
 // Units with an unaccepted draft, or a generation going on or failed, are listed apart from the (often collapsed) index:
 // work in progress must never hide inside a 100-unit list.
 function draftInProgressState(proposal) {
-  if (!proposal.generatable || proposal.latestDraft?.status === "ACCEPTED") return null;
+  if (!proposal.generatable) return null;
+  // A lesson already created stays reachable from here: its Resumo and its "questões depois" actions.
+  if (proposal.latestDraft?.status === "ACCEPTED") return { proposal, accepted: true };
   const status = jobListStatus(proposal.latestJob);
   const generating = status?.kind === "generating";
   const failed = !generating && !proposal.latestDraft && status?.kind === "failed";
@@ -735,13 +647,18 @@ function draftInProgressState(proposal) {
   return { proposal, status, generating, failed, ready };
 }
 
-function renderDraftInProgressItem({ proposal, status, generating, failed, ready }) {
+function renderDraftInProgressItem({ proposal, status, generating, failed, ready, accepted }) {
   const li = document.createElement("li");
   li.className = "source-draft-item";
   li.dataset.proposalId = String(proposal.id);
   const rangeText = bookRangeLabel(proposal, true);
   const title = createTextElement("span", "source-draft-item-title", proposal.title);
   const range = createTextElement("span", "lesson-hint", rangeText);
+  range.id = `source-draft-range-${proposal.id}`;
+  if (accepted) {
+    li.append(title, range, ...acceptedDraftParts(proposal, range.id));
+    return li;
+  }
   const button = document.createElement("button");
   button.type = "button";
   button.className = "small-button";
@@ -762,6 +679,7 @@ function renderDraftInProgressItem({ proposal, status, generating, failed, ready
   }
   li.append(title, range);
   if (generating || failed || ready) li.append(statusLine(status));
+  if (generating && status.stalled) li.append(createTextElement("p", "lesson-hint", t("materials.proposal.stalledHint")));
   li.append(button);
   if (!generating && !failed && proposal.latestDraft?.status === "DRAFT") {
     const discard = document.createElement("button");
@@ -789,6 +707,8 @@ function renderDraftsInProgress(proposals) {
 }
 
 draftsList?.addEventListener("click", async (event) => {
+  const item = event.target.closest("li");
+  if (item && (await openAcceptedSummary(event) || await openLessonQuestionsFromList(event, item) || await openDraftFromList(event, item))) return;
   const show = event.target.closest('[data-action="show-generation"]');
   if (show) {
     await showGenerationOf(show.closest("li").dataset.proposalId, show.dataset.title);
@@ -831,21 +751,6 @@ draftsList?.addEventListener("click", async (event) => {
 
 function renderSourceProposals(proposals) {
   currentProposals = proposals;
-  if (!sourcesProposalsList) return;
-  sourcesProposalsList.replaceChildren();
-  editorialList?.replaceChildren();
-  const content = proposals.filter((p) => p.generatable);
-  const editorial = proposals.filter((p) => !p.generatable);
-  for (const proposal of content) sourcesProposalsList.append(createSourceProposalItem(proposal));
-  for (const proposal of editorial) editorialList?.append(createSourceProposalItem(proposal));
-  // content.length can be 0: the singular is chosen explicitly (tn would treat 0 as singular in pt-BR)
-  if (indexSummary) indexSummary.textContent = content.length === 1 ? t("materials.index.summary.one", { count: content.length }) : t("materials.index.summary.other", { count: content.length });
-  if (indexDetails) { indexDetails.hidden = content.length === 0; indexDetails.open = content.length <= INDEX_OPEN_UP_TO; } // an empty index is not offered
-  if (editorialDetails) {
-    editorialDetails.hidden = editorial.length === 0;
-    editorialDetails.open = false;
-    if (editorialSummary) editorialSummary.textContent = t("materials.editorial.summary", { count: editorial.length });
-  }
   // A material with no trechos (no outline in the PDF) still needs the page range and the title search: the panel follows the open
   // material, never the number of proposals (with 0 of them the student had nothing to act on).
   if (sourcesProposalsPanel) sourcesProposalsPanel.hidden = currentSourceId == null;
@@ -862,10 +767,20 @@ function createTopicItem(candidate, query) {
   li.dataset.ordinal = String(candidate.ordinal);
   li.append(createTextElement("p", "source-topic-title", candidate.title));
   li.append(createTextElement("p", "source-proposal-range", t("materials.topic.rangeChars", { range: rangeLabel(candidate.pageStart, candidate.pageEnd), chars: nf.format(candidate.chars) })));
+  // how long a class on this much text takes, before anything is generated (books have no hours: estimated)
+  const minutes = estimateClassMinutes(candidate.chars);
+  if (minutes > 0) li.append(createTextElement("p", "lesson-hint source-topic-minutes", t("materials.topic.minutes", { minutes: nf.format(minutes) })));
   if (candidate.excerpt) li.append(createTextElement("p", "source-topic-excerpt", candidate.excerpt));
   if (candidate.generatable) {
     const useRange = createUseRangeButton(candidate);
     if (useRange) li.append(useRange);
+    const pageCount = pageCountOf(candidate.pageStart, candidate.pageEnd);
+    if (pageCount > MAX_PAGES_PER_LESSON) {
+      // A chapter is not a class: instead of a button that fails, the student is told to split it into parts of up to the cap.
+      li.append(createTextElement("p", "lesson-hint", t("screens.materials.topic.tooLong", { count: pageCount, max: MAX_PAGES_PER_LESSON })));
+      li.append(createPartButtons(candidate));
+      return li;
+    }
     const generate = document.createElement("button");
     generate.type = "button";
     generate.className = "small-button";
@@ -927,6 +842,11 @@ rangeForm?.addEventListener("submit", async (event) => {
   const pageEnd = Number.parseInt(rangeEndInput.value, 10);
   if (!Number.isInteger(pageStart) || !Number.isInteger(pageEnd) || pageStart < 1 || pageEnd < pageStart) {
     setSourcesMessage(t("screens.materials.range.invalid"), true);
+    return;
+  }
+  // A lesson is a class (~2 h): the same cap the server enforces, shown before anything is sent.
+  if (pageCountOf(pageStart, pageEnd) > MAX_PAGES_PER_LESSON) {
+    setSourcesMessage(t("screens.materials.range.tooMany", { max: MAX_PAGES_PER_LESSON, count: pageCountOf(pageStart, pageEnd) }), true);
     return;
   }
   const submit = rangeForm.querySelector('[type="submit"]');
@@ -1111,7 +1031,8 @@ sourcesFileInput?.addEventListener("change", async () => {
   const [file] = sourcesFileInput.files ?? [];
   if (!file) return;
   if (sourcesProposalsPanel) sourcesProposalsPanel.hidden = true;
-  if (sourcesProposalsList) sourcesProposalsList.replaceChildren();
+  draftsList?.replaceChildren();
+  if (draftsBox) draftsBox.hidden = true;
   topicResults?.replaceChildren();
   if (sourcesCoverageNote) { sourcesCoverageNote.hidden = true; sourcesCoverageNote.textContent = ""; } // never leave a warning from the previous PDF
 
@@ -1164,48 +1085,7 @@ sourcesFileInput?.addEventListener("change", async () => {
   }
 });
 
-// ---- index list actions ------------------------------------------------------------------------------------------------
-async function toggleProposalExcerpt(event, item, proposalId) {
-  const toggleBtn = event.target.closest('[data-action="toggle-proposal-excerpt"]');
-  if (!toggleBtn) return false;
-  const excerptEl = item.querySelector(".source-proposal-excerpt");
-  if (!excerptEl) return true;
-  if (excerptEl.hidden) {
-    const result = await SourceProposalsUI.getProposal(proposalId);
-    if (result.ok) excerptEl.textContent = result.proposal.excerpt;
-    excerptEl.hidden = false;
-    toggleBtn.setAttribute("aria-expanded", "true");
-    toggleBtn.textContent = t("materials.proposal.hideExcerpt");
-  } else {
-    excerptEl.hidden = true;
-    toggleBtn.setAttribute("aria-expanded", "false");
-    toggleBtn.textContent = t("materials.proposal.showExcerpt");
-  }
-  return true;
-}
-
-async function saveProposalTitle(event, item, proposalId) {
-  const saveBtn = event.target.closest('[data-action="save-proposal-title"]');
-  if (!saveBtn) return false;
-  const input = item.querySelector(".source-proposal-title-input");
-  if (!input) return true;
-  const saved = item.querySelector(".source-proposal-saved");
-  if (saved) saved.textContent = "";
-  saveBtn.disabled = true;
-  try {
-    const result = await SourceProposalsUI.renameProposal(proposalId, input.value);
-    if (result.ok) {
-      if (saved) saved.textContent = t("materials.proposal.titleSaved");
-    } else {
-      setSourcesMessage(result.message || t("materials.proposal.saveFailed"), true);
-    }
-  } finally {
-    saveBtn.disabled = false;
-    saveBtn.focus({ preventScroll: true }); // a disabled button drops keyboard focus
-  }
-  return true;
-}
-
+// ---- actions of the in-progress / ready list ------------------------------------------------------------------------------------------------
 async function openAcceptedSummary(event) {
   const summaryBtn = event.target.closest('[data-action="open-summary"]');
   if (!summaryBtn) return false;
@@ -1213,7 +1093,7 @@ async function openAcceptedSummary(event) {
   return true;
 }
 
-async function openLessonQuestionsFromIndex(event, item) {
+async function openLessonQuestionsFromList(event, item) {
   const askBtn = event.target.closest('[data-action="lesson-questions"]');
   if (!askBtn) return false;
   askBtn.disabled = true;
@@ -1223,11 +1103,11 @@ async function openLessonQuestionsFromIndex(event, item) {
     setSourcesMessage(result.message || t("materials.lessonQuestions.failed"), true);
     return true;
   }
-  await openEditor(result.draft, item.querySelector(".source-proposal-title-input")?.value ?? t("materials.draft.fallbackTitle"));
+  await openEditor(result.draft, item.querySelector(".source-draft-item-title")?.textContent || t("materials.draft.fallbackTitle"));
   return true;
 }
 
-async function openDraftFromIndex(event, item) {
+async function openDraftFromList(event, item) {
   const openBtn = event.target.closest('[data-action="open-draft"]');
   if (!openBtn) return false;
   openBtn.disabled = true;
@@ -1237,41 +1117,7 @@ async function openDraftFromIndex(event, item) {
     setSourcesMessage(result.message || t("materials.draft.openFailed"), true);
     return true;
   }
-  await openEditor(result.draft, item.querySelector(".source-proposal-title-input")?.value ?? t("materials.draft.fallbackTitle"));
+  await openEditor(result.draft, item.querySelector(".source-draft-item-title")?.textContent || t("materials.draft.fallbackTitle"));
   return true;
 }
 
-async function showGenerationFromIndex(event, item, proposalId) {
-  const showBtn = event.target.closest('[data-action="show-generation"]');
-  if (!showBtn) return false;
-  await showGenerationOf(proposalId, item.querySelector(".source-proposal-title-input")?.value);
-  return true;
-}
-
-async function generateDraftFromIndex(event, item, proposalId) {
-  const generateBtn = event.target.closest('[data-action="generate-draft"]');
-  if (!generateBtn) return false;
-  const proposal = {
-    id: Number(proposalId),
-    title: item.querySelector(".source-proposal-title-input")?.value ?? t("materials.proposal.fallbackTitle"),
-    pageStart: Number(item.querySelector(".source-proposal-range")?.textContent.match(/\d+/g)?.[0]),
-    pageEnd: Number(item.querySelector(".source-proposal-range")?.textContent.match(/\d+/g)?.at(-1)),
-  };
-  await generateFor(proposal);
-  return true;
-}
-
-async function onIndexClick(event) {
-  const item = event.target.closest(".source-proposal-item");
-  if (!item) return;
-  const proposalId = item.dataset.proposalId;
-  if (await toggleProposalExcerpt(event, item, proposalId)) return;
-  if (await saveProposalTitle(event, item, proposalId)) return;
-  if (await openAcceptedSummary(event)) return;
-  if (await openLessonQuestionsFromIndex(event, item)) return;
-  if (await openDraftFromIndex(event, item)) return;
-  if (await showGenerationFromIndex(event, item, proposalId)) return;
-  await generateDraftFromIndex(event, item, proposalId);
-}
-sourcesProposalsList?.addEventListener("click", onIndexClick);
-editorialList?.addEventListener("click", onIndexClick);

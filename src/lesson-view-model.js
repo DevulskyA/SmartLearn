@@ -179,12 +179,18 @@ export const keptQuestionCount = (draft) => (draft?.questions ?? []).filter((q) 
 
 const nf = { format: (value) => formatNumber(value) }; // resolved per call so the active locale applies
 
+function sourcePagesLabel(firstPage, lastPage) {
+  if (firstPage === undefined) return "";
+  if (firstPage === lastPage) return t("lesson.source.page", { page: firstPage });
+  return t("lesson.source.pages", { from: firstPage, to: lastPage });
+}
+
 /** "Costanzo Physiology.pdf · fonte aprovada: PDF 267–273 · 23.317 caracteres" — read from what was really sent, not from the title. */
 export function sourceLine(draft) {
   const scope = draft?.sourceScope;
   if (!scope) return "";
   const [a, b] = scope.approvedPages ?? [];
-  const pages = a === undefined ? "" : a === b ? t("lesson.source.page", { page: a }) : t("lesson.source.pages", { from: a, to: b });
+  const pages = sourcePagesLabel(a, b);
   const parts = [scope.documentName, pages ? t("lesson.source.approved", { pages }) : null, Number.isFinite(scope.sourceChars) ? t("lesson.source.chars", { count: nf.format(scope.sourceChars) }) : null];
   return parts.filter(Boolean).join(" · ");
 }
@@ -233,8 +239,11 @@ const PHASE_LABELS = catalogLabels({
   SAVING: () => t("lesson.job.phase.saving"),
 });
 /** The real phase the server reports; one it does not know yet reads as the generic "Gerando", never as raw text. */
-export function jobPhaseLabel(job) {
+export function jobPhaseLabel(job, { translate = false } = {}) {
   if (job?.state === "QUEUED") return PHASE_LABELS.QUEUED;
+  // a translation does the same work in another language: say "traduzindo", not "gerando"
+  if (translate && (job?.phase ?? "GENERATING") === "GENERATING") return t("lesson.job.phase.translating");
+  if (translate && job?.phase === "SAVING") return t("lesson.job.phase.savingTranslation");
   return PHASE_LABELS[job?.phase] ?? PHASE_LABELS.GENERATING;
 }
 
@@ -259,7 +268,7 @@ const SERVER_TEXT_CODES = new Set(["BUDGET_EXCEEDED"]);
 /** A failed job in plain Portuguese: what happened (from the typed code), that nothing was saved, and that the unit can be tried again. */
 export function jobFailureMessage(job) {
   const server = typeof job?.errorMessage === "string" ? job.errorMessage.trim() : "";
-  const reason = SERVER_TEXT_CODES.has(job?.errorCode) && /^[\p{Lu}][^\n]{8,300}[.!]$/u.test(server)
+  const reason = SERVER_TEXT_CODES.has(job?.errorCode) && /^\p{Lu}[^\n]{8,300}[.!]$/u.test(server)
     ? server
     : FAILURE_REASONS[job?.errorCode] ?? t("lesson.job.failure.unknown");
   return t("lesson.job.failure.message", { reason });

@@ -4,7 +4,7 @@
 // file plus one tree hash (order-independent of the filesystem listing order).
 //   npm run build && node scripts/release-manifest.mjs [--dist dist] [--out release-manifest.json]
 import { createHash } from 'node:crypto';
-import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -30,13 +30,26 @@ export function buildReleaseManifest({ distDir, commit, dirty, version, now = ()
   return { manifestVersion: 1, builtAt: now().toISOString(), version, commit, dirty: Boolean(dirty), treeSha256, files };
 }
 
+function resolveGitExecutable() {
+  const candidates = process.platform === 'win32'
+    ? [
+      join(process.env.ProgramW6432 ?? 'C:\\Program Files', 'Git', 'cmd', 'git.exe'),
+      join(process.env.ProgramFiles ?? 'C:\\Program Files', 'Git', 'cmd', 'git.exe'),
+      join(process.env['ProgramFiles(x86)'] ?? 'C:\\Program Files (x86)', 'Git', 'cmd', 'git.exe'),
+    ]
+    : ['/usr/bin/git', '/usr/local/bin/git', '/opt/homebrew/bin/git'];
+  const executable = candidates.find((candidate) => existsSync(candidate));
+  if (!executable) throw new Error('release-manifest requires Git in a fixed system installation path');
+  return executable;
+}
+
 function main() {
   const args = process.argv.slice(2);
   const flag = (name, fallback) => (args.includes(name) ? args[args.indexOf(name) + 1] : fallback);
   const root = fileURLToPath(new URL('..', import.meta.url));
   const distDir = flag('--dist', join(root, 'dist'));
   const out = flag('--out', join(root, 'release-manifest.json'));
-  const git = (...a) => execFileSync('git', a, { cwd: root, encoding: 'utf8' }).trim();
+  const git = (...a) => execFileSync(resolveGitExecutable(), a, { cwd: root, encoding: 'utf8' }).trim();
   const manifest = buildReleaseManifest({
     distDir,
     commit: git('rev-parse', 'HEAD'),

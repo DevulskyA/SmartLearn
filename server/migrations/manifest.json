@@ -238,5 +238,10 @@
     "version": 48,
     "name": "draft-summary-versions",
     "checksum": "d4c3ce189e06284f13dfc8e5f87587846d0fef707b4d5e0437c8446992a73a3f"
+  },
+  {
+    "version": 49,
+    "name": "learning-unit-source-kind",
+    "checksum": "0ff5ca4cda86b0892f8f1f43fe98782136d68b65a7aad427f59e0600d92d671e"
   }
 ]

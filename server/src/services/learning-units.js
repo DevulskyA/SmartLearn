@@ -4,6 +4,14 @@ import { checkIdempotency, recordIdempotency } from './idempotency.js';
 import { findUnresolvedRefs, refsMessage } from './visual-assets.js';
 import { dm, splitMessage } from '../api-error-messages.js';
 import { firstUnusedColor } from './subjects.js';
+import { SOURCE_KINDS } from '../../../shared/source-kinds.js';
+
+/** null/undefined = not said; anything else must be one of the four kinds. */
+function normalizeSourceKind(kind) {
+  if (kind === undefined || kind === null) return null;
+  if (!SOURCE_KINDS.includes(kind)) throw new LearningUnitError('VALIDATION_FAILED', dm('INPUT_INVALID', { field: 'sourceKind' }), 'sourceKind');
+  return kind;
+}
 
 export class LearningUnitError extends Error {
   constructor(code, message, field) {
@@ -56,6 +64,7 @@ function unitDto(row) {
     subjectId: row.subject_id,
     title: row.title,
     sourceText: row.source_text,
+    sourceKind: row.source_kind ?? null,
     summaryBody: row.summary_body,
     studyDate: row.study_date,
     lessonDate: row.lesson_date ?? null,
@@ -121,16 +130,18 @@ export function resolveOrCreateSubject(db, userId, input) {
  * conflicts (409) rather than silently doing something different.
  */
 export function create(db, userId, data) {
-  const { subjectId, newSubjectName, newSubjectColor, title, sourceText, summaryBody, studyDate, lessonDate, operationKey } = data;
+  const { subjectId, newSubjectName, newSubjectColor, title, sourceText, summaryBody, studyDate, lessonDate, operationKey, sourceKind } = data;
 
   const titleError = validateTitleField(title);
   if (titleError) throw new LearningUnitError('VALIDATION_FAILED', titleError, 'title');
   if (!DATE_RE.test(studyDate ?? '')) throw new LearningUnitError('VALIDATION_FAILED', dm('STUDY_DATE_INVALID'), 'studyDate');
-  generateReviewDates(studyDate); // throws if calendar-invalid (e.g. Feb 30)
+  // a calendar-impossible day (e.g. 31 February) is the student's mistake, not a server failure: it is answered as a refused field
+  try { generateReviewDates(studyDate); } catch { throw new LearningUnitError('VALIDATION_FAILED', dm('STUDY_DATE_INVALID'), 'studyDate'); }
   const storedLessonDate = normalizeLessonDate(lessonDate, studyDate);
+  const storedSourceKind = normalizeSourceKind(sourceKind);
   assertFigureRefs(db, userId, summaryBody);
 
-  const idempotencyPayload = { subjectId, newSubjectName, newSubjectColor, title, sourceText, summaryBody, studyDate, lessonDate: storedLessonDate };
+  const idempotencyPayload = { subjectId, newSubjectName, newSubjectColor, title, sourceText, sourceKind: storedSourceKind, summaryBody, studyDate, lessonDate: storedLessonDate };
   const check = checkIdempotency(db, { userId, operation: 'create-learning-unit', operationKey, payload: idempotencyPayload });
   if (check.cached) return check.result;
 
@@ -139,9 +150,9 @@ export function create(db, userId, data) {
 
     const now = new Date().toISOString();
     const unitResult = db.prepare(`
-      INSERT INTO learning_units (user_id, subject_id, title, source_text, summary_body, study_date, lesson_date, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(userId, subject.id, normalizeEntityName(title) || title.trim(), sourceText ?? null, summaryBody ?? null, studyDate, storedLessonDate, now, now);
+      INSERT INTO learning_units (user_id, subject_id, title, source_text, source_kind, summary_body, study_date, lesson_date, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(userId, subject.id, normalizeEntityName(title) || title.trim(), sourceText ?? null, storedSourceKind, summaryBody ?? null, studyDate, storedLessonDate, now, now);
     const unit = db.prepare('SELECT * FROM learning_units WHERE id = ?').get(unitResult.lastInsertRowid);
 
     const dueDates = generateReviewDates(studyDate);
@@ -205,7 +216,7 @@ export function getById(db, userId, id) {
  * is out of this task's scope; a caller must get a clear rejection, not a
  * silent no-op, if they try.
  */
-export function updateFields(db, userId, id, { title, sourceText, summaryBody, lessonDate } = {}) {
+export function updateFields(db, userId, id, { title, sourceText, sourceKind, summaryBody, lessonDate } = {}) {
   const unit = findOwned(db, userId, id);
   if (!unit) throw new LearningUnitError('NOT_FOUND', dm('UNIT_NOT_FOUND'));
 
@@ -217,11 +228,12 @@ export function updateFields(db, userId, id, { title, sourceText, summaryBody, l
   const nextLessonDate = lessonDate !== undefined ? normalizeLessonDate(lessonDate, unit.study_date) : (unit.lesson_date ?? null);
   const now = new Date().toISOString();
   db.prepare(`
-    UPDATE learning_units SET title = ?, source_text = ?, summary_body = ?, lesson_date = ?, updated_at = ?
+    UPDATE learning_units SET title = ?, source_text = ?, source_kind = ?, summary_body = ?, lesson_date = ?, updated_at = ?
     WHERE user_id = ? AND id = ?
   `).run(
     normalizeEntityName(nextTitle) || nextTitle.trim(),
     sourceText !== undefined ? sourceText : unit.source_text,
+    sourceKind !== undefined ? normalizeSourceKind(sourceKind) : (unit.source_kind ?? null),
     summaryBody !== undefined ? summaryBody : unit.summary_body,
     nextLessonDate,
     now, userId, id,

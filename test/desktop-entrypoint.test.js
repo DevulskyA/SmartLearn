@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { resolveWindowsPowerShellExecutable } from './system-executables.mjs';
 import { fileURLToPath } from 'node:url';
 
 // DESKTOP ENTRYPOINT: one canonical way for a human to open the local Desktop from THIS worktree.
@@ -44,7 +45,7 @@ test('the shortcut installer points at the launcher, retires foreign shortcuts b
 for (const [name, script] of [['launcher', 'scripts/launch-desktop-dev.ps1'], ['installer', 'scripts/install-dev-shortcut.ps1']]) {
   test(`the ${name} is valid PowerShell (parses with no errors)`, { skip: process.platform !== 'win32' }, () => {
     const path = fileURLToPath(new URL(`../${script}`, import.meta.url));
-    const out = execFileSync('powershell.exe', ['-NoProfile', '-Command', `$e=$null;$t=$null;[System.Management.Automation.Language.Parser]::ParseFile('${path.replace(/'/g, "''")}',[ref]$t,[ref]$e)|Out-Null;$e.Count`], { encoding: 'utf8' });
+    const out = execFileSync(resolveWindowsPowerShellExecutable(), ['-NoProfile', '-Command', `$e=$null;$t=$null;[System.Management.Automation.Language.Parser]::ParseFile('${path.replace(/'/g, "''")}',[ref]$t,[ref]$e)|Out-Null;$e.Count`], { encoding: 'utf8' });
     assert.equal(out.trim(), '0');
   });
 }

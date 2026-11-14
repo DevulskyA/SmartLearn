@@ -4,6 +4,8 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ptBR from '../src/i18n/locales/pt-BR.js';
+import en from '../src/i18n/locales/en.js';
+import es from '../src/i18n/locales/es.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const html = readFileSync(join(root, 'index.html'), 'utf8').replace(/^﻿/, '');
@@ -38,4 +40,26 @@ test('every data-i18n-<attribute> in index.html has a catalog key and the attrib
   }
   assert.deepEqual(problems, []);
   assert.ok(checked >= 0);
+});
+
+test('the remaining fixed labels in index.html are connected to real English and Spanish text', () => {
+  const bindings = [
+    ['theme-toggle', 'aria-label', 'screens.chrome.themeToggle', 'Toggle theme', 'Cambiar tema'],
+    ['theme-toggle', 'title', 'screens.chrome.themeToggle', 'Toggle theme', 'Cambiar tema'],
+    ['last-backup-label', 'text', 'appBackup.none', 'No backup has been exported.', 'No se ha exportado ninguna copia de seguridad.'],
+    ['exam-retest-btn', 'text', 'appExam.retestErrors', 'Retry missed questions', 'Reintentar preguntas incorrectas'],
+    ['study-now-practice-title', 'text', 'appStudyNow.practiceTitle', 'Practice', 'Practicar'],
+    ['study-now-reveal-btn', 'text', 'appStudyNow.reveal', 'Show answer', 'Ver respuesta'],
+    ['study-now-result-title', 'text', 'appStudyNow.result', 'Result', 'Resultado'],
+    ['study-now-retest-btn', 'text', 'appStudyNow.retestErrors', 'Retry missed questions', 'Reintentar preguntas incorrectas'],
+  ];
+
+  for (const [id, attribute, key, english, spanish] of bindings) {
+    const tag = html.match(new RegExp(`<[^>]*id="${id}"[^>]*>`))?.[0];
+    assert.ok(tag, `#${id} exists`);
+    const dataAttribute = attribute === 'text' ? 'data-i18n' : `data-i18n-${attribute}`;
+    assert.ok(tag.includes(`${dataAttribute}="${key}"`), `#${id} is connected to ${key}`);
+    assert.equal(en[key], english, `en/${key}`);
+    assert.equal(es[key], spanish, `es/${key}`);
+  }
 });

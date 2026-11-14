@@ -16,6 +16,8 @@
 
 export const DEV_ACCOUNT = {
   email: 'dev@smartlearn.local',
+  // This synthetic credential is for the opt-in, loopback-only development seed account.
+  // eslint-disable-next-line sonarjs/no-hardcoded-passwords -- Not a production or personal credential.
   password: 'SmartLearn-dev-2026-local-only',
 };
 
@@ -34,9 +36,9 @@ export function isoDay(today, offsetDays) {
 
 // Synthetic, clinically conservative content. `state` documents what each unit
 // is meant to exhibit in the product (used by the test that proves coverage).
-export // One hue per discipline, as in the V7.2 reference (each discipline reads as its own colour, not all default blue).
+// One hue per discipline, as in the V7.2 reference (each discipline reads as its own colour, not all default blue).
 const SUBJECT_COLORS = { 'Anatomia': 'DISC-ROSE', 'Fisiologia': 'DISC-PURPLE', 'Farmacologia': 'DISC-TEAL', 'Semiologia Médica': 'DISC-INDIGO', 'Patologia Geral': 'DISC-AMBER', 'Neurologia': 'DISC-BLUE' };
-function buildPlan(today = new Date()) {
+export function buildPlan(today = new Date()) {
   const day = (o) => isoDay(today, o);
   const subjects = ['Anatomia', 'Fisiologia', 'Farmacologia', 'Semiologia Médica', 'Patologia Geral', 'Neurologia'];
   const units = [
@@ -94,6 +96,7 @@ function buildPlan(today = new Date()) {
         ['O que produz a segunda bulha (B2)?', 'O fechamento das valvas aórtica e pulmonar.', null],
       ], evidence: [] },
     { key: 'inflamacao', subject: 'Patologia Geral', title: 'Inflamação aguda', studyDate: day(-90), sourceText: null, summary: null,
+      emptyOnPurpose: 'the only lesson that shows the "overdue without material" state; its discipline is empty on purpose',
       state: 'overdue-without-material', exercises: [], evidence: [] },
     { key: 'avc', subject: 'Neurologia', title: 'AVC isquêmico: reconhecimento e conduta inicial', studyDate: day(0), sourceText: 'Apostila DEV — Neurologia 1',
       summary: 'Déficit neurológico focal de início súbito; a janela terapêutica define a conduta; imagem sem contraste exclui hemorragia. (Conteúdo sintético.)',
@@ -134,7 +137,7 @@ async function ensureSession(api) {
   let login = await api.call('POST', '/auth/login', DEV_ACCOUNT, { allowError: true });
   if (login.status !== 200) {
     await api.call('POST', '/auth/register', DEV_ACCOUNT);
-    login = await api.call('POST', '/auth/login', DEV_ACCOUNT);
+    await api.call('POST', '/auth/login', DEV_ACCOUNT);
   }
   api.csrf = (await api.call('GET', '/auth/me')).body.csrfToken;
 }

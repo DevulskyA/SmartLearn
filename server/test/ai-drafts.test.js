@@ -188,7 +188,10 @@ test('selectProvider: the live path requires apiKey, model, consentGranted=true,
   assert.equal(drafts.selectProvider(full).live, true);
 
   for (const missingKey of Object.keys(full)) {
-    const partial = { ...full, [missingKey]: missingKey === 'consentGranted' ? false : (missingKey === 'budgetCapUsd' ? 0 : null) };
+    let missingValue = null;
+    if (missingKey === 'consentGranted') missingValue = false;
+    else if (missingKey === 'budgetCapUsd') missingValue = 0;
+    const partial = { ...full, [missingKey]: missingValue };
     const result = drafts.selectProvider(partial);
     assert.equal(result.live, false, `missing ${missingKey} must fall back to the fake provider, never a partial live pass`);
     assert.equal(result.name, FAKE_PROVIDER_NAME);

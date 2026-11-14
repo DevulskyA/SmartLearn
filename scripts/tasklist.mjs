@@ -11,30 +11,24 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const SYMBOL = { '✓': '✓', '>': '>', ' ': ' ', '!': '!', '-': '-', H: 'H' };
-export const LABEL = { '✓': 'concluída', '>': 'ativa', ' ': 'pendente', '!': 'bloqueada', '-': 'adiada' };
+const LABEL = { '✓': 'concluída', '>': 'ativa', ' ': 'pendente', '!': 'bloqueada', '-': 'adiada' };
 
 // Structured fields a task may carry (one per line, `KEY: text`, continuation lines append to the last key).
 // Legacy free-text tasks simply have none and keep showing their plain detail.
-export const FIELD_ORDER = [
+const FIELD_ORDER = [
   'SPRINT_GOAL', 'BEFORE', 'AFTER', 'WHY', 'SCOPE', 'DETAILS', 'PROOF', 'DONE_WHEN', 'FILES_IN_FLIGHT', 'DEPENDENCIES',
   'EVIDENCE', 'PRODUCT_DELTA', 'PROOF_OBSERVED', 'USER_VALUE', 'NOT_PROVEN', 'PERGUNTA', 'COMMIT',
 ];
-const FIELD_LABEL = {
-  SPRINT_GOAL: 'Objetivo', BEFORE: 'Antes', AFTER: 'Depois', WHY: 'Por quê', SCOPE: 'Escopo', DETAILS: 'Detalhes', PROOF: 'Prova prevista',
-  DONE_WHEN: 'Pronto quando', FILES_IN_FLIGHT: 'Arquivos em andamento', DEPENDENCIES: 'Dependências', EVIDENCE: 'Evidência',
-  PRODUCT_DELTA: 'O que melhorou', PROOF_OBSERVED: 'Prova observada', USER_VALUE: 'Valor para o aluno', NOT_PROVEN: 'Não provado',
-  PERGUNTA: 'Pergunta de fechamento', COMMIT: 'Commit',
-};
 const FIELD_KEYS = new Set([...FIELD_ORDER, 'OWNER']);
 
-export function parseFields(lines) {
+function parseFields(lines) {
   const fields = {};
   const free = [];
   let last = null;
   for (const raw of lines) {
     const line = raw.trim();
-    const m = line.match(/^([A-Z_]+):\s*(.*)$/);
-    if (m && FIELD_KEYS.has(m[1])) { last = m[1]; fields[last] = m[2]; continue; }
+    const m = line.match(/^([A-Z_]+):(.*)$/);
+    if (m && FIELD_KEYS.has(m[1])) { last = m[1]; fields[last] = m[2].trimStart(); continue; }
     if (last) fields[last] = `${fields[last]} ${line}`.trim();
     else free.push(line);
   }
@@ -43,20 +37,22 @@ export function parseFields(lines) {
 
 export function parsePlan(markdown) {
   const text = markdown.replace(/\r\n/g, '\n');
-  const title = (text.match(/^# TRACK:\s*(.+)$/m) ?? text.match(/^# (.+)$/m) ?? [])[1]?.trim() ?? '(track sem título)';
+  const trackTitle = text.match(/^# TRACK:\s*(\S.*)$/m);
+  const fallbackTitle = text.match(/^# (.+)$/m);
+  const title = trackTitle?.[1]?.trim() ?? fallbackTitle?.[1]?.trim() ?? '(track sem título)';
   const status = (text.match(/Status:\s*([A-Z_]+)/) ?? [])[1] ?? 'UNKNOWN';
   const tasks = [];
   const skipped = [];
   const lines = text.split('\n');
   for (let i = 0; i < lines.length; i++) {
     // generated plan (scripts/plan-sync.mjs): one panel item per PHASE heading "### [state] HR-n · title"
-    const ph = lines[i].match(/^### \[(✓|>| |!|H)\] (\S+) · (.+)$/);
+    const ph = lines[i].match(/^### \[([✓> !H])\] (\S+) · (.+)$/);
     if (ph) { tasks.push({ state: ph[1], id: ph[2], title: splitPhaseTitle(ph[3]).title, detail: '', fields: {}, free: '', owner: null }); continue; }
-    const m = lines[i].match(/^- \[(✓|>| |!|-)\] \*\*([A-Z]+(?:-\d+)?)\s+(.+?)\*\*\s*(?:—\s*(.*))?$/);
+    const m = parseTaskLine(lines[i]);
     if (!m) {
       // a task-shaped line the id pattern rejected (e.g. "A11Y-1", "LARGE-PDF-1") would silently vanish from the board
-      const bad = lines[i].match(/^- \[(?:✓|>| |!|-)\] \*\*(\S+)/);
-      if (bad && !/^T-/.test(bad[1])) skipped.push(bad[1]); // T-… lines are the generated plan's task rows (not panel items)
+      const bad = lines[i].match(/^- \[([✓> !-])\] \*\*(\S+)/);
+      if (bad && !/^T-/.test(bad[2])) skipped.push(bad[2]); // T-… lines are the generated plan's task rows (not panel items)
       continue;
     }
     const detail = [m[4] ?? ''];
@@ -65,17 +61,56 @@ export function parsePlan(markdown) {
     tasks.push({ state: m[1], id: m[2], title: m[3].trim(), detail: detail.join(' ').trim(), fields, free: free.join(' ').trim(), owner: fields.OWNER ?? null });
   }
   // generated plan: the single [>] task row names the active TASK; the panel shows it as the goal of the active phase
-  const running = text.match(/^\s*- \[>\] \*\*(T-[A-Z0-9]+-\d+[a-z]?)\*\* — (.+)$/m);
+  const running = lines.map((line) => line.trimStart()).map((line) => line.match(/^- \[>\] \*\*(T-[A-Z0-9]+-\d+[a-z]?)\*\* — (.+)$/)).find(Boolean);
   const activePhase = tasks.find((t) => t.state === '>');
   if (running && activePhase) activePhase.fields = { ...activePhase.fields, SPRINT_GOAL: `${running[1]} — ${running[2]}` };
   return { title, status, tasks, skipped };
 }
 
 /** Splits "S3 · Verdade do runner — tarefas 0/3 · subtarefas 13/14" into the title and its counts (counts are generated, never typed). */
-export function splitPhaseTitle(raw) {
-  const m = raw.match(/^(.*?)\s+—\s+tarefas (\d+)\/(\d+)(?: · subtarefas (\d+)\/(\d+))?$/);
-  if (!m) return { title: raw.trim(), tasks: null, subs: null };
-  return { title: m[1].trim(), tasks: { done: +m[2], total: +m[3] }, subs: m[4] === undefined ? null : { done: +m[4], total: +m[5] } };
+function splitPhaseTitle(raw) {
+  const countsMatch = findPhaseCounts(raw);
+  if (!countsMatch) return { title: raw.trim(), tasks: null, subs: null };
+  return countsMatch;
+}
+
+function parseTaskLine(line) {
+  const prefix = line.match(/^- \[([✓> !-])\] \*\*([A-Z]+(?:-\d+)?)/);
+  if (!prefix) return null;
+  const remainder = line.slice(prefix[0].length);
+  const separator = remainder.match(/^\s+/);
+  if (!separator) return null;
+  let titleAndSuffix = remainder.slice(separator[0].length);
+  if (titleAndSuffix.startsWith('**') && separator[0].length > 0) titleAndSuffix = ` ${titleAndSuffix}`;
+  let marker = titleAndSuffix.indexOf('**');
+  while (marker !== -1) {
+    const suffix = titleAndSuffix.slice(marker + 2);
+    const afterWhitespace = suffix.trimStart();
+    const validSuffix = afterWhitespace === '' || afterWhitespace.startsWith('—');
+    if (validSuffix) {
+      const detail = afterWhitespace.startsWith('—') ? afterWhitespace.slice(1).trimStart() : '';
+      return [line, prefix[1], prefix[2], titleAndSuffix.slice(0, marker), detail];
+    }
+    marker = titleAndSuffix.indexOf('**', marker + 2);
+  }
+  return null;
+}
+
+function findPhaseCounts(raw) {
+  let marker = raw.indexOf('—');
+  while (marker !== -1) {
+    const title = raw.slice(0, marker);
+    const counts = raw.slice(marker + 1).match(/^\s+tarefas (\d+)\/(\d+)(?: · subtarefas (\d+)\/(\d+))?$/);
+    if (/\s$/.test(title) && counts) {
+      return {
+        title: title.trim(),
+        tasks: { done: +counts[1], total: +counts[2] },
+        subs: counts[3] === undefined ? null : { done: +counts[3], total: +counts[4] },
+      };
+    }
+    marker = raw.indexOf('—', marker + 1);
+  }
+  return null;
 }
 
 /**
@@ -83,18 +118,36 @@ export function splitPhaseTitle(raw) {
  * AGORA (the active task, full tree) · PRÓXIMO (READY blocks with their subtasks) · ROADMAP (one line per task, by phase) · BLOQUEADAS ·
  * DECISÕES HUMANAS PENDENTES. No plan.md parsing here: there is one projection, not two.
  */
-export function viewHtml(model, { title = '', marco = '', validationLine = '' } = {}) {
+function viewHtml(model, { title = '', marco = '', validationLine = '' } = {}) {
   const sub = (r) => `<li class="t s${Math.min(r.depth, 4)}${r.mark === '>' ? ' now' : ''}"><span class="m">[${r.mark}]</span><span class="x">${esc(r.text)}${r.mark === '>' ? ' <span class="muted">← em execução</span>' : ''}</span></li>`;
   const row = (r) => `<li class="t${r.indent ? ' sub' : ''}${r.mark === '>' ? ' now' : ''}"><span class="m">[${r.mark}]</span><span class="x">${esc(r.id)} — ${esc(r.title + r.note)}</span></li>`;
   const fact = (f) => `<li class="t f"><span class="m"></span><span class="x"><strong>${esc(f.label)}:</strong> ${esc(f.text)}</span></li>`;
   const ptr = (id, text) => `<li class="t p"><span class="m">·</span><span class="x">${esc(id)} — ${esc(text)}</span></li>`;
   const none = '<li class="t muted"><span class="m"></span><span class="x">—</span></li>';
   const a = model.active;
-  const agora = `<h2>AGORA</h2><ul>${a ? `${ptr(a.id, `${a.title} · ${a.group} · subtarefas ${a.counts.done}/${a.counts.total}`)}${a.facts.map(fact).join('')}${a.subtasks.map(sub).join('')}` : none}</ul>`;
-  const proximo = `<h2>PRÓXIMO (${model.ready.length})</h2>${model.ready.map((r) => `<h3>${esc(r.id)} — ${esc(r.label)}${r.ready ? ` · subtarefas ${r.counts.done}/${r.counts.total}` : ''} — ${esc(r.title)}</h3><ul>${fact({ label: 'Por quê', text: r.why })}${r.subtasks.map(sub).join('')}</ul>`).join('') || `<ul>${none}</ul>`}`;
+  const activeDetails = a
+    ? ptr(a.id, `${a.title} · ${a.group} · subtarefas ${a.counts.done}/${a.counts.total}`) + a.facts.map(fact).join('') + a.subtasks.map(sub).join('')
+    : none;
+  const agora = `<h2>AGORA</h2><ul>${activeDetails}</ul>`;
+  const readyItem = (item) => {
+    const count = item.ready ? ` · subtarefas ${item.counts.done}/${item.counts.total}` : '';
+    const why = fact({ label: 'Por quê', text: item.why });
+    const subtasks = item.subtasks.map(sub).join('');
+    return `<h3>${esc(item.id)} — ${esc(item.label)}${count} — ${esc(item.title)}</h3><ul>${why}${subtasks}</ul>`;
+  };
+  const readyItems = model.ready.map(readyItem).join('');
+  const readyBody = readyItems || `<ul>${none}</ul>`;
+  const proximo = `<h2>PRÓXIMO (${model.ready.length})</h2>${readyBody}`;
   const phases = model.phases.map((p) => `<h3>[${p.state}] ${esc(p.id)} — ${esc(p.title)} · tarefas ${p.done}/${p.total}</h3><ul>${p.rows.map(row).join('')}</ul>`).join('');
-  const bloqueadas = `<h2>BLOQUEADAS (${model.blocked.length})</h2><ul>${model.blocked.map((b) => ptr(b.id, `BLOQUEADA → ${b.chain}`)).join('') || none}</ul>`;
-  const decisoes = `<h2>DECISÕES HUMANAS PENDENTES (${model.decisions.length})</h2><ul>${model.decisions.map((d) => ptr(d.id, `${d.title} · ${d.text}${d.after.length ? ` (após ${d.after.join(', ')})` : ''}`)).join('') || none}</ul>`;
+  const blockedItems = model.blocked.map((item) => ptr(item.id, 'BLOQUEADA → ' + String(item.chain))).join('');
+  const blockedBody = blockedItems || none;
+  const bloqueadas = `<h2>BLOQUEADAS (${model.blocked.length})</h2><ul>${blockedBody}</ul>`;
+  const decisionItems = model.decisions.map((item) => {
+    const after = item.after.length ? ' (após ' + item.after.join(', ') + ')' : '';
+    return ptr(item.id, `${item.title} · ${item.text}${after}`);
+  }).join('');
+  const decisionBody = decisionItems || none;
+  const decisoes = `<h2>DECISÕES HUMANAS PENDENTES (${model.decisions.length})</h2><ul>${decisionBody}</ul>`;
   const g = model.progress;
   const activeSub = g.active ? ` · subtarefas da ativa ${esc(g.active.id)} ${g.active.done}/${g.active.total}` : '';
   return `<p class="hdr"><strong>TRACK:</strong> ${esc(title)}<br><strong>MARCO ATUAL:</strong> ${esc(marco || model.marco)}<br><strong>PROGRESSO:</strong> tarefas ${g.tasksDone}/${g.tasksTotal}${activeSub}</p>
@@ -134,7 +187,8 @@ export const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt
  * (e.g. the other agent's one-line state).
  */
 export function renderChecklistHtml({ title = 'SMARTLEARN — DESENVOLVIMENTO', tasks, extraLines = [], keepDone = 6, testsHtml = '', view = null, validationLine = '' }) {
-  const mark = (t) => (t.state === '-' ? '!' : t.state === '✓' ? '✓' : t.state === '>' ? '>' : t.state === '!' ? '!' : t.state === 'H' ? 'H' : ' ');
+  const stateMarks = { '-': '!', '✓': '✓', '>': '>', '!': '!', H: 'H' };
+  const mark = (t) => Object.hasOwn(stateMarks, t.state) ? stateMarks[t.state] : ' ';
   const line = (t) => `<li class="t${mark(t) === '>' ? ' now' : ''}"><span class="m">[${mark(t)}]</span> ${esc(t.id)} — ${esc(t.title)}</li>`;
   const done = tasks.filter((t) => t.state === '✓');
   const shownDone = done.slice(-keepDone);
@@ -144,6 +198,14 @@ export function renderChecklistHtml({ title = 'SMARTLEARN — DESENVOLVIMENTO', 
   const active = tasks.find((t) => t.state === '>');
   const goal = active ? (active.fields?.SPRINT_GOAL || active.title) : null;
   const older = done.length - shownDone.length;
+  const activeGoal = goal
+    ? `<div class="goal"><strong>TAREFA ATIVA AGORA:</strong><p>${esc(active.id)} — ${esc(goal)}</p></div>`
+    : '<div class="goal"><strong>TAREFA ATIVA AGORA:</strong><p>nenhuma</p></div>';
+  const olderLine = older > 0 ? `<li class="t muted">… +${older} concluídas antes</li>` : '';
+  const renderedTasks = olderLine + shownDone.map(line).join('') + upcoming.map(line).join('');
+  const taskListBody = view
+    ? viewHtml(view, { title, validationLine })
+    : `<ul>${renderedTasks}</ul>`;
   return `<!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="refresh" content="5"><title>SmartLearn — tasklist</title>
@@ -159,8 +221,8 @@ ul{list-style:none;margin:0;padding:0}.t{padding:.05rem 0;display:flex;gap:.4rem
 .tl{margin:.5rem 0;font-size:.85rem;line-height:1.5}.tl .st{font-weight:700}.tl.pass .st{color:#1f8a4c}.tl.fail .st,.tl.aborted .st{color:#c0392b}.tl.stale .st{color:#b7791f}.tl.running .st{color:var(--now)}
 </style></head><body><main>
 <h1>${esc(title)}</h1>
-${view ? viewHtml(view, { title, validationLine }) : `<ul>${older > 0 ? `<li class="t muted">… +${older} concluídas antes</li>` : ''}${shownDone.map(line).join('')}${upcoming.map(line).join('')}</ul>`}
-${goal ? `<div class="goal"><strong>TAREFA ATIVA AGORA:</strong><p>${esc(active.id)} — ${esc(goal)}</p></div>` : '<div class="goal"><strong>TAREFA ATIVA AGORA:</strong><p>nenhuma</p></div>'}
+${taskListBody}
+${activeGoal}
 ${extraLines.map((l) => `<p class="muted">${esc(l)}</p>`).join('')}
 ${testsHtml}
 </main></body></html>`;

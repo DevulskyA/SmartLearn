@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { test, expect } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -51,7 +52,7 @@ test.beforeEach(async ({ page }) => {
     window.__SMARTLEARN_API_BASE__ = base;
     window.__SMARTLEARN_REMOTE_MODE__ = true;
   }, API_BASE);
-  const email = `subj-catalog-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+  const email = `subj-catalog-${Date.now()}-${randomUUID()}@example.com`;
   const password = 'a genuinely long test password 1';
   await signInRegistered(page, { email: email, password: password });
 
@@ -61,6 +62,12 @@ test.beforeEach(async ({ page }) => {
   await page.locator('#subjects-new-name').fill('Cardiologia');
   await page.locator('#subjects-create-save-btn').click();
   await expect(page.locator('.subject-catalog-card', { hasText: 'Cardiologia' })).toBeVisible({ timeout: 5000 });
+});
+
+test('an empty discipline says so and where to add content, instead of showing "0 aulas"', async ({ page }) => {
+  const meta = page.locator('.subject-catalog-card', { hasText: 'Cardiologia' }).locator('.subject-catalog-meta');
+  await expect(meta).toContainText('Nenhum resumo ainda — adicione em Materiais');
+  await expect(meta).not.toContainText('0 aulas');
 });
 
 test('a failed Arquivar tells the student, instead of doing nothing', async ({ page }) => {

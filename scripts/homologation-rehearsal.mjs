@@ -18,7 +18,11 @@ const MIGRATIONS_DIR = fileURLToPath(new URL('../server/migrations', import.meta
 const FROM = 34;
 const TO = Math.max(...readdirSync(MIGRATIONS_DIR).filter((f) => /^\d+-.*\.sql$/.test(f)).map((f) => Number(f.slice(0, 3))));
 const checks = [];
-const check = (name, pass, detail = '') => { checks.push({ name, status: pass ? 'PASS' : 'FAIL', detail }); if (!pass) console.error(`FAIL ${name} ${detail}`); return pass; };
+const check = (name, pass, detail = '') => {
+  checks.push({ name, status: pass ? 'PASS' : 'FAIL', detail });
+  if (!pass) console.error(`FAIL ${name} ${detail}`);
+  return pass;
+};
 
 const work = mkdtempSync(join(tmpdir(), 'sl-homologation-'));
 if (work.toLowerCase().includes('smartlearn-devdata')) throw new Error('refusing to run inside the human DEV datastore');
@@ -61,7 +65,12 @@ try {
   db = openDb(dbPath);
   runMigrations(db, MIGRATIONS_DIR);
   check(`schema is now v${TO}`, db.prepare('SELECT MAX(version) AS v FROM schema_migrations').get().v === TO);
-  check('checksums of every applied migration match the files', (() => { try { validateMigrations(db); return true; } catch (e) { return false; } })());
+  check('checksums of every applied migration match the files', (() => {
+    try { validateMigrations(db); return true; } catch {
+      // This rehearsal records validation failure as a failed check so it can continue and report later checks.
+      return false;
+    }
+  })());
   check('integrity_check ok', db.pragma('integrity_check', { simple: true }) === 'ok');
   check('foreign_key_check clean', db.pragma('foreign_key_check').length === 0);
   const after = tableCounts(db);

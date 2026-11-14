@@ -1,16 +1,20 @@
 import { test, expect } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import Database from '../server/node_modules/better-sqlite3/lib/index.js';
+import { createRequire } from 'node:module';
+const requireServerDependency = createRequire(new URL('../server/package.json', import.meta.url));
+const Database = requireServerDependency('better-sqlite3');
 import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.js';
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
 import { waitForServerReady } from './support/wait-for-server.js';
 import { signInRegistered } from './support/session.js';
 import { startEditingSummary } from './support/summary-editing.js';
 
+import { generateByPages, openDraftInProgress } from './support/materials-flow.js';
 // LESSON EDITOR (VALID-4 defect register): a draft is SUMMARY + QUESTIONS[] + SOURCE + REVIEW, each its own area, each saved on
 // its own, and the rest of the book is never a vertical continuation of the lesson being edited. Real server, FAKE provider:
 // no model is ever called by this spec.
@@ -54,7 +58,7 @@ test.beforeEach(async ({ page }) => {
     window.__SMARTLEARN_REMOTE_MODE__ = true;
     window.__SMARTLEARN_LOCAL_AUTHORITY__ = true;
   }, API_BASE);
-  const email = `lesson-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+  const email = `lesson-${Date.now()}-${randomUUID()}@example.com`;
   const password = 'a genuinely long test password 1';
   await signInRegistered(page, { email: email, password: password });
 });
@@ -65,7 +69,7 @@ async function openLesson(page, name = 'aula.pdf') {
   const pdf = buildFixturePdf(['Fisiologia renal: filtração glomerular', 'Barreira de filtração e podócitos', 'Clearance de inulina mede a TFG']);
   await page.setInputFiles('#sources-file-input', { name, mimeType: 'application/pdf', buffer: pdf });
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
-  await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
+  await generateByPages(page);
   await expect(page.locator('.lesson-editor')).toBeVisible({ timeout: 10000 });
   await startEditingSummary(page);
 }
@@ -77,9 +81,7 @@ test('the draft opens as a lesson editor with four separate areas; the rest of t
   await expect(editor.locator('[role="tab"]')).toHaveText([/Resumo/, /Questões/, /Fonte/, /Revisão/]);
   await expect(editor.locator('[role="tab"][aria-selected="true"]')).toContainText('Resumo');
   // nothing from the index/other units can live inside the editor
-  await expect(editor.locator('.source-proposal-item')).toHaveCount(0);
   await expect(editor.locator('.source-topic-item')).toHaveCount(0);
-  await expect(editor.locator('[data-action="generate-draft"]')).toHaveCount(0);
   await expect(editor.locator('[data-action="generate-topic"]')).toHaveCount(0);
   // each area is its own panel
   await expect(editor.locator('[role="tabpanel"]:not([hidden])')).toHaveCount(1);
@@ -105,7 +107,7 @@ test('"Voltar às unidades" leaves the editor and shows the list again', async (
   await page.locator('[data-action="lesson-back"]').click();
   await expect(page.locator('.lesson-editor')).toHaveCount(0);
   await expect(page.locator('#sources-card')).toBeVisible();
-  await expect(page.locator('.source-proposal-item [data-action="open-draft"]').first()).toBeVisible();
+  await expect(page.locator('#sources-drafts-list [data-action="open-draft-in-progress"]').first()).toBeVisible();
 });
 
 test('saving the summary sends ONE request to the summary and touches no question', async ({ page }) => {
@@ -311,7 +313,7 @@ test('a processed document is reopened from "Documentos já enviados" without se
   await expect(existing).toBeVisible({ timeout: 10000 });
   await existing.locator('[data-action="open-source"]').click();
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
-  await page.locator('.source-proposal-item').first().locator('[data-action="open-draft"]').click();
+  await openDraftInProgress(page);
   await expect(page.locator('.lesson-editor')).toBeVisible({ timeout: 10000 });
   await startEditingSummary(page);
   await expect(page.locator('.lesson-editor .lesson-summary-input')).not.toHaveValue('');
@@ -343,7 +345,7 @@ test('RELOAD: a saved question and a saved summary survive a full page reload; u
   await page.locator('[data-screen="materials"]').click();
   await page.locator('#sources-existing-list .source-existing-item', { hasText: 'recarga.pdf' }).locator('[data-action="open-source"]').click();
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
-  await page.locator('.source-proposal-item').first().locator('[data-action="open-draft"]').click();
+  await openDraftInProgress(page);
   await expect(editor).toBeVisible({ timeout: 10000 });
   await startEditingSummary(page);
   await expect(editor.locator('.lesson-summary-input')).toHaveValue('Resumo persistido após recarga');
@@ -359,7 +361,6 @@ test('a draft in progress is listed under "Rascunhos em andamento", outside the 
   const box = page.locator('#sources-drafts');
   await expect(box).toBeVisible();
   await expect(box.locator('.source-draft-item')).toHaveCount(1);
-  await expect(page.locator('#sources-index').locator('#sources-drafts')).toHaveCount(0);
   await box.getByRole('button', { name: /Revisar resumo/ }).click();
   await expect(page.locator('.lesson-editor')).toBeVisible({ timeout: 10000 });
   await startEditingSummary(page);
@@ -431,7 +432,8 @@ test('T-F2-03: a draft audited by older rules says so on open (nothing written);
   const check = new Database(dbPath, { readonly: true });
   try {
     const after = check.prepare('SELECT draft_json, revision FROM generated_drafts WHERE id = ?').get(before.id);
-    const { audit: _a, ...restBefore } = JSON.parse(before.draft_json);
+    const restBefore = JSON.parse(before.draft_json);
+    delete restBefore.audit;
     const { audit, ...restAfter } = JSON.parse(after.draft_json);
     expect(restAfter).toEqual(restBefore);
     expect(after.revision).toBe(before.revision);

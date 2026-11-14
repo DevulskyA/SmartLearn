@@ -1,6 +1,7 @@
 // Studies and Subjects screens.
 export default Object.freeze({
   'subjects.card.archived': 'Archived',
+  'subjects.card.empty': 'No summary yet — add one in Materials',
   'subjects.card.lessons.one': '{count} lesson',
   'subjects.card.lessons.other': '{count} lessons',
   'subjects.card.average': 'Average: {accuracy}',

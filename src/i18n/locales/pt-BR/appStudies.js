@@ -2,6 +2,7 @@
 export default {
   // Disciplinas catalog cards
   'subjects.card.archived': 'Arquivada',
+  'subjects.card.empty': 'Nenhum resumo ainda — adicione em Materiais',
   'subjects.card.lessons.one': '{count} aula',
   'subjects.card.lessons.other': '{count} aulas',
   'subjects.card.average': '{accuracy} média',

@@ -43,7 +43,7 @@ export function openPdfCropDialog({ sourceId = null, pageIndex = 1 } = {}) {
   return new Promise((resolve) => {
     const previouslyFocused = document.activeElement;
     const dialog = el("dialog", "pdf-crop-dialog");
-    const titleId = `pdf-crop-title-${Math.random().toString(36).slice(2)}`;
+    const titleId = `pdf-crop-title-${globalThis.crypto.randomUUID()}`;
     dialog.setAttribute("aria-labelledby", titleId);
     const title = el("h2", "", t("summary.pdfCrop.title"));
     title.id = titleId;

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { test, expect } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -52,43 +53,15 @@ async function openMateriaisWithTrechos(page) {
     window.__SMARTLEARN_REMOTE_MODE__ = true;
     window.__SMARTLEARN_LOCAL_AUTHORITY__ = true;
   }, API_BASE);
-  const email = `a11y-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+  const email = `a11y-${Date.now()}-${randomUUID()}@example.com`;
   const password = 'a genuinely long test password 1';
   await signInRegistered(page, { email: email, password: password });
   await page.locator('[data-screen="materials"]').click();
   await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
   await page.setInputFiles('#sources-file-input', { name: 'aula.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf(PAGES, { outline: OUTLINE }) });
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
-  await expect(page.locator('.source-proposal-item')).toHaveCount(2);
+  await expect(page.locator('#sources-range-form')).toBeVisible();
 }
-
-test('every trecho has a title field with its own accessible name, and its buttons say which trecho they act on', async ({ page }) => {
-  await openMateriaisWithTrechos(page);
-  await expect(page.getByRole('textbox', { name: 'Título do trecho, páginas 1–2' })).toHaveCount(1);
-  await expect(page.getByRole('textbox', { name: 'Título do trecho, páginas 3–4' })).toHaveCount(1);
-
-  // the visible label of each button stays as it is; the trecho it belongs to is its accessible description
-  const described = await page.evaluate(() => [...document.querySelectorAll('.source-proposal-item')].map((item) => (
-    [...item.querySelectorAll(':scope > button')].map((b) => document.getElementById(b.getAttribute('aria-describedby') ?? '')?.textContent?.trim() ?? null)
-  )));
-  expect(described[0].every((d) => d === 'Páginas 1–2')).toBe(true);
-  expect(described[1].every((d) => d === 'Páginas 3–4')).toBe(true);
-  expect(new Set(described.flat()).size).toBe(2);
-});
-
-test('the title field is a comfortable target (at least 40px tall) with a visible focus ring, at 375px', async ({ page }) => {
-  await page.setViewportSize({ width: 375, height: 800 });
-  await openMateriaisWithTrechos(page);
-  const input = page.locator('.source-proposal-title-input').first();
-  const box = await input.boundingBox();
-  expect(box.height).toBeGreaterThanOrEqual(40);
-  await input.focus();
-  await page.keyboard.press('Shift+Tab');
-  await page.keyboard.press('Tab'); // a keyboard focus, so :focus-visible applies
-  const ring = await input.evaluate((el) => { const cs = getComputedStyle(el); return { style: cs.outlineStyle, width: parseFloat(cs.outlineWidth) }; });
-  expect(ring.style).not.toBe('none');
-  expect(ring.width).toBeGreaterThanOrEqual(2);
-});
 
 test('with the browser text size at 200% the page does not scroll horizontally at a 375px viewport (reflow)', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 800 });

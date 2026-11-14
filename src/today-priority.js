@@ -18,7 +18,7 @@ export function reviewTier({ exerciseIds = [], judgedIds = new Set(), priorWrong
   return unjudged.some((id) => priorWrongIds.has(id)) ? 0 : 1;
 }
 
-export function reinforceCount({ exerciseIds = [], judgedIds = new Set(), priorWrongIds = new Set() }) {
+function reinforceCount({ exerciseIds = [], judgedIds = new Set(), priorWrongIds = new Set() }) {
   return exerciseIds.filter((id) => !judgedIds.has(id) && priorWrongIds.has(id)).length;
 }
 

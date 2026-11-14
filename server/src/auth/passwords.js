@@ -8,7 +8,7 @@ const scryptAsync = promisify(scrypt);
 // N=131072 hashes (~2 s of a ~3.5 s sign-in). It is honored ONLY when NODE_ENV is exactly 'test' (every e2e server sets it), is refused
 // by validateProductionConfig, and verifyPassword always uses the params stored with each hash, so production hashing and any hash
 // made with the real params are untouched. Server unit tests do not set it and keep proving the real parameters.
-export const FAST_SCRYPT_FOR_TESTS = process.env.NODE_ENV === 'test' && process.env.SMARTLEARN_TEST_FAST_SCRYPT === '1';
+const FAST_SCRYPT_FOR_TESTS = process.env.NODE_ENV === 'test' && process.env.SMARTLEARN_TEST_FAST_SCRYPT === '1';
 export const SCRYPT_PARAMS = Object.freeze({
   N: FAST_SCRYPT_FOR_TESTS ? 1024 : 131072,
   r: 8,
@@ -18,7 +18,7 @@ export const SCRYPT_PARAMS = Object.freeze({
 });
 
 export const PASSWORD_MIN_CODEPOINTS = 8;
-export const PASSWORD_MAX_UTF8_BYTES = 1024;
+const PASSWORD_MAX_UTF8_BYTES = 1024;
 
 // Bound parallel hashing: scrypt with these params is CPU/memory heavy.
 // Unbounded concurrent hashing is a trivial DoS vector against health/other
@@ -34,7 +34,7 @@ const MAX_CONCURRENT_HASH_JOBS = 2;
 // not depend on every current and future caller getting its own limiter
 // right.
 const MAX_QUEUE_LENGTH = 100;
-export class HashQueueOverloadedError extends Error {
+class HashQueueOverloadedError extends Error {
   constructor() { super('Password hashing queue is overloaded.'); this.code = 'HASH_QUEUE_OVERLOADED'; }
 }
 let activeJobs = 0;

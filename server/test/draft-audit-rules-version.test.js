@@ -20,7 +20,7 @@ const UPLOAD_DEFAULTS = { maxBytes: 25 * 1024 * 1024, quotaBytes: 200 * 1024 * 1
 // T-F2-03 bump rule: the rule set is draft-audit.js + language-detect.js + risk-checks.js + draft-audit-model.js (the model auditor's prompt and the rule that decides which of its findings may repair). Changing either changes this hash; when it does, bump
 // AUDIT_RULES_VERSION (draft-audit.js) and record the new pair here. A rule changed without a new version fails below.
 const RULES_FILES = ['../src/ai/draft-audit.js', '../src/ai/language-detect.js', '../src/ai/risk-checks.js', '../src/ai/draft-audit-model.js'];
-const PINNED = { version: 'audit-rules-12', hash: '8881bed6af28c475dd5b673dbf388bec3cd02320a6ee27fec8c6d067c21231a5' };
+const PINNED = { version: 'audit-rules-16', hash: '254176fd5faac05f5e40461adbe66f06ac7075dfd2248152143ee7a669ae37c7' };
 const rulesHash = () => createHash('sha256').update(RULES_FILES.map((f) => readFileSync(fileURLToPath(new URL(f, import.meta.url)), 'utf8').replace(/\r\n/g, '\n')).join('\n--\n')).digest('hex');
 
 test('the audit rule set cannot change without a new AUDIT_RULES_VERSION', () => {
@@ -96,7 +96,8 @@ test('reaudit changes ONLY audit: content, versions and revision are byte-identi
     const out = drafts.reauditDraft(db, userId, draftId, () => new Date('2026-10-05T10:00:00.000Z'));
     const afterRow = rowOf(db, draftId);
     const afterJson = JSON.parse(afterRow.draft_json);
-    const { audit: _oldAudit, ...beforeRest } = beforeJson;
+    const beforeRest = { ...beforeJson };
+    delete beforeRest.audit;
     const { audit: newAudit, ...afterRest } = afterJson;
     assert.deepEqual(afterRest, beforeRest, 'summary, questions, versions, provenance untouched');
     assert.equal(afterRow.revision, beforeRow.revision);

@@ -3,7 +3,9 @@
 // The destination is migrated forward with the normal migration runner first. Nothing is ever deleted.
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import Database from '../server/node_modules/better-sqlite3/lib/index.js';
+import { createRequire } from 'node:module';
+const requireServerDependency = createRequire(new URL('../server/package.json', import.meta.url));
+const Database = requireServerDependency('better-sqlite3');
 import { openDb } from '../server/src/db.js';
 import { runMigrations } from '../server/src/migrations.js';
 import { assertMigrationAuthorizedForPath } from '../server/src/migration-authorization.js';

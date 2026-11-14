@@ -53,7 +53,8 @@ function face(spec) {
   if (spec.icon) return icon(spec.icon);
   const span = document.createElement("span");
   span.setAttribute("aria-hidden", "true");
-  span.className = `summary-visual-face${spec.faceClass ? ` ${spec.faceClass}` : ""}`;
+  const faceClass = spec.faceClass ? ` ${spec.faceClass}` : "";
+  span.className = `summary-visual-face${faceClass}`;
   span.textContent = spec.face;
   return span;
 }
@@ -70,6 +71,110 @@ function button(spec, onClick) {
   b.addEventListener("mousedown", (event) => event.preventDefault()); // clicking a tool keeps the caret in the text
   b.addEventListener("click", onClick);
   return b;
+}
+
+// ---- drawing of the atoms -----------------------------------------------------------------------------------------
+// A formula is drawn by KaTeX like on every screen; activating it (click, Enter) turns it into a visual MathLive field IN PLACE, and
+// confirming (Enter, leaving it) draws it again. Chemistry (\ce, \pu) cannot be edited visually: the dialog handles those.
+function createMathNodeView(first, getPos, ed, inline, status, formulaSession) {
+  let current = first;
+  let field = null;
+  let starting = false;
+  const dom = document.createElement(inline ? "span" : "div");
+  dom.className = inline ? "summary-math-node" : "summary-math-node summary-math-node-block";
+  dom.contentEditable = "false";
+  const draw = () => { if (!field) dom.replaceChildren(renderMathElement(current.attrs.tex, !inline, () => startEdit())); };
+  const apply = (tex) => ed.view.dispatch(ed.state.tr.setNodeMarkup(getPos(), undefined, { ...current.attrs, tex }));
+  const remove = () => { const pos = getPos(); ed.view.dispatch(ed.state.tr.delete(pos, pos + current.nodeSize)); };
+
+  function finish(confirm) {
+    if (!field) return true;
+    const value = field.getValue("latex").trim();
+    if (confirm && value !== "") {
+      const problem = mathProblem(value, !inline);
+      if (problem) { field.setAttribute("aria-invalid", "true"); status.textContent = `${t("summary.math.invalid")}: ${problem}`; return false; }
+    }
+    status.textContent = "";
+    const old = field;
+    field = null;
+    formulaSession.commit = null;
+    old.remove();
+    if (confirm && value !== "") { if (value !== current.attrs.tex) apply(value); else draw(); }
+    else if (current.attrs.tex === "") remove(); // a new formula that was never typed leaves no trace
+    else draw();
+    ed.commands.focus();
+    return true;
+  }
+
+  async function viaDialog() {
+    const chosen = await openMathDialog({ tex: current.attrs.tex, display: !inline, lockDisplay: true });
+    if (chosen) apply(chosen.tex);
+    else if (current.attrs.tex === "") remove();
+    ed.commands.focus();
+  }
+
+  async function startEdit() {
+    if (field || starting) return;
+    starting = true;
+    try {
+      if (/\\(?:ce|pu)\b/.test(current.attrs.tex)) { await viaDialog(); return; }
+      let module;
+      try { module = await loadMathLive(); } catch { await viaDialog(); return; }
+      if (field) return;
+      field = new module.MathfieldElement();
+      field.className = "summary-math-field";
+      field.setAttribute("aria-label", t("summary.math.inplace"));
+      // the symbol keyboard (fractions, roots, Greek letters, indices) opens with the field: the student picks symbols, nothing to type or to know
+      field.mathVirtualKeyboardPolicy = "onfocus";
+      field.value = current.attrs.tex;
+      field.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.stopPropagation(); finish(true); }
+        else if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); finish(false); }
+      });
+      const openedAt = Date.now();
+      let focusField = () => {};
+      field.addEventListener("focusout", () => setTimeout(() => {
+        if (!field) return;
+        if (Date.now() - openedAt < 500) { focusField(); return; } // the text takes the focus back right after an insertion: the field asks for it again
+        const active = document.activeElement;
+        if (dom.contains(active) || active?.closest?.(".MLK__backdrop, .ML__keyboard, .ML__popover")) return;
+        finish(true);
+      }, 0));
+      dom.replaceChildren(field);
+      formulaSession.commit = () => finish(true);
+      // MathLive finishes attaching asynchronously: take the focus again until it holds it, or the typed keys would go to the page
+      let tries = 0;
+      focusField = () => {
+        if (!field) return;
+        field.focus();
+        if (document.activeElement === field) { field.dataset.ready = "true"; return; }
+        if ((tries += 1) < 30) requestAnimationFrame(focusField);
+      };
+      focusField();
+    } finally { starting = false; }
+  }
+  dom.startEdit = startEdit;
+  draw();
+  return {
+    dom,
+    update(next) {
+      if (next.type !== current.type) return false;
+      current = next;
+      draw();
+      return true;
+    },
+    stopEvent: (event) => Boolean(field) && dom.contains(event.target),
+    ignoreMutation: () => true,
+    destroy() { if (formulaSession.commit && field) formulaSession.commit = null; },
+  };
+}
+
+function mathView(base, inline, status, formulaSession) {
+  return base.extend({
+    addNodeView() {
+      return ({ node: first, getPos, editor: ed }) => createMathNodeView(first, getPos, ed, inline, status, formulaSession);
+    },
+  });
 }
 
 /**
@@ -147,102 +252,8 @@ export function createVisualSummaryEditor(textarea, { openSource = null, editInT
     editor.view.updateState(EditorState.create({ doc: editor.state.doc, plugins: editor.state.plugins }));
   }
 
-  // ---- drawing of the atoms -----------------------------------------------------------------------------------------
-  // A formula is drawn by KaTeX like on every screen; activating it (click, Enter) turns it into a visual MathLive field IN PLACE, and
-  // confirming (Enter, leaving it) draws it again. Chemistry (\ce, \pu) cannot be edited visually: the dialog handles those.
-  const mathView = (base, inline) => base.extend({
-    addNodeView() {
-      return ({ node: first, getPos, editor: ed }) => {
-        let current = first;
-        let field = null;
-        let starting = false;
-        const dom = document.createElement(inline ? "span" : "div");
-        dom.className = inline ? "summary-math-node" : "summary-math-node summary-math-node-block";
-        dom.contentEditable = "false";
-        const draw = () => { if (!field) dom.replaceChildren(renderMathElement(current.attrs.tex, !inline, () => startEdit())); };
-        const apply = (tex) => ed.view.dispatch(ed.state.tr.setNodeMarkup(getPos(), undefined, { ...current.attrs, tex }));
-        const remove = () => { const pos = getPos(); ed.view.dispatch(ed.state.tr.delete(pos, pos + current.nodeSize)); };
-
-        function finish(confirm) {
-          if (!field) return true;
-          const value = field.getValue("latex").trim();
-          if (confirm && value !== "") {
-            const problem = mathProblem(value, !inline);
-            if (problem) { field.setAttribute("aria-invalid", "true"); status.textContent = `${t("summary.math.invalid")}: ${problem}`; return false; }
-          }
-          status.textContent = "";
-          const old = field;
-          field = null;
-          formulaSession.commit = null;
-          old.remove();
-          if (confirm && value !== "") { if (value !== current.attrs.tex) apply(value); else draw(); }
-          else if (current.attrs.tex === "") remove(); // a new formula that was never typed leaves no trace
-          else draw();
-          ed.commands.focus();
-          return true;
-        }
-
-        async function viaDialog() {
-          const chosen = await openMathDialog({ tex: current.attrs.tex, display: !inline, lockDisplay: true });
-          if (chosen) apply(chosen.tex);
-          else if (current.attrs.tex === "") remove();
-          ed.commands.focus();
-        }
-
-        async function startEdit() {
-          if (field || starting) return;
-          starting = true;
-          try {
-            if (/\\(?:ce|pu)\b/.test(current.attrs.tex)) { await viaDialog(); return; }
-            let module;
-            try { module = await loadMathLive(); } catch { await viaDialog(); return; }
-            if (field) return;
-            field = new module.MathfieldElement();
-            field.className = "summary-math-field";
-            field.setAttribute("aria-label", t("summary.math.inplace"));
-            // the symbol keyboard (fractions, roots, Greek letters, indices) opens with the field: the student picks symbols, nothing to type or to know
-            field.mathVirtualKeyboardPolicy = "onfocus";
-            field.value = current.attrs.tex;
-            field.addEventListener("keydown", (event) => {
-              if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.stopPropagation(); finish(true); }
-              else if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); finish(false); }
-            });
-            const openedAt = Date.now();
-            let focusField = () => {};
-            field.addEventListener("focusout", () => setTimeout(() => {
-              if (!field) return;
-              if (Date.now() - openedAt < 500) { focusField(); return; } // the text takes the focus back right after an insertion: the field asks for it again
-              const active = document.activeElement;
-              if (dom.contains(active) || active?.closest?.(".MLK__backdrop, .ML__keyboard, .ML__popover")) return;
-              finish(true);
-            }, 0));
-            dom.replaceChildren(field);
-            formulaSession.commit = () => finish(true);
-            // MathLive finishes attaching asynchronously: take the focus again until it holds it, or the typed keys would go to the page
-            let tries = 0;
-            focusField = () => {
-              if (!field) return;
-              field.focus();
-              if (document.activeElement === field) { field.dataset.ready = "true"; return; }
-              if ((tries += 1) < 30) requestAnimationFrame(focusField);
-            };
-            focusField();
-          } finally { starting = false; }
-        }
-        dom.startEdit = startEdit;
-        draw();
-        return {
-          dom,
-          update(next) { if (next.type !== current.type) return false; current = next; draw(); return true; },
-          stopEvent: (event) => Boolean(field) && dom.contains(event.target),
-          ignoreMutation: () => true,
-          destroy() { if (formulaSession.commit && field) formulaSession.commit = null; },
-        };
-      };
-    },
-  });
-  const MathInlineView = mathView(MathInline, true);
-  const MathBlockView = mathView(MathBlock, false);
+  const MathInlineView = mathView(MathInline, true, status, formulaSession);
+  const MathBlockView = mathView(MathBlock, false, status, formulaSession);
 
   // Drag (the node is draggable: a figure is a block line, so any place between two blocks) and resize (corner handles, proportion kept) come from
   // Tiptap itself; the figure inside is still the app's own (private image by id, caption, provenance, enlarge). The size is this occurrence's `width`.
@@ -305,7 +316,12 @@ export function createVisualSummaryEditor(textarea, { openSource = null, editInT
         draw();
         return {
           dom,
-          update(next) { if (next.type !== current.type) return false; current = next; draw(); return true; },
+          update(next) {
+            if (next.type !== current.type) return false;
+            current = next;
+            draw();
+            return true;
+          },
           stopEvent: (event) => event.target instanceof Element && Boolean(event.target.closest("button")),
           ignoreMutation: () => true,
         };
@@ -478,7 +494,13 @@ export function createVisualSummaryEditor(textarea, { openSource = null, editInT
     const at = available.indexOf(document.activeElement);
     if (at < 0) return;
     event.preventDefault();
-    const next = event.key === "Home" ? 0 : event.key === "End" ? available.length - 1 : (at + (event.key === "ArrowRight" ? 1 : -1) + available.length) % available.length;
+    let next;
+    if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = available.length - 1;
+    else {
+      const offset = event.key === "ArrowRight" ? 1 : -1;
+      next = (at + offset + available.length) % available.length;
+    }
     tabStop = available[next];
     syncTabStop();
     tabStop.focus();

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { test, expect } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
@@ -9,6 +10,7 @@ import { buildFixturePdf } from '../server/test/pdf-fixtures/build-fixture-pdf.j
 import { VITE_ORIGIN, serverPort } from './support/ports.js';
 import { waitForServerReady } from './support/wait-for-server.js';
 
+import { generateByPages } from './support/materials-flow.js';
 // GUI-05: ONE student journey through the whole product, in one profile and one database (real server,
 // real UI, real PDF extraction; the model endpoint is a scripted local stub on the live-provider code
 // path, so this proves the FLOW, not the quality of a model). Nothing is seeded through the API: every
@@ -108,7 +110,7 @@ test.beforeEach(async ({ page }) => {
     window.__SMARTLEARN_REMOTE_MODE__ = true;
     window.__SMARTLEARN_LOCAL_AUTHORITY__ = true;
   }, API_BASE);
-  const email = `journey-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+  const email = `journey-${Date.now()}-${randomUUID()}@example.com`;
   const password = 'a genuinely long test password 1';
   await page.goto('/');
   await page.waitForLoadState('networkidle');
@@ -132,7 +134,7 @@ test('journey: PDF -> reviewed unit -> study with feedback -> exam with no feedb
   await page.locator('[data-screen="materials"]').click();
   await page.setInputFiles('#sources-file-input', { name: 'fisiologia-renal.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf([PAGE_1, PAGE_2]) });
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
-  await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
+  await generateByPages(page);
   const panel = page.locator('.lesson-editor');
   await expect(panel).toBeVisible({ timeout: 15000 });
   await panel.getByRole('tab', { name: /Questões/ }).click();

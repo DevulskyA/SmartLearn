@@ -19,7 +19,16 @@ import { t, has } from './i18n/index.js';
 
 function fail(err) {
   if (err instanceof ApiError) {
-    return { ok: false, code: err.code, message: err.message, details: err.details };
+    const issues = err.details?.issues;
+    let message;
+    if (Array.isArray(issues)) {
+      message = issues.length ? issues.map(issueText).join(' ') : issueText(null);
+    } else if (err.code === 'INVALID_SOURCE') {
+      message = issueText(null);
+    } else {
+      message = err.message;
+    }
+    return { ok: false, code: err.code, message, details: err.details };
   }
   if (err instanceof NetworkError) {
     return { ok: false, code: 'NETWORK_ERROR', message: t('migration.error.network') };
@@ -36,7 +45,7 @@ export async function previewImport(rawSource) {
 }
 
 /** Re-reads an owned, unexpired preview (e.g. after navigating away and back). */
-export async function getImportPreview(id) {
+async function getImportPreview(id) {
   try {
     const { preview } = await apiRequest(`/v1/imports/${id}`);
     return { ok: true, preview };
@@ -82,6 +91,14 @@ export function warningText(warning) {
   const key = `migration.warning.${code}`;
   if (code && warning.params && typeof warning.params === 'object' && has(key)) return t(key, warning.params);
   return warning?.message ?? (code || String(warning));
+}
+
+/** User-facing text for a validation issue. Never display the server's reserve message. */
+export function issueText(issue) {
+  const code = typeof issue?.code === 'string' ? issue.code : '';
+  const key = code ? `migration.issue.${code}` : '';
+  const params = issue?.params && typeof issue.params === 'object' ? issue.params : {};
+  return key && has(key) ? t(key, params) : t('migration.issue.unknown');
 }
 
 /** A downloadable, self-contained record of what a commit actually did —

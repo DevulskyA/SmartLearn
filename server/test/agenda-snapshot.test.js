@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -31,7 +32,7 @@ async function createUnit(app, session, { studyDate }) {
   return app.inject({
     method: 'POST', url: '/v1/learning-units',
     headers: { origin: TEST_ORIGIN, cookie: session.cookie, 'x-csrf-token': session.csrfToken },
-    payload: { newSubjectName: `Subj-${Math.random()}`, title: 'Aula', studyDate },
+    payload: { newSubjectName: `Subj-${randomUUID()}`, title: 'Aula', studyDate },
   });
 }
 

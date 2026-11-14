@@ -12,9 +12,9 @@ export function wilsonUpper(k, n) {
   return (p + (z * z) / (2 * n) + z * Math.sqrt((p * (1 - p)) / n + (z * z) / (4 * n * n))) / d;
 }
 
-export const MIN_DISTINCT_QUESTIONS = 3;
-export const MIN_ATTEMPTS = 5;
-export const GAP_BELOW = 0.7;
+const MIN_DISTINCT_QUESTIONS = 3;
+const MIN_ATTEMPTS = 5;
+const GAP_BELOW = 0.7;
 
 /** Too little evidence is INSUFFICIENT whatever the accuracy; a gap SIGNAL needs the upper end of the interval below the line. */
 export function cautiousState({ attempts, correct, distinct }) {
@@ -57,6 +57,10 @@ export function groupEvidence(events, keyOf) {
     const correct = independent.filter((a) => a.outcome === 'CORRECT').length;
     const distinct = new Set(independent.map((a) => a.exerciseVersionId)).size;
     const sorted = [...list].sort((a, b) => String(a.occurredAt).localeCompare(String(b.occurredAt)) || a.id - b.id);
+    const state = cautiousState({ attempts: independent.length, correct, distinct });
+    let signal = 'INSUFFICIENT';
+    if (state === 'GAP') signal = 'GAP_SIGNAL';
+    else if (state === 'OK') signal = 'NO_GAP_SIGNAL';
     return {
       key: unitId,
       attempts: list.length,
@@ -64,8 +68,7 @@ export function groupEvidence(events, keyOf) {
       assisted: known.filter((a) => a.assistanceUsed !== 'NONE' && a.assistanceUsed !== 'UNKNOWN').length,
       assistanceUnknown: known.filter((a) => a.assistanceUsed === 'UNKNOWN').length,
       outcomeUnknown: list.length - known.length,
-      signal: cautiousState({ attempts: independent.length, correct, distinct }) === 'GAP' ? 'GAP_SIGNAL'
-        : cautiousState({ attempts: independent.length, correct, distinct }) === 'OK' ? 'NO_GAP_SIGNAL' : 'INSUFFICIENT',
+      signal,
       recent: sorted.slice(-5).map((a) => a.outcome),
     };
   });

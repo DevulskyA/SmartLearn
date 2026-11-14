@@ -221,11 +221,11 @@ export async function deleteQuestion(draftId, questionId) {
  * the call with `REVISION_CONFLICT` if the draft was edited since, rather
  * than silently publishing content the caller never reviewed.
  */
-export async function acceptDraft(draftId, { subjectId, newSubjectName, newSubjectColor, studyDate, lessonDate, expectedRevision, acknowledgeSummaryFindings }) {
+export async function acceptDraft(draftId, { subjectId, newSubjectName, newSubjectColor, studyDate, lessonDate, sourceKind, expectedRevision, acknowledgeSummaryFindings }) {
   try {
     const { acceptance } = await apiRequest(`/v1/drafts/${draftId}/accept`, {
       method: 'POST',
-      body: { subjectId, newSubjectName, newSubjectColor, studyDate, lessonDate: lessonDate ?? null, expectedRevision, acknowledgeSummaryFindings: acknowledgeSummaryFindings === true },
+      body: { subjectId, newSubjectName, newSubjectColor, studyDate, lessonDate: lessonDate ?? null, sourceKind: sourceKind ?? null, expectedRevision, acknowledgeSummaryFindings: acknowledgeSummaryFindings === true },
     });
     return { ok: true, acceptance };
   } catch (err) { return fail(err); }

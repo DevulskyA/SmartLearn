@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { test, expect } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -38,7 +39,7 @@ test.beforeEach(async ({ page }) => {
     window.__SMARTLEARN_API_BASE__ = base;
     window.__SMARTLEARN_REMOTE_MODE__ = true;
   }, API_BASE);
-  const email = `resil-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+  const email = `resil-${Date.now()}-${randomUUID()}@example.com`;
   const password = 'a genuinely long test password 1';
   await signInRegistered(page, { email: email, password: password });
 });
@@ -241,9 +242,10 @@ const reinforceTotal = async (page) => Object.values((await getJson(page, '/v1/r
 test('REVIEWNET-1: a wrong item whose attempt could not be sent is retried when the review is completed, so "para reforçar" agrees with the evidence', async ({ page }) => {
   const { unit, row } = await reviewWithTwoItems(page, 'Aula revrede a');
   await row.locator('[data-action="reveal-answer"]').first().click();
-  await page.route('**/v1/attempts/*/submit', (route) => route.abort());
+  let attemptAborted = false;
+  await page.route('**/v1/attempts/*/submit', async (route) => { await route.abort(); attemptAborted = true; });
   await row.locator('[data-action="exercise-errei"]').first().click();
-  await page.waitForTimeout(600);
+  await expect.poll(() => attemptAborted).toBe(true);
   expect(await reinforceTotal(page)).toBe(0); // the server has not heard about it yet
   await page.unroute('**/v1/attempts/*/submit'); // the connection returns before the review is completed
   await row.locator('[data-action="reveal-answer"]').nth(1).click();
@@ -269,11 +271,12 @@ test('REVIEWNET-1: if the connection is STILL down when the review is completed,
 async function reviewWithOneWrongPending(page, title) {
   const { unit, row } = await reviewWithTwoItems(page, title);
   await row.locator('[data-action="reveal-answer"]').first().click();
-  await page.route('**/v1/attempts/*/submit', (route) => route.abort());
+  let attemptAborted = false;
+  await page.route('**/v1/attempts/*/submit', async (route) => { await route.abort(); attemptAborted = true; });
   // a real outage also stops the conclusion the last answer triggers: the stage stays as it was, with the unsent item remembered
   await page.route('**/v1/review-tasks/*/complete', (route) => route.abort());
   await row.locator('[data-action="exercise-errei"]').first().click();
-  await page.waitForTimeout(600);
+  await expect.poll(() => attemptAborted).toBe(true);
   expect(await reinforceTotal(page)).toBe(0);
   await row.locator('[data-action="reveal-answer"]').nth(1).click();
   await row.locator('[data-action="exercise-acertei"]').nth(1).click();
@@ -306,8 +309,7 @@ test('RETESTNET-1: in Hoje, an item the server already holds (reply lost) is not
     await route.continue();
   });
   await row.locator('[data-action="exercise-errei"]').first().click();
-  await page.waitForTimeout(600);
-  expect(await reinforceTotal(page)).toBe(1); // the server has it
+  await expect.poll(() => reinforceTotal(page)).toBe(1); // the server has it
   await row.locator('[data-action="reveal-answer"]').nth(1).click();
   await row.locator('[data-action="exercise-acertei"]').nth(1).click(); // the last answer concludes the stage by itself
   await expect.poll(async () => (await getJson(page, `/v1/learning-evidence?unitId=${unit.id}`)).evidence.length, { timeout: 8000 }).toBe(1);

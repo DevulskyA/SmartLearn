@@ -9,8 +9,21 @@ import { fileURLToPath } from 'node:url';
 
 const defaultRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 
+function resolveGitExecutable() {
+  const candidates = process.platform === 'win32'
+    ? [
+      join(process.env.ProgramW6432 ?? 'C:\\Program Files', 'Git', 'cmd', 'git.exe'),
+      join(process.env.ProgramFiles ?? 'C:\\Program Files', 'Git', 'cmd', 'git.exe'),
+      join(process.env['ProgramFiles(x86)'] ?? 'C:\\Program Files (x86)', 'Git', 'cmd', 'git.exe'),
+    ]
+    : ['/usr/bin/git', '/usr/local/bin/git', '/opt/homebrew/bin/git', '/opt/local/bin/git', '/bin/git'];
+  return candidates.find((candidate) => existsSync(candidate)) ?? null;
+}
+
 function git(root, ...args) {
-  try { return execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch { return null; }
+  const executable = resolveGitExecutable();
+  if (!executable) return null;
+  try { return execFileSync(executable, args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch { return null; }
 }
 
 // T-F1-07: what goes INTO the app. A build is current when this hash is unchanged, whatever the commit (a docs-only commit must not

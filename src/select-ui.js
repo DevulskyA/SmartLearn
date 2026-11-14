@@ -65,7 +65,7 @@ function isItemDisabled(item) {
 // lives on the popup itself while it's open; aria-activedescendant marks
 // the active menuitem within it. Used only by the context-switcher.
 // ---------------------------------------------------------------------
-export function wireListboxKeyboard(menu, { getItems, onCommit, onEscape, onTabAway }) {
+function wireListboxKeyboard(menu, { getItems, onCommit, onEscape, onTabAway }) {
   let typeaheadBuffer = "";
   let typeaheadTimer = null;
 

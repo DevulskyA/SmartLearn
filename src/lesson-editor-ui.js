@@ -6,7 +6,7 @@
 // state words, counts, buttons and findings are separate elements, always separated by real text, never glued to the content.
 import { createTextElement } from "./dom-utils.js";
 import { showConfirm } from "./confirm-dialog.js";
-import { renderSummary as renderSummaryBody } from "./summary-render.js";
+import { renderSummary as renderSummaryBody, renderSummaryOutline } from "./summary-render.js";
 import { createSummaryAuthoring } from "./summary-toolbar.js";
 import { createAutosaver } from "./draft-autosave.js";
 import { createRecoveryStore, createIndexedDbStorage } from "./draft-recovery.js";
@@ -136,7 +136,7 @@ function labelledField(idBase, labelText, tag, value, rows) {
   input.id = idBase;
   input.className = "lesson-field-input";
   if (tag === "textarea") input.rows = rows ?? 3;
-  else input.type = "text";
+  else if (tag !== "select") input.type = "text";
   input.value = value ?? "";
   wrap.append(label, input);
   return { wrap, input };
@@ -251,6 +251,15 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   const summaryRead = document.createElement("div");
   summaryRead.className = "lesson-summary-read";
   summaryRead.hidden = true;
+  // left-margin table of contents of the reading view (sibling right after the text: CSS hides it with the text and puts it on the left)
+  const summaryOutline = document.createElement("nav");
+  summaryOutline.className = "summary-outline";
+  summaryOutline.setAttribute("aria-label", t("summary.outline.title"));
+  summaryOutline.hidden = true;
+  const summaryReading = document.createElement("div");
+  summaryReading.className = "lesson-summary-reading";
+  summaryReading.append(summaryRead, summaryOutline);
+  const showSummaryRead = (text) => { renderSummaryBody(summaryRead, text); renderSummaryOutline(summaryOutline, summaryRead); };
   const summaryAuthoring = createSummaryAuthoring(summaryField.input, { visual: true });
   summaryField.wrap.insertBefore(summaryAuthoring.modeSwitch, summaryField.input);
   summaryField.wrap.insertBefore(summaryAuthoring.bar, summaryField.input);
@@ -320,11 +329,13 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     });
     regenerateSection = regenWrap;
   }
-  summaryPanel.append(summaryTop, summaryField.wrap, summaryRead, summaryHint, summaryActions, summaryMessage);
+  summaryPanel.append(summaryTop, summaryField.wrap, summaryReading, summaryHint, summaryActions, summaryMessage);
+  // A text from the offline test provider is not an AI summary: say so where the student reads it, never let it pass for one.
+  if (draft.provider === "FAKE") summaryPanel.prepend(createTextElement("p", "lesson-hint lesson-fake-notice", t("editor.summary.fakeProvider")));
   // Earlier texts of this summary (the AI's and the student's own): see one next to the current text and put it back. Nothing is ever lost.
   const versions = deps.listSummaryVersions && deps.readSummaryVersion && deps.restoreSummaryVersion && draft.status === "DRAFT" && !lessonTarget
     ? createSummaryVersions() : null;
-  if (versions) summaryPanel.append(versions.element);
+  if (versions) { summaryTop.append(document.createTextNode(" "), versions.button); summaryPanel.append(versions.element); }
   if (regenerateSection && !lessonTarget) summaryPanel.append(regenerateSection);
   if (translateSection && !lessonTarget) summaryPanel.append(translateSection); // after the text it is about, not beside "Editar resumo"
 
@@ -598,6 +609,16 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   lessonDateHint.id = `${uid}-lesson-date-hint`;
   lessonDateField.wrap.append(lessonDateHint);
   const lessonDateOrNull = () => lessonDateField.input.value || null;
+  // What kind of material the lesson came from (handout, book, video, other): optional, never guessed, empty = "not said".
+  const sourceKindField = labelledField(`${uid}-source-kind`, t("editor.accept.sourceKind"), "select", "");
+  sourceKindField.input.classList.add("source-draft-source-kind-input");
+  for (const [value, key] of [["", "editor.accept.sourceKind.none"], ["APOSTILA", "editor.accept.sourceKind.APOSTILA"], ["LIVRO", "editor.accept.sourceKind.LIVRO"], ["VIDEO", "editor.accept.sourceKind.VIDEO"], ["OUTRO", "editor.accept.sourceKind.OUTRO"]]) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = t(key);
+    sourceKindField.input.append(option);
+  }
+  const sourceKindOrNull = () => sourceKindField.input.value || null;
   // Read-only preview of what accepting creates, shown BEFORE the final button; it writes nothing and is dropped as soon as the lesson changes.
   const previewBtn = button("secondary-button", t("editor.accept.preview"), "preview-accept");
   const previewPanel = document.createElement("div");
@@ -625,9 +646,9 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   acceptActions.className = "lesson-accept-actions";
   // in the order the student does them: look at what will be created, then accept (the final, irreversible step comes last)
   acceptActions.append(previewBtn, acceptBtn);
-  footer.append(acceptTitle, acceptNote, subjectField, dateField.wrap, lessonDateField.wrap, newSubjectSlot, previewPanel, ackWrap, acceptActions, acceptMessage, afterAccept);
+  footer.append(acceptTitle, acceptNote, subjectField, dateField.wrap, lessonDateField.wrap, sourceKindField.wrap, newSubjectSlot, previewPanel, ackWrap, acceptActions, acceptMessage, afterAccept);
   if (lessonTarget) {
-    for (const part of [subjectField, dateField.wrap, lessonDateField.wrap, newSubjectSlot]) part.hidden = true;
+    for (const part of [subjectField, dateField.wrap, lessonDateField.wrap, sourceKindField.wrap, newSubjectSlot]) part.hidden = true;
     acceptTitle.textContent = t("editor.lessonQuestions.acceptTitle");
     acceptBtn.textContent = t("editor.lessonQuestions.submit");
     footer.setAttribute("aria-label", t("editor.lessonQuestions.acceptTitle"));
@@ -756,7 +777,8 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
       body.textContent = t("editor.fidelity.running");
       const result = await deps.summaryFidelity(draft.id);
       if (!result.ok) { body.textContent = result.message || t("editor.fidelity.failed"); return; }
-      const { checked, lost } = result.fidelity;
+      const { checked, lost, skipped } = result.fidelity;
+      if (skipped === "LANGUAGE_MISMATCH") { body.textContent = t("editor.fidelity.languageMismatch"); return; }
       if (lost.length === 0) { body.textContent = t("editor.fidelity.none", { count: checked }); return; }
       const list = document.createElement("ul");
       list.className = "lesson-fidelity-list";
@@ -771,9 +793,14 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
   }
 
   function createSummaryVersions() {
-    const element = document.createElement("details");
+    // Closed until the student asks for it with the "Versões anteriores" button (like Word): the screen never announces a history
+    // before the student looks for it, and it says plainly when there is none.
+    const element = document.createElement("section");
     element.className = "lesson-translate lesson-versions";
-    const title = createTextElement("summary", "lesson-translate-title", t("editor.versions.title"));
+    element.hidden = true;
+    const toggleButton = button("secondary-button", t("editor.versions.button"), "open-summary-versions");
+    toggleButton.setAttribute("aria-expanded", "false");
+    const title = createTextElement("h3", "lesson-translate-title", t("editor.versions.title"));
     const hint = createTextElement("p", "lesson-hint", t("editor.versions.hint"));
     const list = document.createElement("ul");
     list.className = "lesson-versions-list";
@@ -781,6 +808,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     compare.className = "lesson-versions-compare";
     compare.hidden = true;
     const message = statusMessage();
+    message.classList.replace("lesson-message", "lesson-versions-message"); // its own class: the summary panel's save message stays the only ".lesson-message" there
     message.tabIndex = -1; // receives the focus after a restore, so the result is announced where the student pressed
     element.append(title, hint, list, compare, message);
     let loadedFor = null; // the summaryVersion the list was loaded for
@@ -825,7 +853,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
     }
 
     async function refresh() {
-      if (!element.open || loadedFor === draft.summaryVersion) return;
+      if (element.hidden || loadedFor === draft.summaryVersion) return;
       const result = await deps.listSummaryVersions(draft.id);
       if (!result.ok) { setMessage(message, result.message || t("editor.versions.failed"), true); return; }
       loadedFor = draft.summaryVersion;
@@ -847,8 +875,12 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
         list.append(li);
       }
     }
-    element.addEventListener("toggle", refresh);
-    return { element, refresh };
+    toggleButton.addEventListener("click", () => {
+      element.hidden = !element.hidden;
+      toggleButton.setAttribute("aria-expanded", String(!element.hidden));
+      refresh();
+    });
+    return { element, button: toggleButton, refresh };
   }
 
   function renderSummary() {
@@ -865,7 +897,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
       ), summaryHint);
     }
     renderGrounding();
-    if (!summaryRead.hidden) renderSummaryBody(summaryRead, summaryBuffer !== null ? summaryBuffer : draft.summary); // a repair or a recovered copy changes what is read
+    if (!summaryRead.hidden) showSummaryRead(summaryBuffer !== null ? summaryBuffer : draft.summary); // a repair or a recovered copy changes what is read
     const dirty = summaryBuffer !== null && summaryBuffer !== draft.summary;
     summarySave.disabled = !dirty;
     syncSummaryChrome();
@@ -1304,7 +1336,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
 
   // The summary opens as the formatted lesson; the editing tools appear when the student asks for them (PRODUCT.md, "Reading first").
   function setSummaryReading(reading) {
-    if (reading) renderSummaryBody(summaryRead, summaryBuffer !== null ? summaryBuffer : draft.summary);
+    if (reading) showSummaryRead(summaryBuffer !== null ? summaryBuffer : draft.summary);
     summaryRead.hidden = !reading;
     summaryField.wrap.hidden = reading;
     summaryToggle.textContent = reading ? t("editor.summary.edit") : t("editor.summary.read");
@@ -1402,6 +1434,7 @@ export function createLessonEditor({ draft: initialDraft, title, subjects = [], 
       newSubjectColor: pickedSubjectId || lessonTarget ? undefined : newSubject.color,
       studyDate: dateField.input.value,
       lessonDate: lessonDateOrNull(),
+      sourceKind: sourceKindOrNull(),
       expectedRevision: draft.revision,
       acknowledgeSummaryFindings: ackBox.checked,
     });

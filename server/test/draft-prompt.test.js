@@ -55,3 +55,12 @@ test('the select-first challenger (promptVersion 9) changes only the summary len
   const strip = (p) => p.split('\n').filter((line) => !/^- (SELECT FIRST|MUST RETAIN|LEAVE OUT|Compression must never|Aim for roughly)/.test(line)).join('\n').replace(/promptVersion exactly "\d+"/, 'promptVersion exactly "N"');
   assert.equal(strip(v9), strip(v8));
 });
+
+test('MED-SUM v2.7.5 (prompt version 10) requires a titled structure: the first line is a "## " title and no summary may be one untitled block', () => {
+  const prompt = buildDraftPrompt([{ pageIndex: 1, text: 'Texto da fonte.' }], '10');
+  assert.match(prompt, /The summary must begin with a section title/);
+  assert.match(prompt, /each main concept or subtopic of the approved source must get its own title placed right before the text of that part/);
+  assert.match(prompt, /never return a summary without titles/);
+  // earlier versions are not touched by this rule
+  assert.doesNotMatch(buildDraftPrompt([{ pageIndex: 1, text: 'x' }], '9'), /must begin with a section title/);
+});

@@ -182,8 +182,27 @@ const stripEnv = () => Object.fromEntries(Object.entries(process.env).filter(([k
 export function runTests(root, cwd, tests, { timeoutMs = 600000 } = {}) {
   const res = spawnSync(process.execPath, ['--test', ...tests], { cwd: join(root, cwd), env: { ...stripEnv(), NODE_ENV: 'test' }, encoding: 'utf8', timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024 });
   const output = `${res.stdout ?? ''}\n${res.stderr ?? ''}`;
-  const failed = [...new Set([...output.matchAll(/^\s*✖ (.+?)(?: \(\d[\d.]*ms\))?$/gm)].map((x) => x[1].trim()).filter((n) => n !== 'failing tests:'))];
+  const failed = [...new Set(output.split(/\r?\n/).map(failedTestName).filter((name) => name && name !== 'failing tests:'))];
   return { exitCode: res.status ?? (res.error ? -1 : 1), failed, output };
+}
+
+function failedTestName(line) {
+  const text = line.trimStart();
+  if (!text.startsWith('✖ ')) return null;
+  let name = text.slice(2).trim();
+  if (!name) return null;
+  const durationStart = name.lastIndexOf(' (');
+  if (durationStart !== -1 && name.endsWith('ms)')) {
+    const duration = name.slice(durationStart + 2, -3);
+    if (duration.length > 0 && [...duration].every((char) => (char >= '0' && char <= '9') || char === '.')) name = name.slice(0, durationStart).trim();
+  }
+  return name;
+}
+
+function mutationOutcome(exitCode, killers) {
+  if (exitCode === 0) return 'SURVIVED';
+  if (killers.length > 0) return 'KILLED';
+  return 'BROKEN_MUTANT';
 }
 
 /**
@@ -206,7 +225,7 @@ export function runMutation(root, m, { run = runTests, guard = {} } = {}) {
   }
   if (readFileSync(join(root, m.file), 'utf8') !== original) throw new Error(`mutation ${m.id}: restore failed`);
   const killers = result.failed.filter((n) => !/\.(m?js)$/.test(n));
-  const status = result.exitCode === 0 ? 'SURVIVED' : killers.length > 0 ? 'KILLED' : 'BROKEN_MUTANT';
+  const status = mutationOutcome(result.exitCode, killers);
   return { id: m.id, area: m.area, why: m.why, status, killedBy: killers, tests: m.tests };
 }
 
@@ -222,10 +241,27 @@ function unlinkJunction(link) {
   try { if (lstatSync(link).isSymbolicLink()) rmdirSync(link); } catch { /* absent */ }
 }
 
+function resolveGitExecutable() {
+  const candidates = process.platform === 'win32'
+    ? [
+      join(process.env.ProgramW6432 ?? 'C:\\Program Files', 'Git', 'cmd', 'git.exe'),
+      join(process.env.ProgramFiles ?? 'C:\\Program Files', 'Git', 'cmd', 'git.exe'),
+      join(process.env['ProgramFiles(x86)'] ?? 'C:\\Program Files (x86)', 'Git', 'cmd', 'git.exe'),
+    ]
+    : ['/usr/bin/git', '/usr/local/bin/git', '/opt/homebrew/bin/git'];
+  const executable = candidates.find((candidate) => existsSync(candidate));
+  if (!executable) throw new Error('mutation-check requires Git in a fixed system installation path');
+  return executable;
+}
+
+function git(args, options) {
+  return execFileSync(resolveGitExecutable(), args, options);
+}
+
 function createWorktree() {
   const base = mkdtempSync(join(tmpdir(), 'sl-mutation-'));
   const root = join(base, 'wt');
-  execFileSync('git', ['worktree', 'add', '--detach', root, 'HEAD'], { cwd: REPO_ROOT, stdio: 'pipe' });
+  git(['worktree', 'add', '--detach', root, 'HEAD'], { cwd: REPO_ROOT, stdio: 'pipe' });
   writeFileSync(join(root, MARKER_FILE), MARKER_TEXT);
   // Dependencies are shared READ-ONLY through junctions (installing them again would take minutes); only source files are mutated.
   for (const d of ['node_modules', join('server', 'node_modules')]) junction(join(REPO_ROOT, d), join(root, d));
@@ -234,9 +270,9 @@ function createWorktree() {
 
 function destroyWorktree({ base, root }) {
   for (const d of ['node_modules', join('server', 'node_modules')]) unlinkJunction(join(root, d));
-  try { execFileSync('git', ['worktree', 'remove', '--force', root], { cwd: REPO_ROOT, stdio: 'pipe' }); } catch { /* fall through to manual cleanup */ }
+  try { git(['worktree', 'remove', '--force', root], { cwd: REPO_ROOT, stdio: 'pipe' }); } catch { /* fall through to manual cleanup */ }
   rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
-  try { execFileSync('git', ['worktree', 'prune'], { cwd: REPO_ROOT, stdio: 'pipe' }); } catch { /* best effort */ }
+  try { git(['worktree', 'prune'], { cwd: REPO_ROOT, stdio: 'pipe' }); } catch { /* best effort */ }
 }
 
 function main(argv) {
@@ -264,7 +300,7 @@ function main(argv) {
   const outDir = join(REPO_ROOT, 'test-results');
   mkdirSync(outDir, { recursive: true });
   const reportPath = join(outDir, 'mutation-report.json');
-  writeFileSync(reportPath, JSON.stringify({ at: new Date().toISOString(), head: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: REPO_ROOT, encoding: 'utf8' }).trim(), summary, results }, null, 2));
+  writeFileSync(reportPath, JSON.stringify({ at: new Date().toISOString(), head: git(['rev-parse', 'HEAD'], { cwd: REPO_ROOT, encoding: 'utf8' }).trim(), summary, results }, null, 2));
   console.log(`\n${summary.killed}/${summary.total} mutations killed${summary.ok ? '' : '  <-- NOT ALL KILLED'}  report: ${reportPath}`);
   return summary.ok ? 0 : 1;
 }

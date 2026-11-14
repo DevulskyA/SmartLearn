@@ -61,6 +61,11 @@ export function segmentsForProposal(db, userId, row) {
  * approved scope holds. Returns the numbers that are recorded with the draft.
  */
 export function assertPayloadWithinScope(db, userId, row, payloadSegments) {
+  // Fail closed: stored spans that cannot be read must never fall back to "every character of the pages" (a legacy proposal has NO spans
+  // at all, which is different from spans that are there but corrupted). Display and listing stay tolerant; only a send to a model stops.
+  if (row.spans_json && parseSpans(row) === null) {
+    throw new ScopeViolation('Os trechos aprovados desta unidade não puderam ser lidos. Nada foi enviado.');
+  }
   const pages = storedPages(db, userId, row.source_id, row.page_start, row.page_end);
   const approved = approvedByPage(row, pages);
   const sourceChars = [...approved.values()].reduce((n, t) => n + t.length, 0);

@@ -51,6 +51,7 @@ export default Object.freeze({
   "summary.visual.cannotWrite": "Esta edición no se puede representar fielmente en el texto del resumen. El texto guardado sigue siendo la última versión válida. Ajusta este fragmento o usa el modo Texto.",
   "summary.visual.cannotSave": "Hay una edición visual que no se pudo representar fielmente, así que no se guardó nada. Ajusta este fragmento o usa el modo Texto.",
   "summary.math.invalid": "Fórmula no válida",
+  "summary.outline.title": "Índice del resumen",
   "summary.math.edit": "Editar fórmula",
   "summary.math.fix": "Corregir",
   "summary.math.dialog.insert": "Insertar fórmula",

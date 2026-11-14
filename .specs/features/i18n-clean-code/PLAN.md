@@ -1,5 +1,8 @@
 # PLAN — Clean Code moderno + i18n (estado e continuação)
-Direção: `BRIEF.md` (texto do usuário, vale sobre este arquivo). Fila operacional: `.specs/LOOP_BACKLOG.md`. Posição de sessão (local): `.specs/HANDOFF.md`. Código, testes e Git vencem qualquer texto. Atualizado em 2026-10-16.
+Direção: `BRIEF.md` (texto do usuário, vale sobre este arquivo). Fila operacional: `.specs/LOOP_BACKLOG.md`. Posição de sessão (local): `.specs/HANDOFF.md`. Código, testes e Git vencem qualquer texto. Atualizado em 2026-11-11.
+
+## Decisão posterior do usuário (2026-11-11)
+O usuário autorizou explicitamente traduções reais da interface para inglês (`en`) e espanhol (`es`), com seleção e persistência em `uiLocale`. Isso resolve o adiamento HG-13 abaixo. Preservar pt-BR como padrão e manter `uiLocale`, `sourceLanguage` e `generationLocale` independentes.
 
 ## Ledger de requisitos
 REQUIREMENTS
@@ -8,7 +11,7 @@ REQUIREMENTS
 - R3 Data, número e ordenação pelo idioma ativo (`src/i18n/format.js`); nenhum 'pt-BR' fixo em `src/`.
 - R4 Sem concatenar fragmentos: uma chave por frase com `{parâmetros}`; plural por `.one/.other`.
 - R5 `uiLocale`, `sourceLanguage` e `generationLocale` continuam independentes.
-- R6 Só pt-BR traduzido; es/en caem em pt-BR por chave (HG-13: tradução completa adiada; nada de tradução inventada).
+- R6 HISTÓRICO: até 2026-11-11 só pt-BR tinha tradução; es/en caíam em pt-BR por chave (HG-13). SUPERSEDIDO pela decisão do usuário acima: completar catálogos reais `en`/`es` e ligar `uiLocale` ao runtime.
 - R7 Fatias pequenas, coesas e reversíveis; sem misturar limpeza, correção e i18n; sem abstração nova sem necessidade.
 - R8 Comentários explicam o PORQUÊ; JSDoc só onde acrescenta; sem ruído.
 INVARIANTS
@@ -31,12 +34,12 @@ FEITO nesta rodada (2026-10-16, tudo local): CI — `practice.spec.js` (3 corrid
 ESTADO NO HEAD `9afb847`: scanner por AST = 0 textos visíveis em `src/` (catraca em `scripts/i18n-baseline.json` = `{}`); pseudo-locale na interface real = 0 fora do catálogo nas 9 telas principais (limites 0 em `e2e/i18n-pseudo-locale.spec.js`) e nos 30 estados com dados de `e2e/i18n-pseudo-flows.spec.js` (exceções: data em tooltip e nome do arquivo enviado). Regressão completa executada por agente Haiku no `9afb847`: eslint 0, 712 unitários, 1051 do servidor, E2E 241 passaram / 0 falharam / 2 ignorados (os dois de modelo real).
 O QUE O SCANNER NÃO VÊ E FOI TRATADO: texto em CSS (`content:`), `<html lang>`, texto de elementos do HTML que o `app.js` reescreve, leitura de volta de texto traduzido (`replace(/^Dica:/)`), plural de zero.
 PENDENTE (não é código local): (1) mensagens em português que vêm do servidor/`shared/` e chegam à tela: avisos do painel de migração (`shared/import-normalization.js`, `shared/logical-import.js`, sem parâmetros na estrutura do aviso, só `code`) e `NetworkError` ("Falha de rede ao acessar…", anexada em "Não foi possível iniciar a prova."): exigem decisão de contrato (código + parâmetros no servidor, texto no cliente); (2) logs `console.*` e `Error` de diagnóstico em português (57 em `app.js`, 86 em `db.js`): exceção técnica, não chegam ao aluno; (3) o número `16` em "16 revisões criadas." é literal no texto, não deriva do agendador; (4) formatação decimal `toFixed(1).replace(".", ",")` em ~10 pontos: segue o idioma pt-BR sem passar por `formatNumber` (arredondamento de `Intl` difere em empates); fatia própria com teste comparando valores; (5) achado fora do escopo: `Falha ao iniciar tentativa (prática inicial). ApiError: Esta tentativa já foi finalizada.` no console de cada passagem de "Estudar agora" (`src/app.js` reveal handler); investigar à parte.
-NÃO FAZER sem decisão: ligar `setLocale` a `uiLocale` do aluno e criar catálogos es/en (HG-13). Hoje existe UM idioma traduzido (pt-BR): a infraestrutura está pronta para traduzir, mas NÃO há suporte multilíngue nem troca de idioma na interface.
+ESTADO ATUALIZADO: a restrição de não ligar `setLocale` a `uiLocale` nem criar catálogos es/en foi removida pela decisão explícita do usuário em 2026-11-11. Implementar HG-13 preservando os invariantes e o restante desta especificação.
 EXCEÇÕES TÉCNICAS (não são texto traduzível): autônimos dos idiomas (Português (Brasil), Español, English); canal e hash da build; nome do produto; datas e números formatados pelo idioma ativo; chaves que o código compara (`unique constraint`).
 LIMITE CONHECIDO DE UMA FUTURA TROCA DE IDIOMA EM TEMPO DE EXECUÇÃO: o que o app desenha na inicialização não é redesenhado; `select-ui` relê o rótulo no `sync()`, mas telas já renderizadas exigem recarregar. Hoje o idioma é escolhido uma vez, antes de o app iniciar.
 
 ## Como continuar (próxima tarefa)
-A internacionalização do que é código local está fechada no `9afb847` (ver "Estado"). O que sobra exige decisão (contrato do servidor, HG-13) ou é fatia própria (decimal por `formatNumber`). Qualquer texto novo: chave no catálogo + `t()`; o scanner, `test/i18n-catalog-integrity.test.js`, `test/i18n-html.test.js` e os dois specs de pseudo-locale (limite 0) falham se um texto ficar no código.
+A migração dos textos locais está fechada no `9afb847` (ver "Estado"). HG-13 agora está autorizado e em execução: criar catálogos completos `en`/`es`, ativar/persistir `uiLocale` e provar que `generationLocale` e `sourceLanguage` permanecem independentes. A fatia decimal por `formatNumber` continua separada. Qualquer texto novo: chave no catálogo + `t()`; o scanner, `test/i18n-catalog-integrity.test.js`, `test/i18n-html.test.js` e os dois specs de pseudo-locale (limite 0) falham se um texto ficar no código.
 1. Próxima frente (só depois do fechamento acima): Clean Code moderno, uma superfície por vez, com caracterização antes. Candidatas medidas (S4): `createLessonEditor` 730 linhas, `createBrowserStore` 663 (legado), `createReviewRow` 397, `renderPlan` 355. Não mudar traduções, interface, persistência nem regras médicas.
 2. O teste de acessibilidade já falhou uma vez com `ERR_CONNECTION_REFUSED` sem causa provada (não reproduziu em 45 repetições); o stdout do Vite agora fica no log.
 3. Um commit por fatia com caminhos explícitos; regressão completa por agente Haiku ao fechar cada lote.

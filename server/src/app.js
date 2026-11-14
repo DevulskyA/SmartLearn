@@ -136,7 +136,7 @@ export async function buildApp(db, migrationsDir = DEFAULT_MIGRATIONS_DIR, { isP
     registerQuestionFlagRoutes(v1, db);
     registerSourceRoutes(v1, db, { mediaDir, ...sources });
     registerVisualAssetRoutes(v1, db, { mediaDir, limits: mediaLimits });
-    registerContentProposalRoutes(v1, db);
+    registerContentProposalRoutes(v1, db, { sourcesDir: sources.sourcesDir ?? config.sourcesDir });
     registerGeneratedDraftRoutes(v1, db, ai);
     registerGenerationJobRoutes(v1, db, ai, jobRunner);
     registerAgendaSnapshotRoutes(v1, db);

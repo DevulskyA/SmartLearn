@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { test, expect } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -37,7 +38,7 @@ test.afterAll(async () => {
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript((base) => { window.__SMARTLEARN_API_BASE__ = base; window.__SMARTLEARN_REMOTE_MODE__ = true; }, API_BASE);
-  await signInRegistered(page, { email: `reveal-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`, password: 'a genuinely long test password 1' });
+  await signInRegistered(page, { email: `reveal-${Date.now()}-${randomUUID()}@example.com`, password: 'a genuinely long test password 1' });
 });
 
 /** Creates a unit with one exercise (optionally with a hint) through the Cadastro form and opens "Estudar agora" from Plano. */

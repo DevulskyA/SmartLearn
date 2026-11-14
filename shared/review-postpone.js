@@ -33,7 +33,11 @@ export function planPostpone(tasks, today, perDay = POSTPONE_DEFAULT_PER_DAY) {
   if (normalizePerDay(perDay) === null) throw new RangeError(`perDay must be an integer from 1 to ${POSTPONE_MAX_PER_DAY}`);
   const overdue = tasks
     .filter((task) => !doneOf(task) && task.dueDate < today)
-    .sort((a, b) => (a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : stageOf(a) - stageOf(b) || a.id - b.id));
+    .sort((a, b) => {
+      if (a.dueDate < b.dueDate) return -1;
+      if (a.dueDate > b.dueDate) return 1;
+      return stageOf(a) - stageOf(b) || a.id - b.id;
+    });
   const moves = overdue.map((task, index) => ({ id: task.id, unitId: task.unitId, from: task.dueDate, to: addDays(today, Math.floor(index / perDay) + 1) }));
   const days = [];
   for (const move of moves) {

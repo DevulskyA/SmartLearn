@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -10,6 +11,7 @@ import { waitForServerReady } from './support/wait-for-server.js';
 import { signInRegistered } from './support/session.js';
 import { startEditingSummary } from './support/summary-editing.js';
 
+import { generateByPages } from './support/materials-flow.js';
 // T38: proves the real draft-review UI (src/draft-review-ui.js, wired into
 // the same "Fontes" card as T36) drives the full T34-T38 pipeline end to
 // end — upload -> extract -> chunk -> generate a draft (fake provider,
@@ -58,7 +60,7 @@ test.beforeEach(async ({ page }) => {
     window.__SMARTLEARN_REMOTE_MODE__ = true;
     window.__SMARTLEARN_LOCAL_AUTHORITY__ = true;
   }, API_BASE);
-  const email = `draft-accept-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+  const email = `draft-accept-${Date.now()}-${randomUUID()}@example.com`;
   const password = 'a genuinely long test password 1';
   await signInRegistered(page, { email: email, password: password });
 });
@@ -70,7 +72,7 @@ async function openFirstDraft(page, name, pages) {
   await expect(page.locator('#sources-card')).toBeVisible({ timeout: 5000 });
   await page.setInputFiles('#sources-file-input', { name, mimeType: 'application/pdf', buffer: buildFixturePdf(pages) });
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
-  await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
+  await generateByPages(page);
   await expect(page.locator('.lesson-editor')).toBeVisible({ timeout: 10000 });
   await startEditingSummary(page);
   return page.locator('.lesson-editor');
@@ -168,7 +170,7 @@ test('P1_PRODUCT A: accepting a second draft can reuse an existing subject inste
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 10000 });
   // renderSourceProposals replaces the list wholesale per upload (it shows this source's own proposals, not an accumulating
   // history) — the only item visible now is this second material's own proposal.
-  await page.locator('.source-proposal-item').first().locator('[data-action="generate-draft"]').click();
+  await generateByPages(page);
   const second = page.locator('.lesson-editor');
   await expect(second).toBeVisible({ timeout: 10000 });
 
@@ -177,6 +179,13 @@ test('P1_PRODUCT A: accepting a second draft can reuse an existing subject inste
   // test must exercise, not Playwright's .selectOption() shortcut.
   const subjectSelect = second.locator('.source-draft-subject-select');
   await expect(subjectSelect.locator('option', { hasText: 'Fisiologia A' })).toHaveCount(1);
+  // GUARD: with disciplines registered, NOTHING is pre-selected (a lesson on physiology was once offered under "Anatomia", the first of
+  // the list). Accepting without choosing is refused with a message and creates neither a lesson nor a discipline.
+  await expect(subjectSelect).toHaveValue('choose');
+  await second.locator('[data-action="accept-draft"]').click();
+  await expect(second.locator('.source-draft-result')).toContainText('Escolha a disciplina');
+  const unitsBeforeChoice = await page.evaluate(async (base) => (await fetch(`${base}/v1/learning-units`, { credentials: 'include' })).json(), API_BASE);
+  expect(unitsBeforeChoice.units).toHaveLength(1);
   const subjectTrigger = subjectSelect.locator('xpath=..').locator('.ui-select-trigger');
   await subjectTrigger.click();
   const subjectMenuId = await subjectTrigger.getAttribute('aria-controls');
@@ -244,7 +253,7 @@ test('the reviewer corrects a flagged summary in the review, the screen re-runs 
   await page.setViewportSize({ width: 1280, height: 720 });
   await editor.locator('[data-action="save-summary"]').click();
 
-  await expect(editor.locator('[data-panel="summary"] .lesson-message')).toContainText('Resumo salvo', { timeout: 10000 });
+  await expect(editor.locator('[data-panel="summary"] .lesson-message').filter({ hasText: 'Resumo salvo' })).toBeVisible({ timeout: 10000 });
   await expect(editor.locator('.lesson-summary-input')).toHaveValue(fixed);
   // the summary's flag is gone; the ONE point left is the fake provider's question having no "Por quê" (F-15 / T-F3-05: a finding for
   // every question without an explanation, shown in the review, never blocking), which a summary correction cannot clear
@@ -283,6 +292,44 @@ test('a correction the server rejects (empty answer) is reported in place and th
   await expect(editor.locator('.lesson-qeditor .lesson-message:not([tabindex])')).toHaveClass(/is-error/, { timeout: 10000 });
   await expect(editor.locator('.lesson-qeditor .lesson-message:not([tabindex])')).not.toHaveText('');
   expect(await editor.getAttribute('data-revision')).toBe(revisionBefore);
+});
+
+test('PBC-1.1: on a phone the "Aceitar a aula" buttons each take the full row, and on a desktop they stay side by side', async ({ page }) => {
+  const editor = await openFirstDraft(page, 'celular.pdf', ['Farmacocinética: absorção e distribuição']);
+  const widths = async () => editor.locator('.lesson-accept-actions').evaluate((row) => {
+    const rowWidth = row.getBoundingClientRect().width;
+    return { rowWidth, buttons: [...row.querySelectorAll(':scope > button')].filter((b) => b.offsetParent !== null).map((b) => b.getBoundingClientRect().width) };
+  });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const desktop = await widths();
+  expect(desktop.buttons.length).toBeGreaterThan(1);
+  expect(Math.max(...desktop.buttons)).toBeLessThan(desktop.rowWidth * 0.8);
+  await page.setViewportSize({ width: 390, height: 844 });
+  const phone = await widths();
+  for (const w of phone.buttons) expect(w).toBeGreaterThan(phone.rowWidth * 0.95);
+});
+
+test('FIDELIDADE-1: the no-AI check opens in the review tab with the real answer, and says "not compared" when source and summary differ in language', async ({ page }) => {
+  const editor = await openFirstDraft(page, 'fidelidade.pdf', ['Farmacocinética: absorção e distribuição']);
+  await editor.getByRole('tab', { name: /Revisão/ }).click();
+  const block = editor.locator('.lesson-fidelity');
+  await block.locator('summary').click();
+  // real server answer for a same-language draft: either "nothing found" or a list, never silent and never the language notice
+  await expect(block.locator('[role="status"]')).toContainText(/Nada encontrado|Encontrei/, { timeout: 10000 });
+  await expect(block).not.toContainText('idiomas diferentes');
+
+  await page.route('**/v1/drafts/*/fidelity', (route) => route.fulfill({ json: { fidelity: { checked: 0, lost: [], skipped: 'LANGUAGE_MISMATCH' } } }));
+  await block.locator('summary').click(); // close
+  await block.locator('summary').click(); // open again: asks the server again
+  await expect(block.locator('[role="status"]')).toContainText('idiomas diferentes', { timeout: 10000 });
+  await expect(block.locator('[role="status"]')).not.toContainText('Nada encontrado');
+});
+
+test('ERROS-1: when the subjects list cannot be loaded the editor says so and still lets the student type a subject name', async ({ page }) => {
+  await page.route('**/v1/subjects**', (route) => route.abort());
+  const editor = await openFirstDraft(page, 'sem-disciplinas.pdf', ['Farmacocinética: absorção e distribuição']);
+  await expect(editor.getByText(/Não foi possível carregar suas disciplinas/)).toBeVisible({ timeout: 10000 });
+  await expect(editor.locator('.source-draft-subject-input')).toBeVisible();
 });
 
 // R-5: the header is the REAL state of the draft, never a fixed text and never the automatic check. The first answer for the draft is
@@ -340,7 +387,7 @@ test('R-4: after accepting, "Abrir Resumo" opens the new lesson in Plano - from 
   await page.locator('[data-screen="materials"]').click();
   // Materiais still has the accepted lesson's editor open; leaving it reloads the list, which now tells the truth
   await page.locator('[data-action="lesson-back"]').click();
-  const link = page.locator('.source-proposal-item [data-action="open-summary"]').first();
+  const link = page.locator('#sources-drafts-list .source-draft-item [data-action="open-summary"]').first();
   await expect(link).toBeVisible({ timeout: 10000 });
   await link.click();
   await expect(page.locator('#screen-plan')).toBeVisible();
@@ -374,4 +421,39 @@ test('R-4: a new discipline created while accepting a draft gets the colour chos
   const card = page.locator('.subject-catalog-card', { hasText: 'Cor Aceite' });
   await expect(card).toBeVisible({ timeout: 5000 });
   expect(await card.evaluate((el) => el.style.getPropertyValue('--subject-color'))).toBe(chosen);
+});
+
+test('TRANSLATE: the summary area offers the other languages; confirming makes a NEW version in that language and the student chooses which to keep', async ({ page }) => {
+  const editor = await openFirstDraft(page, 'traducao.pdf', ['Fisiologia renal: filtração glomerular']);
+  // the current language (pt-BR) is not offered as a target
+  const select = editor.locator('.lesson-translate-select');
+  await expect(select.locator('option')).toHaveText(['Inglês', 'Espanhol']);
+  const firstDraftId = await page.evaluate(async (base) => {
+    const proposals = await (await fetch(`${base}/v1/sources`, { credentials: 'include' })).json();
+    return proposals.sources.length;
+  }, API_BASE);
+  expect(firstDraftId).toBe(1);
+
+  await editor.locator('[data-action="translate-draft"]').click();
+  await expect(page.locator('#confirm-dialog')).toBeHidden(); // no cost question: starting a translation is the click itself
+
+  // the job runs on the server; when it ends the new version opens with the choice banner
+  const translated = page.locator('.lesson-editor');
+  await expect(translated.locator('.lesson-decision')).toBeVisible({ timeout: 10000 });
+  await expect(translated.locator('[data-action="keep-new-version"]')).toBeVisible();
+  await expect(translated.locator('[data-action="restore-previous-version"]')).toBeVisible();
+  await translated.locator('[data-action="keep-new-version"]').click();
+  await expect(translated.locator('.lesson-decision')).toBeHidden();
+});
+
+test('REGENERATE: a draft can be generated again (same language, current prompt); the new version waits beside the old one until the student chooses', async ({ page }) => {
+  const editor = await openFirstDraft(page, 'regerar.pdf', ['Fisiologia renal: filtração glomerular']);
+  await expect(editor.locator('.lesson-decision')).toBeHidden();
+  await editor.locator('[data-action="regenerate-draft"]').click();
+  await expect(page.locator('#confirm-dialog')).toBeHidden(); // no cost question, like the translation
+  const regenerated = page.locator('.lesson-editor');
+  await expect(regenerated.locator('.lesson-decision')).toBeVisible({ timeout: 10000 });
+  // going back keeps the first version; the choice is the student's
+  await regenerated.locator('[data-action="restore-previous-version"]').click();
+  await expect(page.locator('.lesson-editor [data-action="regenerate-draft"]')).toBeVisible({ timeout: 10000 });
 });

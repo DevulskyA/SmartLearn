@@ -50,7 +50,7 @@ function cleanText(raw, max, { required = false, field }) {
  * Validates the real bytes and returns a clean re-encoded image. PNG stays PNG (lossless) and WebP stays lossless WebP, so small labels
  * in diagrams stay readable; JPEG stays JPEG at high quality. EXIF orientation is applied, all metadata (EXIF, GPS) is dropped.
  */
-export async function normalizeImage(buffer, limits = DEFAULT_LIMITS) {
+async function normalizeImage(buffer, limits = DEFAULT_LIMITS) {
   if (!Buffer.isBuffer(buffer) || buffer.length === 0) throw new VisualAssetError('VALIDATION_FAILED', dm('IMAGE_NONE_SENT'), 'file');
   if (buffer.length > limits.maxUploadBytes) throw new VisualAssetError('FILE_TOO_LARGE', dm('IMAGE_TOO_LARGE'), 'file');
   let meta;
@@ -76,7 +76,7 @@ export async function normalizeImage(buffer, limits = DEFAULT_LIMITS) {
   }
 }
 
-export function toDto(row) {
+function toDto(row) {
   return {
     id: row.id,
     kind: row.kind,

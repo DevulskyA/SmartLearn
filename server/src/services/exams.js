@@ -156,7 +156,25 @@ export function start(db, userId, { unitId }, now = () => new Date()) {
   return { exam: get(db, userId, run()), resumed: false };
 }
 
-export const SUBJECT_EXAM_MAX_QUESTIONS = 20;
+const SUBJECT_EXAM_MAX_QUESTIONS = 20;
+
+function selectSubjectExamCandidates(candidates, weakIds) {
+  const chosen = candidates.filter((candidate) => weakIds.has(candidate.exercise_id)).slice(0, SUBJECT_EXAM_MAX_QUESTIONS);
+  const picked = new Set(chosen.map((candidate) => candidate.exercise_id));
+  const queues = new Map();
+  for (const candidate of candidates) {
+    if (picked.has(candidate.exercise_id)) continue;
+    if (!queues.has(candidate.unit_id)) queues.set(candidate.unit_id, []);
+    queues.get(candidate.unit_id).push(candidate);
+  }
+  while (chosen.length < SUBJECT_EXAM_MAX_QUESTIONS && [...queues.values()].some((queue) => queue.length > 0)) {
+    for (const queue of queues.values()) {
+      if (chosen.length >= SUBJECT_EXAM_MAX_QUESTIONS) break;
+      if (queue.length > 0) chosen.push(queue.shift());
+    }
+  }
+  return chosen.sort((a, b) => a.unit_id - b.unit_id || a.order_index - b.order_index || a.exercise_id - b.exercise_id);
+}
 
 /**
  * A discipline exam: up to ${SUBJECT_EXAM_MAX_QUESTIONS} questions drawn from ALL the discipline's units.
@@ -184,21 +202,7 @@ export function startSubject(db, userId, { subjectId }, now = () => new Date()) 
   if (candidates.length === 0) throw new ExamError('NO_QUESTIONS', dm('EXAM_SUBJECT_NO_QUESTIONS'));
 
   const weak = new Set(Object.values(attemptsService.reinforcementByUnit(db, userId)).flat());
-  const chosen = candidates.filter((c) => weak.has(c.exercise_id)).slice(0, SUBJECT_EXAM_MAX_QUESTIONS);
-  const picked = new Set(chosen.map((c) => c.exercise_id));
-  const queues = new Map();
-  for (const c of candidates) {
-    if (picked.has(c.exercise_id)) continue;
-    if (!queues.has(c.unit_id)) queues.set(c.unit_id, []);
-    queues.get(c.unit_id).push(c);
-  }
-  while (chosen.length < SUBJECT_EXAM_MAX_QUESTIONS && [...queues.values()].some((q) => q.length > 0)) {
-    for (const q of queues.values()) {
-      if (chosen.length >= SUBJECT_EXAM_MAX_QUESTIONS) break;
-      if (q.length > 0) chosen.push(q.shift());
-    }
-  }
-  chosen.sort((a, b) => a.unit_id - b.unit_id || a.order_index - b.order_index || a.exercise_id - b.exercise_id);
+  const chosen = selectSubjectExamCandidates(candidates, weak);
 
   const nowIso = now().toISOString();
   const run = db.transaction(() => {

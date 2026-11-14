@@ -19,7 +19,7 @@ export const MIN_SAMPLE_QUESTIONS = 10;
 // Same value as the client's THRESHOLDS.ADEQUATE (src/performance-thresholds.js);
 // a test pins the equality so the two cannot drift apart silently.
 export const WEAK_BELOW_PCT = 65;
-export const MAX_WEAK_SUGGESTIONS = 5;
+const MAX_WEAK_SUGGESTIONS = 5;
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -51,7 +51,7 @@ export function buildPriorities(
   const everSeen = new Set();
   const sampleByUnit = new Map();
   for (const row of evidence) {
-    if (!(row.questionsCount > 0)) continue;
+    if ((row.questionsCount > 0) === false) continue; // Preserve NaN behavior; `<= 0` alone would treat NaN differently.
     everSeen.add(row.unitId);
     if (row.evidenceDate < from || row.evidenceDate > today) continue;
     const s = sampleByUnit.get(row.unitId) ?? { questions: 0, correct: 0, bySource: {} };

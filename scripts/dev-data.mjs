@@ -7,7 +7,7 @@ import { existsSync, mkdirSync, copyFileSync, readdirSync, rmSync, statSync } fr
 
 // The datastore paths and the single-writer lock live in the server package (the backend that writes the database holds the
 // lock itself, T-F1-01); the launchers keep importing them from here.
-export { devDataDir, devDbPaths, acquireDevLock, assertDevLockFree, pidAlive } from '../server/src/dev-datastore.js';
+export { devDataDir, devDbPaths, acquireDevLock, assertDevLockFree } from '../server/src/dev-datastore.js';
 
 const dayStamp = (now) => now.toISOString().slice(0, 10);
 

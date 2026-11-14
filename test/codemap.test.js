@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { resolveGitExecutable } from './system-executables.mjs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -31,7 +32,7 @@ test('CODEMAP.md cites paths, and every cited path exists', () => {
   // "Exists" means TRACKED by Git: a file that is only on this machine passes existsSync here and fails in CI (it already happened once).
   // Without Git (a zip of the repo) the check falls back to the filesystem.
   let tracked = null;
-  try { tracked = execFileSync('git', ['ls-files'], { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).split('\n').filter(Boolean); } catch { /* no git */ }
+  try { tracked = execFileSync(resolveGitExecutable(), ['ls-files'], { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).split('\n').filter(Boolean); } catch { /* no git */ }
   const isThere = (p) => (tracked ? tracked.some((f) => (p.endsWith('/') ? f.startsWith(p) : f === p)) : existsSync(join(root, p)));
   const missing = paths.filter((p) => !NEVER_COMMITTED.has(p) && !isThere(p));
   assert.deepEqual(missing, [], `CODEMAP.md cites paths that no longer exist: ${missing.join(', ')}`);

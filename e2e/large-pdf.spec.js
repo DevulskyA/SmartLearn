@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -9,6 +10,7 @@ import { VITE_ORIGIN, serverPort } from './support/ports.js';
 import { waitForServerReady } from './support/wait-for-server.js';
 import { signInRegistered } from './support/session.js';
 
+import { generateByPages } from './support/materials-flow.js';
 // LARGEPDF-1: a realistic lecture PDF (dozens to ~150 pages) goes from upload to reviewable drafts without
 // hanging, dropping pages, or failing silently. The provider is the default deterministic one (this proves the
 // SCALE of extraction / proposals / limits, not the quality of a model).
@@ -49,7 +51,7 @@ test.beforeEach(async ({ page }) => {
     window.__SMARTLEARN_REMOTE_MODE__ = true;
     window.__SMARTLEARN_LOCAL_AUTHORITY__ = true;
   }, API_BASE);
-  const email = `large-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+  const email = `large-${Date.now()}-${randomUUID()}@example.com`;
   const password = 'a genuinely long test password 1';
   await signInRegistered(page, { email: email, password: password });
 });
@@ -58,7 +60,7 @@ const SENTENCE = 'A filtração glomerular depende da pressão hidrostática cap
 const pageText = (n, chars) => `Página ${n}. ${SENTENCE.repeat(Math.ceil(chars / SENTENCE.length))}`.slice(0, chars);
 const noHorizontalScroll = (page) => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth);
 
-test('a 150-page lecture PDF: extracted in bounded time, 15 proposals covering every page once, a draft of one chunk is reviewable', async ({ page }) => {
+test('a 150-page lecture PDF: extracted in bounded time, and a draft of ten chosen pages is reviewable', async ({ page }) => {
   const pages = Array.from({ length: 150 }, (_, i) => pageText(i + 1, 1800));
   const pdf = buildFixturePdf(pages);
   await page.locator('[data-screen="materials"]').click();
@@ -69,72 +71,39 @@ test('a 150-page lecture PDF: extracted in bounded time, 15 proposals covering e
   console.log(`[LARGEPDF] 150 pages, ${(pdf.length / 1024).toFixed(0)} KB -> proposals in ${elapsedMs} ms`);
   expect(elapsedMs).toBeLessThan(45000);
 
-  await page.locator('#sources-index > summary').click(); // a whole book keeps the index collapsed behind the topic search
-  const proposals = page.locator('.source-proposal-item');
-  await expect(proposals).toHaveCount(15);
-  // every page belongs to exactly one proposal: 1-10, 11-20, ..., 141-150
-  const ranges = await proposals.evaluateAll((els) => els.map((e) => e.innerText.match(/p[áa]ginas?\s+(\d+)\s*[–-]\s*(\d+)|p[áa]gina\s+(\d+)/i)?.slice(1, 4).filter(Boolean).join('-')));
-  console.log('[LARGEPDF] ranges', JSON.stringify(ranges));
-  expect(ranges[0]).toBe('1-10');
-  expect(ranges[14]).toBe('141-150');
   expect(await noHorizontalScroll(page)).toBe(true);
   await page.setViewportSize({ width: 375, height: 800 });
   expect(await noHorizontalScroll(page)).toBe(true);
   await page.setViewportSize({ width: 1280, height: 900 });
 
-  // a chunk from the middle becomes a reviewable draft
-  const item = proposals.nth(7);
-  await item.locator('[data-action="generate-draft"]').click();
+  // ten pages from the middle become a reviewable draft (chosen by page range)
+  await generateByPages(page, { from: 71, to: 80 });
   await page.locator('.lesson-editor').getByRole('tab', { name: /Questões/ }).click();
   await expect(page.locator('.lesson-editor .lesson-qitem').first()).toBeVisible({ timeout: 20000 });
 });
 
-test('dense pages: chunks close before the model input limit, so every proposal can become a draft; only one absurdly dense page gets a plain-language explanation', async ({ page }) => {
+test('dense pages: a page range within the model input limit becomes a draft; only one absurdly dense page gets a plain-language explanation', async ({ page }) => {
   // 10 dense pages x 6500 chars = 65000 chars: as one 10-page chunk it would exceed the 50000-char input limit
   const pages = Array.from({ length: 10 }, (_, i) => pageText(i + 1, 6500));
   await page.locator('[data-screen="materials"]').click();
   await page.setInputFiles('#sources-file-input', { name: 'capitulo-denso.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf(pages) });
   await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 30000 });
-  const proposals = page.locator('.source-proposal-item');
-  // the message appears a moment before the list is drawn: wait for the list instead of counting it at once
-  await expect(async () => { expect(await proposals.count()).toBeGreaterThanOrEqual(2); }).toPass({ timeout: 10000 }); // split by size, not one impossible chunk
-  const first = proposals.first();
-  await first.locator('[data-action="generate-draft"]').click();
+  await generateByPages(page, { from: 1, to: 2 });
   await page.locator('.lesson-editor').getByRole('tab', { name: /Questões/ }).click();
   await expect(page.locator('.lesson-editor .lesson-qitem').first()).toBeVisible({ timeout: 20000 });
   await expect(page.locator('#sources-message')).toContainText('Resumo gerado');
   await page.locator('[data-action="lesson-back"]').click();
 
   // a single page above the limit cannot be split: the student is told plainly (not a raw engineering message),
-  // and the message is brought into view even though it sits far above a long list of proposals
+  // and the message is brought into view
   const longList = Array.from({ length: 150 }, (_, n) => pageText(n + 1, n === 149 ? 60000 : 300));
   await page.setInputFiles('#sources-file-input', { name: 'aula-com-pagina-gigante.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf(longList) });
-  await expect(page.locator('.source-proposal-item')).toHaveCount(16, { timeout: 30000 }); // 15 by pages + the giant page alone
-  await page.locator('#sources-index > summary').click();
-  const last = page.locator('.source-proposal-item').last();
+  await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 30000 });
+  const last = page.locator('#sources-range-form');
   await last.scrollIntoViewIfNeeded();
-  expect(await page.locator('#sources-message').isVisible()).toBe(true);
-  await last.locator('[data-action="generate-draft"]').click();
+  await expect(page.locator('#sources-message')).toBeVisible();
+  await generateByPages(page, { from: 150, to: 150 });
   await expect(page.locator('#sources-message')).toContainText('texto demais', { timeout: 20000 });
   await expect(page.locator('#sources-message')).not.toContainText('excede o limite de');
   await expect(page.locator('#sources-message')).toBeInViewport(); // brought into view, not left off-screen
-});
-
-test('TRACKUX-1: on a 375px Materiais the proposals are cards with a full-width title box (the title being edited is readable), not bare bullets', async ({ page }) => {
-  await page.locator('[data-screen="materials"]').click();
-  const pages = Array.from({ length: 30 }, (_, n) => pageText(n + 1, 1500));
-  await page.setInputFiles('#sources-file-input', { name: 'aula-de-fisiologia-renal-completa-com-nome-longo.pdf', mimeType: 'application/pdf', buffer: buildFixturePdf(pages) });
-  await expect(page.locator('#sources-message')).toContainText(/trechos? propostos?/, { timeout: 30000 });
-  await page.setViewportSize({ width: 375, height: 800 });
-  const item = page.locator('.source-proposal-item').first();
-  const m = await item.evaluate((el) => {
-    const input = el.querySelector('.source-proposal-title-input').getBoundingClientRect();
-    // a proposal is a card on its own, or a row of one bordered block (the approved V6 list grammar)
-    const border = Math.max(parseFloat(getComputedStyle(el).borderTopWidth), parseFloat(getComputedStyle(el.parentElement).borderTopWidth));
-    return { inputWidth: input.width, itemWidth: el.getBoundingClientRect().width, bullet: getComputedStyle(el).listStyleType, border };
-  });
-  expect(m.bullet, 'no bare bullets').toBe('none');
-  expect(m.inputWidth / m.itemWidth, 'the title box uses the card width').toBeGreaterThan(0.85);
-  expect(m.border, 'each proposal is a card or a row of a bordered block').toBeGreaterThan(0);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 });

@@ -102,7 +102,7 @@ export async function changePassword(currentPassword, newPassword) {
   return { ok: true };
 }
 
-export async function resetPassword(token, newPassword) {
+async function resetPassword(token, newPassword) {
   const res = await apiFetch('/v1/auth/reset-password', { method: 'POST', body: { token, newPassword } });
   if (!res.ok) return { ok: false, message: errorMessage(res.body?.error?.code) };
   return { ok: true };

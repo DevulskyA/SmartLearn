@@ -158,7 +158,7 @@ function setPause(db, userId, unitId, action) {
 export const pauseUnit = (db, userId, unitId) => setPause(db, userId, unitId, 'PAUSE');
 export const resumeUnit = (db, userId, unitId) => setPause(db, userId, unitId, 'RESUME');
 
-export const ANCHORS = Object.freeze({ PLANNED_DATE: 'PLANNED_DATE', ACTUAL_DATE: 'ACTUAL_DATE' });
+const ANCHORS = Object.freeze({ PLANNED_DATE: 'PLANNED_DATE', ACTUAL_DATE: 'ACTUAL_DATE' });
 
 /**
  * Named combinations of the two parameters. V1 is today's calendar. DECIDED is the student's experimental decision of 2026-10-19: a performed review
@@ -166,10 +166,48 @@ export const ANCHORS = Object.freeze({ PLANNED_DATE: 'PLANNED_DATE', ACTUAL_DATE
  * really done, so progression advances ONE stage per performed review and the planned dates that passed stay in the reschedule log (D-14).
  * SUPERSEDE_OVERDUE is NOT part of DECIDED: it would skip stages, which D-14 forbids.
  */
-export const PROFILES = Object.freeze({
+const PROFILES = Object.freeze({
   V1: { recovery: RECOVERY.NONE, anchor: ANCHORS.PLANNED_DATE },
   DECIDED: { recovery: RECOVERY.NONE, anchor: ANCHORS.ACTUAL_DATE },
 });
+
+function resolveObligationOptions(profile, recoveryArg, anchorArg, expectedReviewTaskId) {
+  if (profile !== undefined && !Object.hasOwn(PROFILES, profile)) throw new ReviewError('VALIDATION_FAILED', 'profile não é reconhecido.', 'profile');
+  const recovery = recoveryArg ?? PROFILES[profile ?? 'V1'].recovery;
+  const anchor = anchorArg ?? PROFILES[profile ?? 'V1'].anchor;
+  if (!Object.values(RECOVERY).includes(recovery)) throw new ReviewError('VALIDATION_FAILED', 'recovery não é reconhecido.', 'recovery');
+  if (!Object.values(ANCHORS).includes(anchor)) throw new ReviewError('VALIDATION_FAILED', 'anchor não é reconhecido.', 'anchor');
+  if (expectedReviewTaskId !== undefined && (!Number.isInteger(expectedReviewTaskId) || expectedReviewTaskId < 1)) throw new ReviewError('VALIDATION_FAILED', dm('REVIEW_NOT_FOUND'), 'expectedReviewTaskId');
+  return { recovery, anchor };
+}
+
+function completedObligationReplay(db, userId, unitId, expected, questionsCount, correctCount, base) {
+  if (!expected?.completed_at) return null;
+  const evidence = db.prepare('SELECT id, questions_count, correct_count FROM learning_evidence WHERE user_id = ? AND unit_id = ? AND review_task_id = ? AND created_at = ? ORDER BY id DESC LIMIT 1').get(userId, unitId, expected.id, expected.completed_at);
+  if ((evidence?.questions_count ?? null) !== (questionsCount ?? null) || (evidence?.correct_count ?? null) !== (correctCount ?? null)) throw new IdempotencyConflictError();
+  return { ...base, completedId: expected.id, completedAt: expected.completed_at, reviewOnly: !evidence, evidenceId: evidence?.id ?? null };
+}
+
+function applyObligationPolicies(db, userId, { pending, viewDate, entry, recovery, anchor, nowIso }) {
+  const supersededIds = [];
+  if (recovery === RECOVERY.SUPERSEDE_OVERDUE) {
+    const insert = db.prepare('INSERT INTO review_task_supersessions (user_id, task_id, superseded_by_task_id, policy, superseded_at) VALUES (?, ?, ?, ?, ?)');
+    for (const t of pending.filter((p) => p.due_date <= viewDate)) { insert.run(userId, t.id, entry.required.id, recovery, nowIso); supersededIds.push(t.id); }
+  }
+  const rescheduled = [];
+  if (anchor === ANCHORS.ACTUAL_DATE) {
+    const update = db.prepare('UPDATE review_tasks SET due_date = ? WHERE user_id = ? AND id = ?');
+    const log = db.prepare('INSERT INTO review_task_reschedules (user_id, task_id, from_due_date, to_due_date, anchor, anchored_on_task_id, rescheduled_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
+    for (const t of pending.filter((p) => !supersededIds.includes(p.id) && p.offset_days > entry.required.offsetDays)) {
+      const to = addDays(viewDate, t.offset_days - entry.required.offsetDays);
+      if (to === t.due_date) continue;
+      update.run(to, userId, t.id);
+      log.run(userId, t.id, t.due_date, to, anchor, entry.required.id, nowIso);
+      rescheduled.push({ taskId: t.id, from: t.due_date, to });
+    }
+  }
+  return { supersededIds, rescheduled };
+}
 
 /**
  * EXPERIMENTAL (HG-09 / D-12 option 3), D4b: perform the ONE review a unit requires today, with the two open decisions as NAMED parameters.
@@ -181,12 +219,7 @@ export const PROFILES = Object.freeze({
  * Disposable databases only until the student integrates migration 034.
  */
 export function completeObligation(db, userId, unitId, { date, timezoneOverride, profile, recovery: recoveryArg, anchor: anchorArg, questionsCount, correctCount, operationKey, expectedReviewTaskId } = {}, now = () => new Date()) {
-  if (profile !== undefined && !Object.hasOwn(PROFILES, profile)) throw new ReviewError('VALIDATION_FAILED', 'profile não é reconhecido.', 'profile');
-  const recovery = recoveryArg ?? PROFILES[profile ?? 'V1'].recovery;
-  const anchor = anchorArg ?? PROFILES[profile ?? 'V1'].anchor;
-  if (!Object.values(RECOVERY).includes(recovery)) throw new ReviewError('VALIDATION_FAILED', 'recovery não é reconhecido.', 'recovery');
-  if (!Object.values(ANCHORS).includes(anchor)) throw new ReviewError('VALIDATION_FAILED', 'anchor não é reconhecido.', 'anchor');
-  if (expectedReviewTaskId !== undefined && (!Number.isInteger(expectedReviewTaskId) || expectedReviewTaskId < 1)) throw new ReviewError('VALIDATION_FAILED', dm('REVIEW_NOT_FOUND'), 'expectedReviewTaskId');
+  const { recovery, anchor } = resolveObligationOptions(profile, recoveryArg, anchorArg, expectedReviewTaskId);
   const run = db.transaction(() => {
     // An uncertain reply must remain bound to the stage practiced, even if another stage is now due.
     const expected = expectedReviewTaskId === undefined ? null : db.prepare('SELECT * FROM review_tasks WHERE user_id = ? AND unit_id = ? AND id = ?').get(userId, unitId, expectedReviewTaskId);
@@ -194,11 +227,8 @@ export function completeObligation(db, userId, unitId, { date, timezoneOverride,
     const view = obligations(db, userId, { date, timezoneOverride, recovery });
     const entry = view.units.find((u) => u.unitId === unitId);
     const base = { profile: profile ?? null, recovery, anchor, date: view.date, completedId: null, supersededIds: [], rescheduled: [], ...(entry?.paused ? { reason: 'PAUSED' } : {}) };
-    if (expected?.completed_at) {
-      const evidence = db.prepare('SELECT id, questions_count, correct_count FROM learning_evidence WHERE user_id = ? AND unit_id = ? AND review_task_id = ? AND created_at = ? ORDER BY id DESC LIMIT 1').get(userId, unitId, expected.id, expected.completed_at);
-      if ((evidence?.questions_count ?? null) !== (questionsCount ?? null) || (evidence?.correct_count ?? null) !== (correctCount ?? null)) throw new IdempotencyConflictError();
-      return { ...base, completedId: expected.id, completedAt: expected.completed_at, reviewOnly: !evidence, evidenceId: evidence?.id ?? null };
-    }
+    const replay = completedObligationReplay(db, userId, unitId, expected, questionsCount, correctCount, base);
+    if (replay) return replay;
     if (expected && entry?.required?.id !== expected.id) throw new IdempotencyConflictError();
     if (!entry?.required) return base;
     // One conclusion rule: a stage with questions is concluded by their evidence, never by a bare "done" (reading is for stages without questions).
@@ -208,23 +238,7 @@ export function completeObligation(db, userId, unitId, { date, timezoneOverride,
     const completed = complete(db, userId, entry.required.id, { questionsCount, correctCount, operationKey }, now);
     const nowIso = completed.completedAt;
     const pending = db.prepare(`${TASK_SELECT} AND rt.unit_id = ? AND rt.completed_at IS NULL${NOT_SUPERSEDED} ORDER BY rt.due_date`).all(userId, unitId);
-    const supersededIds = [];
-    if (recovery === RECOVERY.SUPERSEDE_OVERDUE) {
-      const insert = db.prepare('INSERT INTO review_task_supersessions (user_id, task_id, superseded_by_task_id, policy, superseded_at) VALUES (?, ?, ?, ?, ?)');
-      for (const t of pending.filter((p) => p.due_date <= view.date)) { insert.run(userId, t.id, entry.required.id, recovery, nowIso); supersededIds.push(t.id); }
-    }
-    const rescheduled = [];
-    if (anchor === ANCHORS.ACTUAL_DATE) {
-      const update = db.prepare('UPDATE review_tasks SET due_date = ? WHERE user_id = ? AND id = ?');
-      const log = db.prepare('INSERT INTO review_task_reschedules (user_id, task_id, from_due_date, to_due_date, anchor, anchored_on_task_id, rescheduled_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
-      for (const t of pending.filter((p) => !supersededIds.includes(p.id) && p.offset_days > entry.required.offsetDays)) {
-        const to = addDays(view.date, t.offset_days - entry.required.offsetDays);
-        if (to === t.due_date) continue;
-        update.run(to, userId, t.id);
-        log.run(userId, t.id, t.due_date, to, anchor, entry.required.id, nowIso);
-        rescheduled.push({ taskId: t.id, from: t.due_date, to });
-      }
-    }
+    const { supersededIds, rescheduled } = applyObligationPolicies(db, userId, { pending, viewDate: view.date, entry, recovery, anchor, nowIso });
     return { ...base, completedId: entry.required.id, completedAt: nowIso, reviewOnly: completed.reviewOnly, evidenceId: completed.evidenceId, supersededIds, rescheduled };
   });
   return run();

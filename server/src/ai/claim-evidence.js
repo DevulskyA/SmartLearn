@@ -13,19 +13,65 @@
 // The result is honest about its reach: SOURCE_LINKED means "a real passage of the approved source, related to this sentence, is
 // pointed at" — whether it really entails the sentence is what the reviewer reads side by side.
 
-export const MAX_EVIDENCE_ENTRIES = 60;
+const MAX_EVIDENCE_ENTRIES = 60;
 const MIN_QUOTE_CHARS = 20;
 const MAX_QUOTE_CHARS = 600;
 const MIN_CLAIM_CHARS = 12;
 const MAX_CLAIM_CHARS = 1200;
 const MIN_SENTENCE_CHARS = 25;
+const LETTER = /\p{L}/u;
+const WHITESPACE = /\s/u;
+const LINE_HYPHENS = new Set(['-', '‐', '‑']);
+
+function codePointAt(text, index) {
+  const codePoint = text.codePointAt(index);
+  const character = String.fromCodePoint(codePoint);
+  return { character, end: index + character.length };
+}
+
+function splitWordEnd(text, index) {
+  let hasLineFeed = false;
+  while (index < text.length) {
+    const next = codePointAt(text, index);
+    if (!WHITESPACE.test(next.character)) break;
+    if (next.character === '\n') hasLineFeed = true;
+    index = next.end;
+  }
+  if (!hasLineFeed || index >= text.length) return null;
+  const next = codePointAt(text, index);
+  return LETTER.test(next.character) ? next : null;
+}
+
+function joinedWordAt(text, index, first) {
+  const hyphenIndex = index + first.length;
+  if (!LETTER.test(first) || !LINE_HYPHENS.has(text[hyphenIndex])) return null;
+  const next = splitWordEnd(text, hyphenIndex + 1);
+  return next ? { text: first + next.character, end: next.end } : null;
+}
+
+function removeHyphenatedLineBreaks(text) {
+  const output = [];
+  let index = 0;
+  while (index < text.length) {
+    const first = codePointAt(text, index);
+    const joined = joinedWordAt(text, index, first.character);
+    if (joined) {
+      output.push(joined.text);
+      index = joined.end;
+      continue;
+    }
+    output.push(first.character);
+    index = first.end;
+  }
+  return output.join('');
+}
 
 /** The one normalization every comparison goes through. */
 export function normalizeForMatch(text) {
-  return String(text)
+  const normalized = String(text)
     .normalize('NFKC') // ligatures (ﬁ -> fi), compatibility forms
-    .replace(/[­​‌‍﻿]/g, '') // soft hyphen, zero-width characters
-    .replace(/(\p{L})[-‐‑]\s*\n\s*(\p{L})/gu, '$1$2') // a word broken across lines with a hyphen
+    .replace(/\u00AD/g, '').replace(/\u200B/g, '').replace(/\u200C/g, '').replace(/\u200D/g, '').replace(/\uFEFF/g, ''); // soft hyphen, zero-width characters
+  return removeHyphenatedLineBreaks(normalized)
     .replace(/[‐‑‒–—−]/g, '-')
     .replace(/[‘’‚′]/g, "'")
     .replace(/[“”„″]/g, '"')

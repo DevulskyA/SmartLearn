@@ -11,9 +11,10 @@ function fail(err) {
 }
 
 /** Records the job for one approved trecho and hands it to the server; returns at once. An already active job is returned as is. */
-export async function createJob(proposalId) {
+export async function createJob(proposalId, { targetLocale = null, regenerate = false } = {}) {
   try {
-    const { job } = await apiRequest('/v1/generation-jobs', { method: 'POST', body: { proposalId } });
+    // targetLocale: a translation, i.e. a new version of the same trecho in another language (the previous one is kept until the student decides)
+    const { job } = await apiRequest('/v1/generation-jobs', { method: 'POST', body: { proposalId, ...(targetLocale ? { targetLocale } : {}), ...(regenerate ? { regenerate: true } : {}) } });
     return { ok: true, job };
   } catch (err) { return fail(err); }
 }

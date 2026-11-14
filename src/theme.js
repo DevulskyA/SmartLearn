@@ -276,7 +276,7 @@ export function resolveThemePreference(preference, systemMode = getSystemThemeMo
 
 // Quick light/dark button: flips the mode but remembers, per mode, the preference the user was on, so the second click returns to it
 // (picking Dracula, toggling to light and back lands on Dracula, not on Noite). `preference` may be "auto"; it is remembered as such.
-export const QUICK_TOGGLE_MEMORY_KEY = "smartlearn:theme-quick-memory";
+const QUICK_TOGGLE_MEMORY_KEY = "smartlearn:theme-quick-memory";
 
 export function quickToggleTarget(preference, systemMode, memory = {}) {
   const modeOf = (pref) => (THEME_OPTIONS_BY_ID.get(resolveThemePreference(pref, systemMode))?.mode === "dark" ? "dark" : "light");
@@ -322,6 +322,13 @@ export function applyThemePreference(preference, { persist = false } = {}) {
   const metaThemeColor = document.querySelector('meta[name="theme-color"]');
   if (metaThemeColor) {
     metaThemeColor.setAttribute("content", theme.themeColor);
+  }
+
+  // What the very first paint of the next load (F5) needs, read by the inline script in index.html before any module runs.
+  try {
+    localStorage.setItem("smartlearn:theme-paint", JSON.stringify({ bg: theme.tokens["--color-bg"], mode: root.dataset.themeMode }));
+  } catch {
+    // localStorage indisponível: o próximo carregamento usa o fundo do sistema.
   }
 
   if (persist) {

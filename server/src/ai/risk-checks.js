@@ -167,7 +167,13 @@ const anchorsOf = (sentence) => {
   return out;
 };
 const sentencesOf = (text) => String(text).replace(/\s+/g, ' ').split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter((s) => s.length >= 25);
-const overlap = (a, b) => { let n = 0; for (const x of a) if (b.has(x)) n += 1; return n; };
+const overlap = (a, b) => {
+  let n = 0;
+  for (const x of a) {
+    if (b.has(x)) n += 1;
+  }
+  return n;
+};
 
 function pairSentences(sourceItems, draftItems) {
   const bestOf = (item, pool) => {
@@ -203,6 +209,34 @@ function windowCues(items, at, sets, own) {
   return out;
 }
 
+function reportLostQualifier(findings, sourceQualifiers, draftWindow, scope, draft, evidence) {
+  for (const qualifier of sourceQualifiers) {
+    const hasEquivalentHedge = qualifier.startsWith('HEDGE') && [...draftWindow.qualifiers].some((candidate) => candidate.startsWith('HEDGE'));
+    if (draftWindow.qualifiers.has(qualifier) || hasEquivalentHedge) continue;
+    findings.push(resolveMessages({ issue: 'QUALIFIER_LOST', severity: 'MEDIUM', scope, generatedClaim: clip(draft.text), sourceEvidence: evidence, repair: msg('REPAIR_QUALIFIER_LOST') }));
+    return;
+  }
+}
+
+function reportAddedQualifier(findings, draftQualifiers, sourceWindow, scope, draft, evidence) {
+  for (const qualifier of draftQualifiers) {
+    const unsubstantiatedNever = qualifier === 'NEVER' && sourceWindow.negation.size > 0;
+    if (!ABSOLUTES.has(qualifier) || sourceWindow.qualifiers.has(qualifier) || unsubstantiatedNever) continue;
+    findings.push(resolveMessages({ issue: 'QUALIFIER_ADDED', severity: 'MEDIUM', scope, generatedClaim: clip(draft.text), sourceEvidence: evidence, repair: msg('REPAIR_QUALIFIER_ADDED') }));
+    return;
+  }
+}
+
+function reportNegationChange(findings, sourceCues, draftCues, scope, draft, evidence) {
+  const strongSource = sourceCues.negation.filter((word) => !WEAK_NEGATION.has(word));
+  if (strongSource.length > 0 && draftCues.negation.length === 0) {
+    findings.push(resolveMessages({ issue: 'NEGATION_LOST', severity: 'HIGH', blocksRepair: false, scope, generatedClaim: clip(draft.text), sourceEvidence: evidence, repair: msg('REPAIR_NEGATION_LOST') }));
+    return;
+  }
+  const addedNegation = sourceCues.negation.length === 0 && draftCues.negation.some((word) => !WEAK_NEGATION.has(word) && !NEVER_CUES.has(word));
+  if (addedNegation) findings.push(resolveMessages({ issue: 'NEGATION_ADDED', severity: 'HIGH', blocksRepair: false, scope, generatedClaim: clip(draft.text), sourceEvidence: evidence, repair: msg('REPAIR_NEGATION_ADDED') }));
+}
+
 function auditPairs(pairs, sets, scopeOf, { sourceItems, draftItems }) {
   const findings = [];
   for (const { draft, source } of pairs) {
@@ -212,28 +246,13 @@ function auditPairs(pairs, sets, scopeOf, { sourceItems, draftItems }) {
     const draftWindow = windowCues(draftItems, draftItems.indexOf(draft), sets.draft, d);
     const scope = scopeOf(draft);
     const evidence = msg('EVIDENCE_SOURCE_PASSAGE', { page: source.pageIndex, text: clip(source.text) });
-    for (const q of s.qualifiers) {
-      if (!draftWindow.qualifiers.has(q) && !(q.startsWith('HEDGE') && [...draftWindow.qualifiers].some((x) => x.startsWith('HEDGE')))) {
-        findings.push(resolveMessages({ issue: 'QUALIFIER_LOST', severity: 'MEDIUM', scope, generatedClaim: clip(draft.text), sourceEvidence: evidence, repair: msg('REPAIR_QUALIFIER_LOST') }));
-        break;
-      }
-    }
-    for (const q of d.qualifiers) {
-      if (ABSOLUTES.has(q) && !sourceWindow.qualifiers.has(q) && !(q === 'NEVER' && sourceWindow.negation.size > 0)) {
-        findings.push(resolveMessages({ issue: 'QUALIFIER_ADDED', severity: 'MEDIUM', scope, generatedClaim: clip(draft.text), sourceEvidence: evidence, repair: msg('REPAIR_QUALIFIER_ADDED') }));
-        break;
-      }
-    }
+    reportLostQualifier(findings, s.qualifiers, draftWindow, scope, draft, evidence);
+    reportAddedQualifier(findings, d.qualifiers, sourceWindow, scope, draft, evidence);
     // A flipped negation reverses the claim (a contraindication that reads as an indication). Judged on the paired sentence itself,
     // so a negation in a neighbouring sentence cannot hide a loss. Only explicit negators count: verbs like "bloqueia"/"evita"
     // have legitimate paraphrases ("inibe"). It is a word-level signal (it cannot tell which claim the negator applies to), so
     // it is shown for the human to check and never starts an automatic repair on its own.
-    const strongSource = s.negation.filter((w) => !WEAK_NEGATION.has(w));
-    if (strongSource.length > 0 && d.negation.length === 0) {
-      findings.push(resolveMessages({ issue: 'NEGATION_LOST', severity: 'HIGH', blocksRepair: false, scope, generatedClaim: clip(draft.text), sourceEvidence: evidence, repair: msg('REPAIR_NEGATION_LOST') }));
-    } else if (s.negation.length === 0 && d.negation.some((w) => !WEAK_NEGATION.has(w) && !NEVER_CUES.has(w))) { // "never" is QUALIFIER_ADDED's
-      findings.push(resolveMessages({ issue: 'NEGATION_ADDED', severity: 'HIGH', blocksRepair: false, scope, generatedClaim: clip(draft.text), sourceEvidence: evidence, repair: msg('REPAIR_NEGATION_ADDED') }));
-    }
+    reportNegationChange(findings, s, d, scope, draft, evidence);
   }
   return findings;
 }

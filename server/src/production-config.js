@@ -9,20 +9,21 @@ import { isAbsolute } from 'node:path';
 const problem = (code, detail) => ({ code, detail });
 const isPositiveInt = (v) => /^\d+$/.test(String(v)) && Number(v) > 0;
 
-export function validateProductionConfig(env = process.env, { fileExists = existsSync } = {}) {
+function validateRuntime(env) {
   const problems = [];
-
   if (env.NODE_ENV !== 'production') problems.push(problem('NODE_ENV_NOT_PRODUCTION', 'NODE_ENV deve ser "production" (cookies Secure/__Host-, sem atalhos de desenvolvimento).'));
-
   // The test-only cheap password hashing (T-F6-10) must never be present in a production launch, whatever else is set.
   if (env.SMARTLEARN_TEST_FAST_SCRYPT) problems.push(problem('TEST_FAST_SCRYPT_SET', 'SMARTLEARN_TEST_FAST_SCRYPT é só para testes e não pode existir em produção.'));
-
   // Persistent data paths: a relative default silently creates an EMPTY database per working directory.
   for (const [code, name] of [['DB_PATH', 'SMARTLEARN_DB_PATH'], ['SOURCES_DIR', 'SMARTLEARN_SOURCES_DIR']]) {
     if (!env[name]) problems.push(problem(`${code}_MISSING`, `${name} deve ser definido explicitamente.`));
     else if (!isAbsolute(env[name])) problems.push(problem(`${code}_NOT_ABSOLUTE`, `${name} deve ser um caminho absoluto (recebido: ${env[name]}).`));
   }
+  return problems;
+}
 
+function validateOrigins(env) {
+  const problems = [];
   // One origin, HTTPS, explicit. The dev default (http://localhost:5173) must never carry over.
   if (!env.SMARTLEARN_ALLOWED_ORIGINS) {
     problems.push(problem('ORIGINS_MISSING', 'SMARTLEARN_ALLOWED_ORIGINS deve listar explicitamente a(s) origem(ns) HTTPS.'));
@@ -32,12 +33,20 @@ export function validateProductionConfig(env = process.env, { fileExists = exist
       else if (!/^https:\/\/[^/\s]+$/i.test(origin)) problems.push(problem('ORIGIN_NOT_HTTPS', `Origem deve ser https://host[:porta] sem caminho: ${origin}`));
     }
   }
+  return problems;
+}
 
+function validateStaticDirectory(env, fileExists) {
+  const problems = [];
   // One origin serves the SPA too: no CORS surface, the browser's origin IS the API origin.
   if (!env.SMARTLEARN_STATIC_DIR) problems.push(problem('STATIC_DIR_MISSING', 'SMARTLEARN_STATIC_DIR (dist/ do build) é necessário para servir SPA e API na mesma origem.'));
   else if (!isAbsolute(env.SMARTLEARN_STATIC_DIR)) problems.push(problem('STATIC_DIR_NOT_ABSOLUTE', 'SMARTLEARN_STATIC_DIR deve ser absoluto.'));
   else if (!fileExists(env.SMARTLEARN_STATIC_DIR)) problems.push(problem('STATIC_DIR_NOT_FOUND', `Não existe: ${env.SMARTLEARN_STATIC_DIR}`));
+  return problems;
+}
 
+function validateNetwork(env) {
+  const problems = [];
   // Proxy trust is a topology decision, never a default.
   if (env.SMARTLEARN_TRUST_PROXY !== 'true' && env.SMARTLEARN_TRUST_PROXY !== 'false') {
     problems.push(problem('TRUST_PROXY_UNSPECIFIED', 'SMARTLEARN_TRUST_PROXY deve ser "true" (atrás de proxy conhecido) ou "false" (exposição direta), explicitamente.'));
@@ -46,12 +55,20 @@ export function validateProductionConfig(env = process.env, { fileExists = exist
     problems.push(problem('HOST_EXPOSED_WITHOUT_PROXY_TRUST', 'HOST em todas as interfaces exige decisão explícita: use um proxy TLS na frente (TRUST_PROXY=true) ou faça bind em 127.0.0.1.'));
   }
   if (env.PORT !== undefined && !(isPositiveInt(env.PORT) && Number(env.PORT) <= 65535)) problems.push(problem('PORT_INVALID', `PORT inválida: ${env.PORT}`));
+  return problems;
+}
 
+function validateLimits(env) {
+  const problems = [];
   // Upload/import budgets: NaN or <= 0 would silently disable a limit.
   for (const name of ['SMARTLEARN_SOURCE_MAX_BYTES', 'SMARTLEARN_SOURCE_QUOTA_BYTES', 'SMARTLEARN_IMPORT_MAX_ROWS', 'SMARTLEARN_IMPORT_MAX_BYTES', 'SMARTLEARN_AI_TIMEOUT_MS', 'SMARTLEARN_AI_MAX_INPUT_CHARS', 'SMARTLEARN_CODEX_TIMEOUT_MS']) {
     if (env[name] !== undefined && !isPositiveInt(env[name])) problems.push(problem('LIMIT_INVALID', `${name} deve ser um inteiro positivo (recebido: ${env[name]}).`));
   }
+  return problems;
+}
 
+function validateAi(env) {
+  const problems = [];
   // The real AI provider needs key + model + consent together (config.js falls back to the FAKE provider
   // otherwise). A half-configured production must fail loudly, not quietly serve fake drafts.
   // CODEX authenticates through the operator's own Codex CLI login: no API key, model or USD cap is required (or
@@ -70,11 +87,26 @@ export function validateProductionConfig(env = process.env, { fileExists = exist
       if (!(Number.isFinite(cap) && cap > 0)) problems.push(problem('AI_BUDGET_REQUIRED', 'Com provedor real, SMARTLEARN_AI_BUDGET_CAP_USD deve ser um número positivo.'));
     }
   }
+  return problems;
+}
 
+function validateNoDevelopmentFlags(env) {
+  const problems = [];
   // Nothing development-only may ride along.
   for (const name of Object.keys(env)) {
     if (/^SMARTLEARN_(DEV|SEED|DEBUG)/.test(name)) problems.push(problem('DEV_FLAG_PRESENT', `${name} não pode existir em produção.`));
   }
-
   return problems;
+}
+
+export function validateProductionConfig(env = process.env, { fileExists = existsSync } = {}) {
+  return [
+    ...validateRuntime(env),
+    ...validateOrigins(env),
+    ...validateStaticDirectory(env, fileExists),
+    ...validateNetwork(env),
+    ...validateLimits(env),
+    ...validateAi(env),
+    ...validateNoDevelopmentFlags(env),
+  ];
 }

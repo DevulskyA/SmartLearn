@@ -72,7 +72,7 @@ const sumChars = (spans) => spans.reduce((n, s) => n + (s.end - s.start), 0);
 const pagesOf = (spans) => [...new Set(spans.map((s) => s.pageIndex))];
 
 /** Full-page spans (a page-bounded range with no heading information). */
-export function spansForPages(pages, pageStart, pageEnd) {
+function spansForPages(pages, pageStart, pageEnd) {
   return pages
     .filter((p) => p.pageIndex >= pageStart && p.pageIndex <= pageEnd && (p.text ?? '').length > 0)
     .map((p) => ({ pageIndex: p.pageIndex, start: 0, end: p.text.length }));
@@ -86,7 +86,10 @@ export function textOfSpans(pageTextByIndex, spans) {
 function greedySpanGroups(spans, { maxPages, maxChars }) {
   const groups = [];
   let current = [];
-  const close = () => { if (current.length > 0) groups.push(current); current = []; };
+  const close = () => {
+    if (current.length > 0) groups.push(current);
+    current = [];
+  };
   for (const span of spans) {
     const next = [...current, span];
     if (current.length > 0 && (pagesOf(next).length > maxPages || sumChars(next) > maxChars)) close();
@@ -141,7 +144,10 @@ export function planSectionUnits(pages, outline, bounds) {
   // Text no heading owns (a cover, front matter, pages before the first heading) is never dropped: it is chunked by the safety bounds.
   const unowned = all.filter((s) => s.owner === null);
   let run = [];
-  const flushRun = () => { for (const part of greedySpanGroups(run, bounds)) units.push({ title: null, spans: part }); run = []; };
+  const flushRun = () => {
+    for (const part of greedySpanGroups(run, bounds)) units.push({ title: null, spans: part });
+    run = [];
+  };
   for (const span of unowned) {
     if (run.length > 0 && span.pageIndex > run[run.length - 1].pageIndex + 1) flushRun();
     run.push(span);

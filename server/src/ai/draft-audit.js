@@ -25,7 +25,7 @@ export const triggersRepair = (f) => (f.severity === 'HIGH' || f.severity === 'M
 // T-F2-03: identity of the deterministic rule set. Opening a draft only COMPARES the stored audit's version with this one (never
 // recalculates); "Reauditar" is the explicit action that recomputes. BUMP this whenever a rule (this file or language-detect.js)
 // changes (draft-audit.js, language-detect.js, risk-checks.js, draft-audit-model.js):draft-audit-rules-version.test.js pins a hash of the files to a version and fails when the rules change without a new one.
-export const AUDIT_RULES_VERSION = 'audit-rules-12';
+export const AUDIT_RULES_VERSION = 'audit-rules-16';
 
 const norm = (s) => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 const tokens = (s) => (String(s).match(/\p{L}+/gu) ?? []).map((w) => ({ raw: w.toLowerCase(), key: norm(w) }));
@@ -49,15 +49,53 @@ const GENERIC = new Set([
 // An exponent is one number however it is written: extraction gives "10¹¹", a summary may say "10^11". Both read as base 10
 // and the exponent "e11", so neither an equal exponent is flagged nor a different one ("10^13") let through.
 const SUPERSCRIPT_TO_ASCII = { '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9', '⁺': '', '⁻': '-' };
+const SUPERSCRIPT_DIGITS = new Set('⁰¹²³⁴⁵⁶⁷⁸⁹');
+const SUPERSCRIPT_SIGNS = new Set(['⁺', '⁻']);
+const isDigit = (ch) => ch >= '0' && ch <= '9';
+
+function exponentLength(text, start) {
+  if (text[start] !== '^') return 0;
+  let at = start + 1;
+  if (/\s/.test(text[at] ?? '')) at += 1;
+  if (text[at] === '-' || text[at] === '−') at += 1;
+  const firstDigit = at;
+  while (isDigit(text[at] ?? '')) at += 1;
+  return at > firstDigit ? at - start : 0;
+}
+
+function superscriptLength(text, start) {
+  let at = start;
+  if (SUPERSCRIPT_SIGNS.has(text[at])) at += 1;
+  const firstDigit = at;
+  while (SUPERSCRIPT_DIGITS.has(text[at])) at += 1;
+  return at > firstDigit ? at - start : 0;
+}
+
+function decimalLength(text, start) {
+  let at = start;
+  while (isDigit(text[at] ?? '')) at += 1;
+  if (at === start) return 0;
+  if (text[at] === '.' || text[at] === ',') {
+    let end = at + 1;
+    while (isDigit(text[end] ?? '')) end += 1;
+    if (end > at + 1) at = end;
+  }
+  return at - start;
+}
+
 function numbersIn(text) {
   const out = [];
-  for (const m of String(text).matchAll(/\^\s?[-−]?\d+|[⁺⁻]?[⁰¹²³⁴⁵⁶⁷⁸⁹]+|\d+(?:[.,]\d+)?/g)) {
-    const raw = m[0];
+  const source = String(text);
+  for (let index = 0; index < source.length;) {
+    const length = exponentLength(source, index) || superscriptLength(source, index) || decimalLength(source, index);
+    if (length === 0) { index += 1; continue; }
+    const raw = source.slice(index, index + length);
     const isExponent = raw.startsWith('^') || /^[⁺⁻⁰¹²³⁴⁵⁶⁷⁸⁹]/.test(raw);
     const key = isExponent
       ? `e${[...raw].map((ch) => SUPERSCRIPT_TO_ASCII[ch] ?? ch).join('').replace(/[\^\s]/g, '').replace('−', '-')}`
       : raw.replace(',', '.');
-    out.push({ raw, key, index: m.index });
+    out.push({ raw, key, index });
+    index += length;
   }
   return out;
 }
@@ -67,7 +105,7 @@ const sentencesOf = (text) => String(text).split(/(?<=[.!?])\s+/).map((s) => s.t
 // A typeset equation can come out of the PDF with its decimal points detached ("10 3 45 / 6 55 / . / .": the values 3.45 and 6.55).
 // On text that shows such detached points (a line holding nothing but ".") two digit groups written next to each other are ALSO read
 // as a decimal number, so a value the source really states is not reported as invented. Elsewhere nothing changes.
-export function sourceNumberKeys(text) {
+function sourceNumberKeys(text) {
   const keys = new Set(numbersIn(text).map((n) => n.key));
   if (/(^|\n)[ \t]*\.[ \t]*(\n|$)/.test(String(text))) {
     // every neighbouring pair (lookahead, so "10 3 45" gives 10.3 and 3.45)
@@ -114,12 +152,9 @@ function sentenceContaining(text, index) {
   return text.slice(start).trim();
 }
 
-function auditSummary(summary, segments, { lexical = true } = {}) {
+// 1) Values (doses, pressures, rates...) that the source never states are the classic invented fact.
+function unsupportedSummaryValueFindings(summary, segments, sourceNumbers) {
   const findings = [];
-  const sourceText = segments.map((s) => s.text).join(' ');
-  const sourceNumbers = sourceNumberKeys(segments.map((seg) => seg.text).join('\n'));
-
-  // 1) Values (doses, pressures, rates...) that the source never states are the classic invented fact.
   const badNumbers = numbersIn(summary).filter((n) => !sourceNumbers.has(n.key) && (n.key.includes('.') || n.key.length >= 2));
   for (const n of badNumbers) {
     const claim = clip(sentenceContaining(summary, n.index), 240);
@@ -133,8 +168,11 @@ function auditSummary(summary, segments, { lexical = true } = {}) {
       repair: msg('REPAIR_SUMMARY_UNSUPPORTED_VALUE', { value: n.raw }),
     });
   }
+  return findings;
+}
 
-  // 2) Specific terms with no counterpart in the source (a drug, a condition, a swapped term). Word comparison: same language only.
+// 2) Specific terms with no counterpart in the source; word comparison only applies within one language.
+function unsupportedSummaryTermFinding(summary, segments, lexical) {
   const srcStems = sourceStemSet(segments);
   const seen = new Set();
   const unsupportedTerms = [];
@@ -145,8 +183,8 @@ function auditSummary(summary, segments, { lexical = true } = {}) {
     seen.add(s);
     unsupportedTerms.push(t.raw);
   }
-  if (unsupportedTerms.length > 0) {
-    findings.push({
+  if (unsupportedTerms.length === 0) return null;
+  return {
       issue: 'SUMMARY_UNSUPPORTED_TERM',
       ...LEXICAL_ONLY,
       severity: 'MEDIUM',
@@ -154,10 +192,11 @@ function auditSummary(summary, segments, { lexical = true } = {}) {
       generatedClaim: unsupportedTerms.slice(0, 5).join(', '),
       sourceEvidence: msg('EVIDENCE_SUMMARY_TERMS_ABSENT'),
       repair: msg('REPAIR_SUMMARY_UNSUPPORTED_TERM'),
-    });
-  }
+  };
+}
 
-  // 3) Central concepts of the source that the summary dropped silently.
+// 3) Central concepts of the source that the summary dropped silently.
+function centralSummaryConceptFinding(summary, segments, lexical) {
   const counts = new Map();
   const order = [];
   for (const seg of segments) {
@@ -171,11 +210,11 @@ function auditSummary(summary, segments, { lexical = true } = {}) {
   const central = order.filter((s) => counts.get(s).n >= 2)
     .sort((a, b) => counts.get(b).n - counts.get(a).n || order.indexOf(a) - order.indexOf(b))
     .slice(0, 5);
-  if (lexical && central.length >= 3) {
-    const summaryStems = new Set(tokens(summary).map((t) => stem(t.key)));
-    const missing = central.filter((s) => !summaryStems.has(s));
-    if ((central.length - missing.length) / central.length < 0.5) {
-      findings.push({
+  if (!lexical || central.length < 3) return null;
+  const summaryStems = new Set(tokens(summary).map((t) => stem(t.key)));
+  const missing = central.filter((s) => !summaryStems.has(s));
+  if ((central.length - missing.length) / central.length >= 0.5) return null;
+  return {
         issue: 'SUMMARY_OMITS_CENTRAL_CONCEPT',
         ...LEXICAL_ONLY,
         severity: 'MEDIUM',
@@ -183,23 +222,34 @@ function auditSummary(summary, segments, { lexical = true } = {}) {
         generatedClaim: clip(summary, 160),
         sourceEvidence: msg('EVIDENCE_CENTRAL_TERMS_MISSING', { terms: missing.map((s) => counts.get(s).shown).join(', ') }),
         repair: msg('REPAIR_SUMMARY_OMITS_CENTRAL_CONCEPT'),
-      });
-    }
-  }
+  };
+}
 
-  // 4) A token summary over a substantial source.
+// 4) A token summary over a substantial source.
+function thinSummaryFinding(summary, sourceText) {
   const summaryWords = tokens(summary).length;
   const sourceWords = tokens(sourceText).length;
-  if (summaryWords < 12 && sourceWords >= 40) {
-    findings.push({
+  if (summaryWords >= 12 || sourceWords < 40) return null;
+  return {
       issue: 'SUMMARY_TOO_THIN',
       severity: 'HIGH',
       scope: 'summary',
       generatedClaim: clip(summary, 160),
       sourceEvidence: msg('EVIDENCE_SUMMARY_TOO_THIN', { sourceWords, summaryWords }),
       repair: msg('REPAIR_SUMMARY_TOO_THIN'),
-    });
-  }
+  };
+}
+
+function auditSummary(summary, segments, { lexical = true } = {}) {
+  const sourceText = segments.map((s) => s.text).join(' ');
+  const sourceNumbers = sourceNumberKeys(segments.map((seg) => seg.text).join('\n'));
+  const findings = unsupportedSummaryValueFindings(summary, segments, sourceNumbers);
+  const unsupportedTerms = unsupportedSummaryTermFinding(summary, segments, lexical);
+  if (unsupportedTerms) findings.push(unsupportedTerms);
+  const centralConcept = centralSummaryConceptFinding(summary, segments, lexical);
+  if (centralConcept) findings.push(centralConcept);
+  const tooThin = thinSummaryFinding(summary, sourceText);
+  if (tooThin) findings.push(tooThin);
   return findings;
 }
 
@@ -216,114 +266,122 @@ function answerCore(answer) {
 }
 const squash = (s) => norm(s).replace(/\s+/g, ' ');
 
+// Feedback must teach, and the answer must not be given away by the question or hint.
+function addQuestionFeedbackFindings(q, answerWords, explanationWords, add) {
+  if (answerWords + explanationWords < 4) {
+    add('QUESTION_ANSWER_TOO_THIN', 'HIGH', q.answer, msg('EVIDENCE_ANSWER_TOO_THIN'), msg('REPAIR_ANSWER_TOO_THIN'));
+  }
+  if (explanationWords === 0) {
+    add('EXPLANATION_MISSING', 'MEDIUM', q.answer, msg('EVIDENCE_EXPLANATION_MISSING'), msg('REPAIR_EXPLANATION_MISSING'));
+  }
+  const core = answerCore(q.answer);
+  if (core && squash(q.question).includes(core)) {
+    add('QUESTION_ANSWER_LEAKED', 'HIGH', q.question, msg('EVIDENCE_ANSWER_IN_QUESTION', { answer: clip(q.answer, 60) }), msg('REPAIR_ANSWER_LEAKED'));
+  }
+  if (core && q.hint && squash(q.hint).includes(core)) {
+    add('HINT_REVEALS_ANSWER', 'HIGH', q.hint, msg('EVIDENCE_ANSWER_IN_HINT', { answer: clip(q.answer, 60) }), msg('REPAIR_HINT_REVEALS_ANSWER'));
+  }
+}
+
+// Numbers already stated in the question are not a hint leak; single-digit values are too common to count.
+function addHintValueFinding(q, add) {
+  if (!q.hint) return;
+  const questionNumbers = new Set(numbersIn(q.question).map((n) => n.key));
+  const hintNumbers = new Set(numbersIn(q.hint).map((n) => n.key));
+  const leaked = numbersIn(q.answer).find((n) => (n.key.includes('.') || n.key.length >= 2) && hintNumbers.has(n.key) && !questionNumbers.has(n.key));
+  if (leaked) add('HINT_REVEALS_VALUE', 'HIGH', q.hint, msg('EVIDENCE_HINT_HAS_VALUE', { value: leaked.raw }), msg('REPAIR_HINT_REVEALS_VALUE'));
+}
+
+// Only an exact restatement is reliable to flag deterministically; semantic "why" quality belongs to model audit.
+function addCircularExplanationFinding(q, explanationWords, add) {
+  if (explanationWords < 5) return;
+  const known = new Set(tokens(`${q.question} ${q.answer}`).map((t) => stem(t.key)));
+  const knownNumbers = new Set(numbersIn(`${q.question} ${q.answer}`).map((n) => n.key));
+  const contentStems = [...new Set(tokens(q.explanation).filter((t) => t.key.length >= 5 && !GENERIC.has(t.key) && !isPhrasing(t.key)).map((t) => stem(t.key)))];
+  const addsTerm = contentStems.some((s) => !known.has(s));
+  const addsNumber = numbersIn(q.explanation).some((n) => !knownNumbers.has(n.key));
+  if (contentStems.length >= 3 && !addsTerm && !addsNumber) {
+    add('EXPLANATION_ADDS_NOTHING', 'MEDIUM', q.explanation, msg('EVIDENCE_EXPLANATION_CIRCULAR'), msg('REPAIR_EXPLANATION_CIRCULAR'));
+  }
+}
+
+// Facts absent from the cited page are reported before word-level term signals.
+function addUnsupportedQuestionValueFindings(teaching, cited, segments, citedText, add) {
+  const citedNumbers = sourceNumberKeys(citedText);
+  for (const n of numbersIn(teaching)) {
+    if (citedNumbers.has(n.key) || !(n.key.includes('.') || n.key.length >= 2)) continue;
+    const claim = sentenceContaining(teaching, n.index);
+    add('QUESTION_UNSUPPORTED_VALUE', 'HIGH', claim,
+      closestSourceSentence(teaching.slice(Math.max(0, n.index - 60), n.index), cited.length > 0 ? cited : segments),
+      msg('REPAIR_QUESTION_UNSUPPORTED_VALUE', { value: n.raw }));
+  }
+}
+
+function addUnsupportedQuestionTermFinding(teaching, citedStems, questionStems, lexical, add) {
+  const seen = new Set();
+  const unsupported = [];
+  for (const t of lexical ? tokens(teaching) : []) {
+    if (t.key.length < 8 || GENERIC.has(t.key) || isPhrasing(t.key)) continue;
+    const s = stem(t.key);
+    if (citedStems.has(s) || questionStems.has(s) || seen.has(s)) continue;
+    seen.add(s);
+    unsupported.push(t.raw);
+  }
+  if (unsupported.length > 0) {
+    add('QUESTION_UNSUPPORTED_TERM', 'MEDIUM', unsupported.slice(0, 5).join(', '),
+      msg('EVIDENCE_QUESTION_TERMS_ABSENT'), msg('REPAIR_QUESTION_UNSUPPORTED_TERM'), LEXICAL_ONLY);
+  }
+}
+
+// Little lexical footing on the cited page is advisory and only applies within one language.
+function addLowSourceSupportFinding(q, cited, citedStems, questionStems, teaching, lexical, add) {
+  if (!lexical || cited.length === 0) return;
+  const contentStems = [...new Set(tokens(teaching).filter((t) => t.key.length >= 5 && !GENERIC.has(t.key)).map((t) => stem(t.key)))]
+    .filter((s) => !questionStems.has(s));
+  if (contentStems.length < 4) return;
+  const supported = contentStems.filter((s) => citedStems.has(s)).length;
+  if (supported / contentStems.length < 0.4) {
+    add('QUESTION_LOW_SOURCE_SUPPORT', 'MEDIUM', q.answer,
+      msg('EVIDENCE_LOW_SOURCE_SUPPORT', { supported, total: contentStems.length }), msg('REPAIR_LOW_SOURCE_SUPPORT'), LEXICAL_ONLY);
+  }
+}
+
+// Duplicates and verbatim copies are reported last, preserving their established finding order.
+function addDuplicateQuestionFindings(q, citedText, seenQuestions, index, add) {
+  const key = squash(q.question);
+  if (seenQuestions.has(key)) {
+    add('QUESTION_DUPLICATE', 'MEDIUM', q.question, msg('EVIDENCE_DUPLICATE_OF', { number: seenQuestions.get(key) + 1 }), msg('REPAIR_DUPLICATE'));
+  } else {
+    seenQuestions.set(key, index);
+  }
+  const answerNorm = squash(q.answer);
+  if (answerNorm.length >= 60 && squash(citedText).includes(answerNorm)) {
+    add('QUESTION_LITERAL_COPY', 'LOW', q.answer, msg('EVIDENCE_LITERAL_COPY'), msg('REPAIR_LITERAL_COPY'));
+  }
+}
+
 function auditQuestions(questions, segments, { lexical = true } = {}) {
   const findings = [];
   const seenQuestions = new Map();
-
   questions.forEach((q, index) => {
     const scope = `question:${index}`;
     const add = (issue, severity, generatedClaim, sourceEvidence, repair, extra = {}) =>
       findings.push({ issue, severity, scope, generatedClaim: clip(generatedClaim, 240), sourceEvidence, repair, ...extra });
-
     const cited = segments.filter((s) => (q.sourceSpans ?? []).some((span) => span.pageIndex === s.pageIndex));
     const citedText = cited.map((s) => s.text).join(' ');
     const teaching = `${q.answer} ${q.explanation ?? ''}`;
     const answerWords = tokens(q.answer).length;
     const explanationWords = tokens(q.explanation ?? '').length;
-
-    // 1) Feedback must teach: "125" or "C" alone corrects nothing.
-    if (answerWords + explanationWords < 4) {
-      add('QUESTION_ANSWER_TOO_THIN', 'HIGH', q.answer, msg('EVIDENCE_ANSWER_TOO_THIN'), msg('REPAIR_ANSWER_TOO_THIN'));
-    }
-    // 1b) F-15: the "Por quê" belongs to EVERY question, whatever the length of its answer (a long answer is not an explanation).
-    // Shown in the review as a finding; it never blocks acceptance.
-    if (explanationWords === 0) {
-      add('EXPLANATION_MISSING', 'MEDIUM', q.answer, msg('EVIDENCE_EXPLANATION_MISSING'), msg('REPAIR_EXPLANATION_MISSING'));
-    }
-
-    // 2) Answer given away by the question or by the hint.
-    const core = answerCore(q.answer);
-    if (core && squash(q.question).includes(core)) {
-      add('QUESTION_ANSWER_LEAKED', 'HIGH', q.question, msg('EVIDENCE_ANSWER_IN_QUESTION', { answer: clip(q.answer, 60) }), msg('REPAIR_ANSWER_LEAKED'));
-    }
-    if (core && q.hint && squash(q.hint).includes(core)) {
-      add('HINT_REVEALS_ANSWER', 'HIGH', q.hint, msg('EVIDENCE_ANSWER_IN_HINT', { answer: clip(q.answer, 60) }), msg('REPAIR_HINT_REVEALS_ANSWER'));
-    }
-
-    // 2b) A hint can also give the answer away WITHOUT repeating all of it: its value. (Numbers the question itself already
-    // states are not a leak, and one-digit numbers are too common to mean anything.)
-    if (q.hint) {
-      const questionNumbers = new Set(numbersIn(q.question).map((n) => n.key));
-      const hintNumbers = new Set(numbersIn(q.hint).map((n) => n.key));
-      const leaked = numbersIn(q.answer).find((n) => (n.key.includes('.') || n.key.length >= 2) && hintNumbers.has(n.key) && !questionNumbers.has(n.key));
-      if (leaked) {
-        add('HINT_REVEALS_VALUE', 'HIGH', q.hint, msg('EVIDENCE_HINT_HAS_VALUE', { value: leaked.raw }), msg('REPAIR_HINT_REVEALS_VALUE'));
-      }
-    }
-
-    // 2c) A circular explanation: nothing in it that the question and the answer did not already say. Deliberately narrow —
-    // zero new content terms and zero new numbers — because "does this explain WHY?" is semantic (the model audit owns it);
-    // only the exact restatement is reliable to detect.
-    if (explanationWords >= 5) {
-      const known = new Set(tokens(`${q.question} ${q.answer}`).map((t) => stem(t.key)));
-      const knownNumbers = new Set(numbersIn(`${q.question} ${q.answer}`).map((n) => n.key));
-      const contentStems = [...new Set(tokens(q.explanation).filter((t) => t.key.length >= 5 && !GENERIC.has(t.key) && !isPhrasing(t.key)).map((t) => stem(t.key)))];
-      const addsTerm = contentStems.some((s) => !known.has(s));
-      const addsNumber = numbersIn(q.explanation).some((n) => !knownNumbers.has(n.key));
-      if (contentStems.length >= 3 && !addsTerm && !addsNumber) {
-        add('EXPLANATION_ADDS_NOTHING', 'MEDIUM', q.explanation, msg('EVIDENCE_EXPLANATION_CIRCULAR'), msg('REPAIR_EXPLANATION_CIRCULAR'));
-      }
-    }
-
-    // 3) Facts the cited page does not hold — values first (the classic invented fact), then terms.
-    const citedNumbers = sourceNumberKeys(citedText);
-    for (const n of numbersIn(teaching)) {
-      if (citedNumbers.has(n.key) || !(n.key.includes('.') || n.key.length >= 2)) continue;
-      const claim = sentenceContaining(teaching, n.index);
-      add('QUESTION_UNSUPPORTED_VALUE', 'HIGH', claim,
-        closestSourceSentence(teaching.slice(Math.max(0, n.index - 60), n.index), cited.length > 0 ? cited : segments),
-        msg('REPAIR_QUESTION_UNSUPPORTED_VALUE', { value: n.raw }));
-    }
     const citedStems = sourceStemSet(cited.length > 0 ? cited : segments);
     const questionStems = new Set(tokens(q.question).map((t) => stem(t.key)));
-    const seen = new Set();
-    const unsupported = [];
-    for (const t of lexical ? tokens(teaching) : []) {
-      if (t.key.length < 8 || GENERIC.has(t.key) || isPhrasing(t.key)) continue;
-      const s = stem(t.key);
-      if (citedStems.has(s) || questionStems.has(s) || seen.has(s)) continue;
-      seen.add(s);
-      unsupported.push(t.raw);
-    }
-    if (unsupported.length > 0) {
-      add('QUESTION_UNSUPPORTED_TERM', 'MEDIUM', unsupported.slice(0, 5).join(', '),
-        msg('EVIDENCE_QUESTION_TERMS_ABSENT'), msg('REPAIR_QUESTION_UNSUPPORTED_TERM'), LEXICAL_ONLY);
-    }
 
-    // 4) Little lexical footing on the cited page at all (same language only).
-    if (lexical && cited.length > 0) {
-      const contentStems = [...new Set(tokens(teaching).filter((t) => t.key.length >= 5 && !GENERIC.has(t.key)).map((t) => stem(t.key)))]
-        .filter((s) => !questionStems.has(s));
-      if (contentStems.length >= 4) {
-        const supported = contentStems.filter((s) => citedStems.has(s)).length;
-        if (supported / contentStems.length < 0.4) {
-          add('QUESTION_LOW_SOURCE_SUPPORT', 'MEDIUM', q.answer,
-            msg('EVIDENCE_LOW_SOURCE_SUPPORT', { supported, total: contentStems.length }), msg('REPAIR_LOW_SOURCE_SUPPORT'), LEXICAL_ONLY);
-        }
-      }
-    }
-
-    // 5) Duplicates, and a verbatim copy of the source (advisory: a lacuna, not a question).
-    const key = squash(q.question);
-    if (seenQuestions.has(key)) {
-      add('QUESTION_DUPLICATE', 'MEDIUM', q.question, msg('EVIDENCE_DUPLICATE_OF', { number: seenQuestions.get(key) + 1 }), msg('REPAIR_DUPLICATE'));
-    } else {
-      seenQuestions.set(key, index);
-    }
-    const answerNorm = squash(q.answer);
-    if (answerNorm.length >= 60 && squash(citedText).includes(answerNorm)) {
-      add('QUESTION_LITERAL_COPY', 'LOW', q.answer, msg('EVIDENCE_LITERAL_COPY'), msg('REPAIR_LITERAL_COPY'));
-    }
+    addQuestionFeedbackFindings(q, answerWords, explanationWords, add);
+    addHintValueFinding(q, add);
+    addCircularExplanationFinding(q, explanationWords, add);
+    addUnsupportedQuestionValueFindings(teaching, cited, segments, citedText, add);
+    addUnsupportedQuestionTermFinding(teaching, citedStems, questionStems, lexical, add);
+    addLowSourceSupportFinding(q, cited, citedStems, questionStems, teaching, lexical, add);
+    addDuplicateQuestionFindings(q, citedText, seenQuestions, index, add);
   });
   return findings;
 }
@@ -332,8 +390,8 @@ function auditQuestions(questions, segments, { lexical = true } = {}) {
 // Proportional with a cap: at most one question per ~300 characters (never fewer than 5, never more than 40) and, for large units, at
 // least one per ~4000 characters. Out of range is an ADVISORY (LOW): it never blocks acceptance, never triggers a model repair, and
 // nothing is cut silently — the reviewer decides.
-export const QUESTION_VOLUME_POLICY = Object.freeze({ charsPerMaxQuestion: 300, charsPerMinQuestion: 4000, floorMax: 5, capMax: 40 });
-export function expectedQuestionRange(sourceChars, policy = QUESTION_VOLUME_POLICY) {
+const QUESTION_VOLUME_POLICY = Object.freeze({ charsPerMaxQuestion: 300, charsPerMinQuestion: 4000, floorMax: 5, capMax: 40 });
+function expectedQuestionRange(sourceChars, policy = QUESTION_VOLUME_POLICY) {
   const max = Math.min(policy.capMax, Math.max(policy.floorMax, Math.ceil(sourceChars / policy.charsPerMaxQuestion)));
   const min = Math.max(1, Math.floor(sourceChars / policy.charsPerMinQuestion));
   return { min: Math.min(min, max), max };
