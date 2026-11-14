@@ -47,4 +47,13 @@ export default {
   'appStudyNow.loadFailed': 'Não foi possível carregar as questões desta aula. Verifique a conexão e abra a aula de novo.',
   'appStudyNow.adopted.correct': 'Sua resposta anterior já estava registrada como acerto e foi mantida.',
   'appStudyNow.adopted.incorrect': 'Sua resposta anterior já estava registrada como erro e foi mantida.',
+  // Practice from the student's own question bank (questions of OTHER lessons that look like this one); extra practice, never a review
+  'appStudyNow.bank.offer': 'Praticar mais com o seu banco ({count})',
+  'appStudyNow.bank.hint': 'Perguntas suas de outras aulas parecidas com esta. É prática extra: não muda a sua agenda de revisões.',
+  'appStudyNow.bank.failed': 'Não foi possível abrir as perguntas do seu banco agora. Tente de novo em instantes.',
+  'appStudyNow.progress.bank': 'Pergunta {current} de {total} do seu banco',
+  'appStudyNow.practiceTitle.bank': 'Prática com o seu banco',
+  'appStudyNow.result.bank': 'Resultado da prática com o seu banco',
+  'appStudyNow.score.bank': '{correct} de {answered} corretas',
+  'appStudyNow.bank.scheduleUntouched': 'Sua agenda de revisões não foi alterada.',
 };

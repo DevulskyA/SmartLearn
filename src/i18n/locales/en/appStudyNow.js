@@ -44,5 +44,13 @@ export default Object.freeze({
   "appStudyNow.evidenceSaved": "Result recorded in your statistics.",
   "appStudyNow.loadFailed": "Could not load the questions for this lesson. Check your connection and reopen the lesson.",
   "appStudyNow.adopted.correct": "Your previous answer was already recorded as correct and was kept.",
-  "appStudyNow.adopted.incorrect": "Your previous answer was already recorded as incorrect and was kept."
+  "appStudyNow.adopted.incorrect": "Your previous answer was already recorded as incorrect and was kept.",
+  "appStudyNow.bank.offer": "Practice more from your bank ({count})",
+  "appStudyNow.bank.hint": "Your own questions from other lessons that look like this one. Extra practice: it does not change your review schedule.",
+  "appStudyNow.bank.failed": "Could not open the questions from your bank right now. Try again in a moment.",
+  "appStudyNow.progress.bank": "Question {current} of {total} from your bank",
+  "appStudyNow.practiceTitle.bank": "Practice from your bank",
+  "appStudyNow.result.bank": "Bank practice result",
+  "appStudyNow.score.bank": "{correct} of {answered} correct",
+  "appStudyNow.bank.scheduleUntouched": "Your review schedule was not changed."
 });

@@ -1,6 +1,7 @@
 ﻿import { DB as LocalDB } from "./db.js";
 import { DB as RemoteDB } from "./remote-store.js";
 import { NetworkError, apiRequest } from "./api-client.js";
+import { fetchBankPractice, resolveBankExercises } from "./bank-practice-ui.js";
 import { renderReuseSettings } from "./reuse-settings-ui.js";
 import { createStudyEvidenceQueue } from "./study-evidence-queue.js";
 import { Stats, formatAverageScore } from "./stats.js";
@@ -555,6 +556,8 @@ const studyNowRetestBtn = document.querySelector("#study-now-retest-btn");
 const studyNowEvidenceNote = document.querySelector("#study-now-evidence-note");
 const studyNowEvidenceRetryBtn = document.querySelector("#study-now-evidence-retry-btn");
 const studyNowDoneBtn = document.querySelector("#study-now-done-btn");
+const studyNowBankBtn = document.querySelector("#study-now-bank-btn");
+const studyNowBankHint = document.querySelector("#study-now-bank-hint");
 const studyNowPracticeCard = document.querySelector("#study-now-practice-card");
 const studyNowPracticeTitle = document.querySelector("#study-now-practice-title");
 const studyNowQuestionFlagHost = document.createElement("div");
@@ -3116,6 +3119,9 @@ function resetStudyNowResult() {
   studyNowQuestionFlagHost.hidden = true;
   studyNowQuestionFlagHost.replaceChildren();
   studyNowRetestBtn.hidden = true;
+  studyNowBankOffer = null;
+  studyNowBankBtn.hidden = true;
+  studyNowBankHint.hidden = true;
   studyNowPracticeCard.hidden = false;
 }
 
@@ -3317,15 +3323,15 @@ function renderStudyNowQuestion() {
   studyNowJudgment.hidden = true;
   studyNowRevealBtn.hidden = false;
   studyNowRevealBtn.textContent = t("appStudyNow.reveal");
-  const progressKey = { retest: "appStudyNow.progress.retest", review: "appStudyNow.progress.review" }[state.mode] ?? "appStudyNow.progress.question";
-  const titleKey = { retest: "appStudyNow.practiceTitle.retest", review: "appStudyNow.practiceTitle.review" }[state.mode] ?? "appStudyNow.practiceTitle";
+  const progressKey = { retest: "appStudyNow.progress.retest", review: "appStudyNow.progress.review", bank: "appStudyNow.progress.bank" }[state.mode] ?? "appStudyNow.progress.question";
+  const titleKey = { retest: "appStudyNow.practiceTitle.retest", review: "appStudyNow.practiceTitle.review", bank: "appStudyNow.practiceTitle.bank" }[state.mode] ?? "appStudyNow.practiceTitle";
   studyNowProgress.textContent = t(progressKey, { current: state.index + 1, total: state.exercises.length });
   studyNowProgress.style.setProperty("--p", String((state.index + 1) / state.exercises.length));
   studyNowProgressBar.style.width = `${((state.index + 1) / state.exercises.length) * 100}%`;
   studyNowPracticeTitle.textContent = t(titleKey);
   // The Resumo Mestre contains the very answers being retrieved: showing it
   // above a redo question would turn retrieval practice into reading.
-  if (state.mode === "retest" || state.mode === "review") studyNowSummaryCard.hidden = true;
+  if (state.mode === "retest" || state.mode === "review" || state.mode === "bank") studyNowSummaryCard.hidden = true;
   state.attemptId = null;
   state.pendingReveal = null;
   delete studyNowQuestionArea.dataset.attemptId;
@@ -3335,6 +3341,7 @@ async function finishStudyNowSession() {
   const state = studyNowState;
   if (!state) return;
   const isRetest = state.mode === "retest";
+  const isBank = state.mode === "bank";
   studyNowQuestionArea.hidden = true;
   studyNowProgress.textContent = "";
 
@@ -3343,7 +3350,8 @@ async function finishStudyNowSession() {
   // A review that was partly judged inside its Hoje row counts those answers too: the review closes with the whole block.
   const totalAnswered = answeredCount + (isReview ? state.restored.answered : 0);
   const totalCorrect = correctCount + (isReview ? state.restored.correct : 0);
-  if (answeredCount > 0 && !isRetest) {
+  // A redo and a bank practice (questions of several lessons) write no aggregate evidence: no single lesson owns the block.
+  if (answeredCount > 0 && !isRetest && !isBank) {
     pendingStudyEvidence.enqueue(isReview
       ? { reviewTaskId: state.reviewTaskId, obligationUnitId: state.obligationUnitId ?? null, questionsCount: totalAnswered, correctCount: totalCorrect }
       : {
@@ -3364,6 +3372,9 @@ async function finishStudyNowSession() {
     studyNowResultText.textContent = t("appStudyNow.score.retest", { correct: correctCount, answered: answeredCount });
     studyNowResultNote.hidden = false;
     studyNowResultNote.textContent = t(state.wrongExercises.length === 0 ? "appStudyNow.note.allFixed" : "appStudyNow.note.someWrong");
+  } else if (isBank) {
+    studyNowResultTitle.textContent = t("appStudyNow.result.bank");
+    studyNowResultText.textContent = t("appStudyNow.score.bank", { correct: correctCount, answered: answeredCount });
   } else if (isReview) {
     const pct = totalAnswered > 0 ? formatDecimal((totalCorrect / totalAnswered) * 100) : formatDecimal(0);
     studyNowResultTitle.textContent = t("appStudyNow.result.review");
@@ -3374,7 +3385,9 @@ async function finishStudyNowSession() {
     studyNowResultText.textContent = t("appStudyNow.score.initial", { correct: correctCount, answered: answeredCount, percent: pct });
   }
 
-  try {
+  if (isBank) {
+    studyNowNextReviewText.textContent = t("appStudyNow.bank.scheduleUntouched");
+  } else try {
     const tasks = await DB.reviewTasks.getByUnit(unitId);
     const next = getNextReview(unitId, tasks);
     // An earliest pending review dated before today is overdue, not "next": say so instead of printing a past date as the next review (J04).
@@ -3428,6 +3441,7 @@ async function finishStudyNowSession() {
   studyNowSummaryCard.hidden = studyNowSummaryBody.textContent === "";
   studyNowPracticeCard.hidden = true;
   studyNowResultCard.hidden = false;
+  offerBankPractice(state);
   studyNowResultTitle.focus();
   studyNowState = null;
   renderPlan().catch((error) => console.error("Falha ao atualizar plano.", error));
@@ -3535,6 +3549,48 @@ studyNowRetestBtn?.addEventListener("click", () => {
   studyNowState = newStudyNowState("retest", block.unitId, block.wrong.slice());
   renderStudyNowQuestion();
   studyNowRevealBtn.focus();
+});
+
+// -- Practice from the student's own bank ---------------------------------------------------------------------
+// After a block, questions of OTHER lessons that look like this one can be offered (server: GET /v1/bank-practice). It runs in its own
+// "bank" mode of the study screen: no review task, no aggregate evidence, schedule untouched. Needs the server (remote mode).
+let studyNowBankOffer = null;
+
+/** Asks the server in the background and, only if there is something to practise, shows the button; never delays or breaks the result. */
+function offerBankPractice(state) {
+  if (!REMOTE_MODE || state.mode === "bank" || state.mode === "retest") return;
+  const unitId = state.unitId;
+  fetchBankPractice(apiRequest, unitId).then((practice) => {
+    if (!practice || studyNowResultCard.hidden || studyNowBankOffer) return;
+    studyNowBankOffer = { unitId, items: practice.items };
+    studyNowBankBtn.textContent = t("appStudyNow.bank.offer", { count: practice.items.length });
+    studyNowBankBtn.hidden = false;
+    studyNowBankHint.hidden = false;
+  }).catch((error) => console.error("Falha ao buscar perguntas do banco.", error));
+}
+
+function showBankFailure() {
+  studyNowResultNote.hidden = false;
+  studyNowResultNote.textContent = t("appStudyNow.bank.failed");
+}
+
+studyNowBankBtn?.addEventListener("click", async () => {
+  const offer = studyNowBankOffer;
+  if (!offer) return;
+  studyNowBankBtn.disabled = true;
+  try {
+    const exercises = await resolveBankExercises(offer.items, (unitId) => DB.exercises.getAll(unitId));
+    if (exercises.length === 0) { showBankFailure(); return; }
+    resetStudyNowResult();
+    studyNowState = newStudyNowState("bank", offer.unitId, exercises);
+    renderStudyNowQuestion();
+    studyNowRevealBtn.focus();
+  } catch (error) {
+    console.error("Falha ao abrir a prática do banco.", error);
+    showBankFailure();
+  } finally {
+    studyNowBankBtn.disabled = false;
+  }
 });
 
 studyNowDoneBtn?.addEventListener("click", () => showScreen("today", { focus: true }));

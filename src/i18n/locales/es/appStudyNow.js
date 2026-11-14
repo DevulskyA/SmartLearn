@@ -44,5 +44,13 @@ export default Object.freeze({
   "appStudyNow.evidenceSaved": "Resultado registrado en tus estadísticas.",
   "appStudyNow.loadFailed": "No se pudieron cargar las preguntas de esta clase. Comprueba la conexión y vuelve a abrirla.",
   "appStudyNow.adopted.correct": "Tu respuesta anterior ya constaba como correcta y se conservó.",
-  "appStudyNow.adopted.incorrect": "Tu respuesta anterior ya constaba como incorrecta y se conservó."
+  "appStudyNow.bank.offer": "Practicar más con tu banco ({count})",
+  "appStudyNow.bank.hint": "Preguntas tuyas de otras clases parecidas a esta. Es práctica extra: no cambia tu agenda de repasos.",
+  "appStudyNow.bank.failed": "No se pudieron abrir las preguntas de tu banco ahora. Inténtalo de nuevo en un momento.",
+  "appStudyNow.progress.bank": "Pregunta {current} de {total} de tu banco",
+  "appStudyNow.practiceTitle.bank": "Práctica con tu banco",
+  "appStudyNow.result.bank": "Resultado de la práctica con tu banco",
+  "appStudyNow.score.bank": "{correct} de {answered} correctas",
+  "appStudyNow.bank.scheduleUntouched": "Tu agenda de repasos no cambió.",
+  "appStudyNow.adopted.incorrect":"Tu respuesta anterior ya constaba como incorrecta y se conservó."
 });
