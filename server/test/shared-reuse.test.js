@@ -410,3 +410,35 @@ test('HTTP: a hit is served with AI consent OFF and no credentials; a miss keeps
     assert.equal(isReuseGranted(ctx.db, a.userId), true);
   } finally { await app.close(); ctx.cleanup(); }
 });
+
+test('private bank: the questions a student already accepted from the same pages are used before the model, from their own bank only', OPTS, async () => {
+  const ctx = tmpDb();
+  try {
+    const a = makeUser(ctx.db, 'bank-a@example.com');
+    const { proposal } = await proposalFor(ctx, a);
+    const first = await generate(ctx, a, proposal, counting());
+    acceptDraft(ctx.db, a, first.id, { ...INPUT, expectedRevision: first.revision });
+    assert.equal(exerciseCount(ctx.db, a), 2);
+
+    // a second, summary-first draft of the same pages: its questions come from A's own accepted ones, with no model call and no consent
+    const provider = counting({ withQuestions: false });
+    const second = await generate(ctx, a, proposal, provider, { regenerate: true, codex: { deferQuestions: true } });
+    assert.equal(second.questionsDeferred, true);
+    assert.equal(drafts.hasReusableContent(ctx.db, a, { draftId: second.id }), true, 'the job route can tell it needs no AI consent');
+    const withQuestions = await drafts.generateDeferredQuestions(ctx.db, a, second.id, { providerImpl: provider });
+    assert.equal(provider.questionCalls, 0, 'no model call');
+    assert.equal(withQuestions.questions.length, 2);
+    assert.equal(withQuestions.questions[0].generatedBy.provider, 'PRIVATE_BANK');
+    assert.equal(withQuestions.questions[0].status, 'PROPOSED', 'still reviewed before it joins a lesson');
+    assert.equal(shared(ctx.db).length, 0, 'nothing reached the shared pool (no consent)');
+
+    // another student with the same text has no bank: the model is asked
+    const b = makeUser(ctx.db, 'bank-b@example.com');
+    const { proposal: pb } = await proposalFor(ctx, b);
+    const providerB = counting({ withQuestions: false });
+    const draftB = await generate(ctx, b, pb, providerB, { codex: { deferQuestions: true } });
+    assert.equal(drafts.hasReusableContent(ctx.db, b, { draftId: draftB.id }), false);
+    await drafts.generateDeferredQuestions(ctx.db, b, draftB.id, { providerImpl: providerB });
+    assert.equal(providerB.questionCalls, 1, "A's bank is A's alone");
+  } finally { ctx.cleanup(); }
+});

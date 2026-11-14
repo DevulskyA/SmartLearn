@@ -23,6 +23,7 @@ import { auditDraft, AUDIT_RESULT, AUDIT_RULES_VERSION, triggersRepair } from '.
 import { groundSummary } from '../ai/claim-evidence.js';
 import { findUnresolvedRefs, refsMessage } from './visual-assets.js';
 import { findShared, recordReuse, bibliographyOf } from './shared-reuse.js';
+import { privateBankItems } from '../corpus/private-bank.js';
 
 export class DraftError extends Error {
   constructor(code, message, field) {
@@ -785,34 +786,64 @@ function reuseSharedDraft(db, userId, { found, scope, proposalId, inputDigest, i
 }
 
 /** The questions of a summary-first draft, taken from reviewed content for the same text instead of asking the model. Null on a miss. */
+/** The questions of `candidates` that cite a page of THIS student's text and are not in the draft yet (an invalid one is dropped, never repaired). */
+function validFresh(first, candidates) {
+  const { draftRow, found, current } = first;
+  const have = new Set(current.questions.map((q) => q.question));
+  const fresh = [];
+  for (const candidate of candidates) {
+    if (have.has(candidate.question)) continue;
+    try {
+      const [valid] = validateOrThrow({
+        summary: current.summary, summarySourceSpans: current.summarySourceSpans, questions: [candidate],
+        modelVersion: draftRow.model_version, promptVersion: draftRow.prompt_version,
+      }, found.segments).questions;
+      fresh.push(valid);
+    } catch (err) {
+      if (!(err instanceof DraftError)) throw err;
+    }
+  }
+  return fresh;
+}
+
+/**
+ * The student's OWN accepted questions (private bank) that were written from pages of this same source and that this text contains, from lessons
+ * other than the one the draft adds to. Their own reviewed work: it needs no consent, no model and is never shared by this path.
+ */
+function privateQuestions(db, userId, first) {
+  const { draftRow, found } = first;
+  const inText = new Set(found.segments.map((seg) => seg.pageIndex));
+  const candidates = [];
+  for (const item of privateBankItems(db, userId)) {
+    if (item.source_file !== `source#${found.proposal.source_id}` || item.unit_id === draftRow.target_unit_id || item.needs_verification) continue;
+    const pages = (/^pages ([\d,]+)$/.exec(item.source_evidence ?? '')?.[1] ?? '').split(',').filter(Boolean).map(Number);
+    if (pages.length === 0 || !pages.every((p) => inText.has(p)) || !item.stem || !item.key || !item.explanation) continue;
+    candidates.push({ question: item.stem, answer: item.key, explanation: item.explanation, hint: null, questionType: item.item_type ?? null, sourceSpans: pages.map((pageIndex) => ({ pageIndex })) });
+  }
+  const fresh = validFresh(first, candidates);
+  return fresh.length === 0 ? null : { shared: null, fresh, generatedBy: { provider: 'PRIVATE_BANK', modelVersion: 'accepted-exercise', promptVersion: '-' } };
+}
+
+/** Existing material before the model: the student's own accepted questions first, then reviewed questions of the same text from the pool. */
 function reusableQuestions(db, userId, first) {
+  const own = privateQuestions(db, userId, first);
+  if (own) return own;
   const { draftRow, found, current } = first;
   const shared = findShared(db, { digest: draftRow.input_sha256, locale: current.generationLocale, bib: bibliographyOf(db, userId, found.proposal.source_id) });
   if (!shared || shared.questions.length === 0) return null;
-  let validated;
-  try { // reviewed elsewhere is not enough: each question must also cite a page of THIS student's text, else it is a miss and the normal flow runs
-    validated = validateOrThrow({
-      summary: current.summary, summarySourceSpans: current.summarySourceSpans, questions: shared.questions,
-      modelVersion: draftRow.model_version, promptVersion: draftRow.prompt_version,
-    }, found.segments);
-  } catch (err) {
-    if (err instanceof DraftError) return null;
-    throw err;
-  }
-  const have = new Set(current.questions.map(questionText));
-  const fresh = validated.questions.filter((q) => !have.has(questionText(q)));
-  return fresh.length === 0 ? null : { shared, fresh };
+  const fresh = validFresh(first, shared.questions); // reviewed elsewhere is not enough: each question must also cite a page of THIS student's text
+  return fresh.length === 0 ? null : { shared, fresh, generatedBy: shared.generatedBy };
 }
 
 function reuseSharedQuestions(db, userId, draftId, first, now) {
   const { draftRow, found, current } = first;
   const hit = reusableQuestions(db, userId, first);
   if (!hit) return null;
-  const { shared, fresh } = hit;
-  recordReuse(db, shared.id);
+  const { shared, fresh, generatedBy } = hit;
+  if (shared) recordReuse(db, shared.id);
   return persistEdit(db, userId, draftId, draftRow, found, current, {
     summary: current.summary, summarySourceSpans: current.summarySourceSpans, summaryVersion: current.summaryVersion,
-    questions: [...current.questions, ...fresh.map((q) => ({ ...q, origin: 'GENERATED', generatedBy: shared.generatedBy, editedAt: null }))],
+    questions: [...current.questions, ...fresh.map((q) => ({ ...q, origin: 'GENERATED', generatedBy, editedAt: null }))],
     questionsDelivered: true,
   }, now);
 }
