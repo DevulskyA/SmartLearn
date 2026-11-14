@@ -1,5 +1,6 @@
 import { DraftError, selectProvider, hasReusableContent, reuseOnlyProvider } from '../services/generated-drafts.js';
 import * as jobs from '../services/generation-jobs.js';
+import { SUPPORTED_LOCALES } from '../../../shared/locales.js';
 import { resolveAiSettings } from '../services/generation-job-runner.js';
 
 function handleError(err, reply) {
@@ -7,7 +8,7 @@ function handleError(err, reply) {
     const statusByCode = {
       NOT_FOUND: 404, VALIDATION_FAILED: 400, UNKNOWN_PROVIDER: 400,
       INPUT_TOO_LARGE: 413, NO_USABLE_TEXT: 409, NOT_GENERATABLE: 409, SCOPE_VIOLATION: 409, SCOPE_CHANGED: 409,
-      INVALID_TRANSITION: 409, MISSING_CREDENTIALS: 409, INVALID_STATE: 409, GENERATION_IN_PROGRESS: 409, SOURCE_CHANGED: 409,
+      INVALID_TRANSITION: 409, MISSING_CREDENTIALS: 409, DECISION_PENDING: 409, INVALID_STATE: 409, GENERATION_IN_PROGRESS: 409, SOURCE_CHANGED: 409,
     };
     reply.status(statusByCode[err.code] ?? 400);
     return { error: { code: err.code, field: err.field, message: err.message, msg: err.msg } };
@@ -24,7 +25,7 @@ export function registerGenerationJobRoutes(app, db, aiOptions = {}, runner) {
   app.post('/generation-jobs', {
     schema: {
       // proposalId: the summary job. draftId: the questions job of that (summary-first or lesson-questions) draft.
-      body: { type: 'object', minProperties: 1, properties: { proposalId: { type: 'integer', minimum: 1 }, draftId: { type: 'integer', minimum: 1 }, regenerate: { type: 'boolean' } } },
+      body: { type: 'object', minProperties: 1, properties: { proposalId: { type: 'integer', minimum: 1 }, draftId: { type: 'integer', minimum: 1 }, regenerate: { type: 'boolean' }, targetLocale: { type: 'string', enum: SUPPORTED_LOCALES } } },
     },
   }, async (request, reply) => {
     try {
@@ -47,7 +48,9 @@ export function registerGenerationJobRoutes(app, db, aiOptions = {}, runner) {
       const { job, created } = draftId !== undefined
         ? jobs.createQuestionsJob(db, request.actor.userId, draftId, { provider: { ...provider, plannedCalls: 1 }, maxInputChars: settings.maxInputChars })
         : jobs.createJob(db, request.actor.userId, proposalId, {
-          provider, regenerate: request.body.regenerate === true, maxInputChars: settings.maxInputChars,
+          provider, targetLocale: request.body.targetLocale ?? null,
+          // a translation is always a new draft beside the previous one: the student decides which to keep
+          regenerate: request.body.regenerate === true || request.body.targetLocale !== undefined, maxInputChars: settings.maxInputChars,
         });
       // A job nobody in this process is running (new, or left QUEUED by a crash) is handed to the runner; a running one is left alone.
       if (job.state === 'QUEUED') runner.start({ ...job, userId: request.actor.userId });

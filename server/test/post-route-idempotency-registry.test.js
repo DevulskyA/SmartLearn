@@ -6,6 +6,7 @@
 //   STATE     naturally idempotent by state or uniqueness (asserted in creator-routes-concurrency.test.js or a unique index).
 //             By code reading (not a probe): drafts/accept returns the frozen acceptance_result_json; generation-jobs returns the ACTIVE job of the proposal;
 //             hint/reveal only raise max_assistance (monotonic); exams/submit changes status once; sources/proposals re-chunks by replacement; sources/scopes dedups by spans; proposals/drafts reuses the valid draft; drafts/questions skips identical content (probed, lesson-add-reorder.test.js).
+//             drafts/decision consumes the pending decision once: a repeat finds nothing pending (409) or the deleted draft (404), probed in draft-replacements.test.js;
 //             imports/preview reuses the row of the same checksum; imports/commit returns commit_result_json once committed_at is set; sources POST dedups by checksum.
 //   ACTION    acts on an existing record or session and a repeat is harmless. A review judgement, NOT individually probed.
 //   UNPROBED  creates or changes records and has NOT been probed for a duplicate yet. This is the open debt, listed on purpose.
@@ -40,7 +41,9 @@ const REGISTRY = {
   'generated-drafts.js POST /drafts/:id/generate-questions': 'STATE',
   'generated-drafts.js POST /learning-units/:unitId/questions-draft': 'STATE', // returns the lesson's open questions draft (partial unique index), probed in lesson-questions.test.js
   'generated-drafts.js POST /drafts/:id/reaudit': 'ACTION',
+  'generated-drafts.js POST /drafts/:id/audit-summary': 'ACTION',
   'generated-drafts.js POST /drafts/:id/accept': 'STATE',
+  'generated-drafts.js POST /drafts/:id/decision': 'STATE',
   'generation-jobs.js POST /generation-jobs': 'STATE',
   'generation-jobs.js POST /generation-jobs/:id/cancel': 'ACTION',
   'imports.js POST /imports/preview': 'STATE',

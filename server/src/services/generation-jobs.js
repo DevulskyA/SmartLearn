@@ -17,8 +17,9 @@
 import { detectSourceLanguage } from '../ai/language-contract.js';
 import { dm, splitMessage } from '../api-error-messages.js';
 import { estimateCostUnits } from './generation-budget.js';
-import { prepareGeneration, segmentsDigest, isDraftStale, DraftError } from './generated-drafts.js';
+import { prepareGeneration, segmentsDigest, isDraftStale, DraftError, assertNoPendingDecision, settleExpiredDecisions } from './generated-drafts.js';
 import { ensureGenerationLocale } from './settings.js';
+import { resolveSupportedLocale } from '../../../shared/locales.js';
 
 export class JobError extends Error {
   constructor(code, message, field) {
@@ -45,7 +46,7 @@ export const TRANSITIONS = Object.freeze({
 });
 
 /** What the student is told the job is doing; each state has a sensible default, a caller may be more specific while running. */
-export const JOB_PHASES = Object.freeze(['QUEUED', 'PREPARING', 'GENERATING', 'AUDITING', 'REPAIRING', 'SAVING', 'FINISHED']);
+const JOB_PHASES = Object.freeze(['QUEUED', 'PREPARING', 'GENERATING', 'AUDITING', 'REPAIRING', 'SAVING', 'FINISHED']);
 const DEFAULT_PHASE = { QUEUED: 'QUEUED', CALLING_PROVIDER: 'GENERATING', SUCCEEDED: 'FINISHED', FAILED: 'FINISHED', CANCELLED: 'FINISHED' };
 
 export const SERVER_RESTARTED = 'SERVER_RESTARTED';
@@ -87,7 +88,7 @@ function activeRow(db, userId, proposalId) {
  * payload outside the approved scope, input too large) and leaves no row. `provider` is {name, live, plannedCalls}: a live
  * provider gets a cost estimate recorded (priced and reserved for real when the job runs); the test double spends nothing.
  */
-export function createJob(db, userId, proposalId, { provider, regenerate = false, localeHint = null, maxInputChars = 50_000, now = () => new Date() } = {}) {
+export function createJob(db, userId, proposalId, { provider, regenerate = false, localeHint = null, targetLocale = null, maxInputChars = 50_000, now = () => new Date() } = {}) {
   if (!provider || typeof provider.name !== 'string' || provider.name.length === 0) throw new JobError('VALIDATION_FAILED', 'Provedor da geração não informado.', 'provider');
   const existing = activeRow(db, userId, proposalId);
   if (existing) return { job: toDto(existing), created: false };
@@ -95,6 +96,11 @@ export function createJob(db, userId, proposalId, { provider, regenerate = false
   let prepared;
   try {
     prepared = prepareGeneration(db, userId, proposalId, { maxInputChars });
+    // a regenerate keeps the previous draft until the student decides: while that is pending no job is created (same refusal as createDraft)
+    if (regenerate) {
+      settleExpiredDecisions(db, { now });
+      assertNoPendingDecision(db, userId, proposalId);
+    }
   } catch (err) {
     if (err instanceof DraftError) throw new JobError(err.code, err.message, err.field);
     throw err;
@@ -107,7 +113,7 @@ export function createJob(db, userId, proposalId, { provider, regenerate = false
   const run = db.transaction(() => {
     const raced = activeRow(db, userId, proposalId);
     if (raced) return { job: toDto(raced), created: false };
-    const generationLocale = ensureGenerationLocale(db, userId, localeHint);
+    const generationLocale = (targetLocale && resolveSupportedLocale(targetLocale)) || ensureGenerationLocale(db, userId, localeHint);
     const result = db.prepare(`
       INSERT INTO generation_jobs (user_id, proposal_id, state, phase, provider, source_language, generation_locale, scope_digest,
                                    regenerate, estimated_units, created_at, last_activity_at)
@@ -151,7 +157,7 @@ export function createQuestionsJob(db, userId, draftId, { provider, maxInputChar
   const run = db.transaction(() => {
     const raced = activeRow(db, userId, draftRow.proposal_id);
     if (raced) return { job: toDto(raced), created: false };
-    const generationLocale = content.generationLocale || ensureGenerationLocale(db, userId, null);
+    const generationLocale = (content.generationLocale && resolveSupportedLocale(content.generationLocale)) || ensureGenerationLocale(db, userId, null);
     const result = db.prepare(`
       INSERT INTO generation_jobs (user_id, proposal_id, state, phase, provider, source_language, generation_locale, scope_digest,
                                    regenerate, estimated_units, created_at, last_activity_at, kind, target_draft_id)

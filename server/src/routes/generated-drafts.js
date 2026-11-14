@@ -26,6 +26,8 @@ export function handleError(err, reply) {
       NOT_GENERATABLE: 409,
       SOURCE_CHANGED: 409,
       FINDINGS_UNRESOLVED: 409,
+      DECISION_PENDING: 409,
+      DISCARD_NEEDS_CONFIRMATION: 409,
     };
     reply.status(statusByCode[err.code] ?? 400);
     return { error: { code: err.code, field: err.field, message: err.message, msg: err.msg } };
@@ -90,6 +92,21 @@ export function registerGeneratedDraftRoutes(app, db, aiOptions = {}) {
     } catch (err) { return handleError(err, reply); }
   });
 
+  // Discard an unfinished summary (status DRAFT only). `confirmDiscard=true` is required when the student edited it.
+  // The book, the unit and any accepted lesson are never touched.
+  app.delete('/drafts/:id', {
+    schema: {
+      params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } },
+      querystring: { type: 'object', properties: { confirmDiscard: { type: 'string' } } },
+    },
+  }, async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
+    try {
+      return drafts.discardDraftById(db, request.actor.userId, id, { confirmDiscard: request.query.confirmDiscard === 'true' });
+    } catch (err) { return handleError(err, reply); }
+  });
+
   // T-F2-01: replacing the whole question list by position was removed — it could not tell a reorder from a
   // replacement, so a REJECTED status could land on the wrong question. Edit one entity at a time instead.
   app.patch('/drafts/:id', async (request, reply) => {
@@ -100,6 +117,32 @@ export function registerGeneratedDraftRoutes(app, db, aiOptions = {}) {
         message: 'Esta operação foi removida. Use PATCH /drafts/:id/summary para o resumo e PATCH ou DELETE /drafts/:id/questions/:questionId para uma questão.',
       },
     };
+  });
+
+  // Replacement decision (migration 043): a regenerate keeps the previous draft until the student chooses which to keep.
+  // GET answers { pending: { newDraftId, previousDraftId, createdAt, expiresAt } | null }; POST applies KEEP_NEW or RESTORE_PREVIOUS
+  // to the NEW draft (the one that carries the decision). Neither calls a provider or spends credit.
+  app.get('/proposals/:id/decision', {
+    schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },
+  }, async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
+    try {
+      return { pending: drafts.loadPendingDecision(db, request.actor.userId, id) };
+    } catch (err) { return handleError(err, reply); }
+  });
+
+  app.post('/drafts/:id/decision', {
+    schema: {
+      params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } },
+      body: { type: 'object', required: ['decision'], additionalProperties: false, properties: { decision: { type: 'string', enum: ['KEEP_NEW', 'RESTORE_PREVIOUS'] }, confirmDiscard: { type: 'boolean' } } },
+    },
+  }, async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
+    try {
+      return drafts.decideReplacement(db, request.actor.userId, id, request.body.decision, { confirmDiscard: request.body.confirmDiscard === true });
+    } catch (err) { return handleError(err, reply); }
   });
 
   // T-F2-03: explicit re-audit with the CURRENT deterministic rules (no model call). Opening a draft never does this.
@@ -172,6 +215,24 @@ export function registerGeneratedDraftRoutes(app, db, aiOptions = {}) {
     if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
     try {
       const draft = await drafts.generateDeferredQuestions(db, request.actor.userId, id, {
+        provider: config.aiProvider,
+        consentGranted: config.aiConsentGranted,
+        codex: { command: config.codexCommand, model: config.codexModel, timeoutMs: config.codexTimeoutMs, reasoningEffort: config.codexReasoningEffort },
+        timeoutMs: config.aiRequestTimeoutMs,
+        ...aiOptions,
+      });
+      return { draft };
+    } catch (err) { return handleError(err, reply); }
+  });
+
+  // On-demand independent model check of the summary as it is now (the student's own text included). Only reports; never rewrites.
+  app.post('/drafts/:id/audit-summary', {
+    schema: { params: { type: 'object', required: ['id'], properties: { id: { type: 'string' } } } },
+  }, async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!Number.isInteger(id)) { reply.status(400); return { error: { code: 'VALIDATION_FAILED' } }; }
+    try {
+      const draft = await drafts.auditSummaryWithModel(db, request.actor.userId, id, {
         provider: config.aiProvider,
         consentGranted: config.aiConsentGranted,
         codex: { command: config.codexCommand, model: config.codexModel, timeoutMs: config.codexTimeoutMs, reasoningEffort: config.codexReasoningEffort },

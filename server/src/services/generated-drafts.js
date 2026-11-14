@@ -13,7 +13,7 @@ import {
 } from '../ai/openai-provider.js';
 import {
   generateDraft as codexGenerateDraft, generateQuestions as codexGenerateQuestions, auditDraftWithModel as codexAudit, repairDraftWithModel as codexRepair,
-  CODEX_PROVIDER_NAME, CODEX_DEFAULT_TIMEOUT_MS,
+  CODEX_PROVIDER_NAME, CODEX_DEFAULT_TIMEOUT_MS, scaledCodexTimeoutMs, CODEX_PROMPT_OVERHEAD_CHARS,
 } from '../ai/codex-provider.js';
 import { validateDraft, DraftValidationError } from '../ai/draft-schema.js';
 import { segmentsForProposal, assertPayloadWithinScope, ScopeViolation } from './proposal-scope.js';
@@ -24,6 +24,7 @@ import { groundSummary } from '../ai/claim-evidence.js';
 import { findUnresolvedRefs, refsMessage } from './visual-assets.js';
 import { findShared, recordReuse, bibliographyOf } from './shared-reuse.js';
 import { privateBankItems } from '../corpus/private-bank.js';
+import { findPending, recordReplacement, applyDecision, discardDraft, settleExpired, REPLACEMENT_DECISIONS } from './draft-replacements.js';
 
 export class DraftError extends Error {
   constructor(code, message, field) {
@@ -33,6 +34,57 @@ export class DraftError extends Error {
     if (field) this.field = field;
     if (msg) this.msg = msg;
   }
+}
+
+function createAnthropicProvider(options) {
+  return {
+    name: ANTHROPIC_PROVIDER_NAME,
+    live: true,
+    generate: (input) => anthropicGenerateDraft(input, options),
+    // The independent audit and one targeted repair use the same consent and budget as generation.
+    audit: (input) => auditDraftWithModel(input, options),
+    repair: (input) => repairDraftWithModel(input, options),
+  };
+}
+
+function createOpenAIProvider(options) {
+  return {
+    name: OPENAI_PROVIDER_NAME,
+    live: true,
+    generate: (input) => openaiGenerateDraft(input, options),
+    audit: (input) => openaiAudit(input, options),
+    repair: (input) => openaiRepair(input, options),
+  };
+}
+
+function createCodexProvider(codex) {
+  // A per-draft state carries call counters; the outer deadline lets the child-process deadline fire first.
+  const codexOptions = { ...codex, state: {} };
+  return {
+    name: CODEX_PROVIDER_NAME,
+    live: true,
+    timeoutMs: (codex.timeoutMs ?? CODEX_DEFAULT_TIMEOUT_MS) + 5_000,
+    // the outer deadline follows the same size-based limit as the call it wraps, so it never fires first
+    deadlineFor: (payloadChars) => (codex.timeoutMs ?? scaledCodexTimeoutMs(payloadChars + CODEX_PROMPT_OVERHEAD_CHARS)) + 5_000,
+    generate: (input) => codexGenerateDraft(input, codexOptions),
+    generateQuestions: (input) => codexGenerateQuestions(input, codexOptions),
+    audit: (input) => codexAudit(input, codexOptions),
+    repair: (input) => codexRepair(input, codexOptions),
+  };
+}
+
+function selectDeclaredProvider(name, declared, { liveAvailable, options, codex, consentGranted }) {
+  if (name === 'FAKE') return { name: FAKE_PROVIDER_NAME, live: false, languageContract: 'NOT_APPLICABLE', generate: fakeGenerateDraft };
+  if (name === CODEX_PROVIDER_NAME) {
+    // Codex uses the operator's CLI login, not an API key or per-request budget cap; explicit consent still applies.
+    if (consentGranted !== true) throw new DraftError('MISSING_CREDENTIALS', dm('CODEX_CONSENT_MISSING'));
+    return createCodexProvider(codex);
+  }
+  if (name !== OPENAI_PROVIDER_NAME && name !== ANTHROPIC_PROVIDER_NAME) {
+    throw new DraftError('UNKNOWN_PROVIDER', dm('PROVIDER_UNKNOWN', { provider: String(declared) }));
+  }
+  if (!liveAvailable) throw new DraftError('MISSING_CREDENTIALS', dm('PROVIDER_MISSING_SETUP', { provider: String(name) }));
+  return name === OPENAI_PROVIDER_NAME ? createOpenAIProvider(options) : createAnthropicProvider(options);
 }
 
 /**
@@ -46,59 +98,12 @@ export class DraftError extends Error {
 export function selectProvider({ provider: declared = null, apiKey, model, consentGranted, budgetCapUsd, fetchImpl, apiUrl, codex = {} }) {
   const liveAvailable = Boolean(apiKey) && Boolean(model) && consentGranted === true && typeof budgetCapUsd === 'number' && budgetCapUsd > 0;
   const options = { apiKey, model, ...(fetchImpl ? { fetchImpl } : {}), ...(apiUrl ? { apiUrl } : {}) };
-  const anthropic = () => ({
-    name: ANTHROPIC_PROVIDER_NAME,
-    live: true,
-    generate: (input) => anthropicGenerateDraft(input, options),
-    // Production-time quality gate: an independent audit and one targeted repair. Same
-    // credentials, consent and budget as generation — never a runtime call for the student.
-    audit: (input) => auditDraftWithModel(input, options),
-    repair: (input) => repairDraftWithModel(input, options),
-  });
-  const openai = () => ({
-    name: OPENAI_PROVIDER_NAME,
-    live: true,
-    generate: (input) => openaiGenerateDraft(input, options),
-    audit: (input) => openaiAudit(input, options),
-    repair: (input) => openaiRepair(input, options),
-  });
-
   // A DECLARED provider is honoured exactly: never silently replaced by fake or by another provider
   // (AI_SILENT_FALLBACK=FORBIDDEN). Without credentials/consent/budget it is an explicit error.
-  if (declared) {
-    const name = String(declared).toUpperCase();
-    if (name === 'FAKE') return { name: FAKE_PROVIDER_NAME, live: false, languageContract: 'NOT_APPLICABLE', generate: fakeGenerateDraft };
-    // CODEX authenticates through the operator's own Codex CLI login, not an API key, and has no per-request price to
-    // cap — so the key/model/budget gate does not apply. Explicit consent still does, and a Codex that is missing or not
-    // logged in is an explicit error raised by the provider itself (never fake/other-provider content).
-    if (name === CODEX_PROVIDER_NAME) {
-      if (consentGranted !== true) {
-        throw new DraftError('MISSING_CREDENTIALS', dm('CODEX_CONSENT_MISSING'));
-      }
-      // One options object per selected provider: it also carries the per-draft call counters.
-      const codexOptions = { ...codex, state: {} };
-      return {
-        name: CODEX_PROVIDER_NAME,
-        live: true,
-        // The outer deadline sits just above the child-process deadline so the child is killed first.
-        timeoutMs: (codex.timeoutMs ?? CODEX_DEFAULT_TIMEOUT_MS) + 5_000,
-        generate: (input) => codexGenerateDraft(input, codexOptions),
-        generateQuestions: (input) => codexGenerateQuestions(input, codexOptions),
-        audit: (input) => codexAudit(input, codexOptions),
-        repair: (input) => codexRepair(input, codexOptions),
-      };
-    }
-    if (name !== OPENAI_PROVIDER_NAME && name !== ANTHROPIC_PROVIDER_NAME) {
-      throw new DraftError('UNKNOWN_PROVIDER', dm('PROVIDER_UNKNOWN', { provider: String(declared) }));
-    }
-    if (!liveAvailable) {
-      throw new DraftError('MISSING_CREDENTIALS', dm('PROVIDER_MISSING_SETUP', { provider: String(name) }));
-    }
-    return name === OPENAI_PROVIDER_NAME ? openai() : anthropic();
-  }
+  if (declared) return selectDeclaredProvider(String(declared).toUpperCase(), declared, { liveAvailable, options, codex, consentGranted });
 
   // Nothing declared (legacy behaviour): the configured real adapter when fully configured, otherwise the fake.
-  if (liveAvailable) return anthropic();
+  if (liveAvailable) return createAnthropicProvider(options);
   return { name: FAKE_PROVIDER_NAME, live: false, languageContract: 'NOT_APPLICABLE', generate: fakeGenerateDraft };
 }
 /**
@@ -267,7 +272,7 @@ export function normalizeContent(content, generatedByDefault = null) {
     if (!id) { do { seq += 1; id = `q${seq}`; } while (used.has(id)); used.add(id); }
     const recorded = QUESTION_ORIGINS.has(q.origin);
     const origin = recorded ? q.origin : 'GENERATED';
-    const { legacy: _storedLegacy, ...rest } = q;
+    const { legacy, ...rest } = q;
     return {
       ...rest,
       id,
@@ -276,7 +281,7 @@ export function normalizeContent(content, generatedByDefault = null) {
       origin,
       generatedBy: origin === 'HUMAN_ADDED' ? null : (q.generatedBy ?? generatedByDefault ?? null),
       editedAt: q.editedAt ?? null,
-      ...(!recorded || q.legacy === true ? { legacy: true } : {}),
+      ...(!recorded || legacy === true ? { legacy: true } : {}),
     };
   });
   return {
@@ -293,22 +298,35 @@ export function normalizeContent(content, generatedByDefault = null) {
 }
 
 /** Audit findings with the entity they are about (stable id), so the UI groups them per question instead of dumping them. */
-export function findingsWithEntities(audit, questions) {
+function findingsWithEntities(audit, questions) {
   if (!audit) return audit;
   return {
     ...audit,
     findings: (audit.findings ?? []).map((f, index) => {
       const m = /^question:(\d+)$/.exec(f.scope ?? '');
       const target = m ? questions[Number(m[1])] : null;
+      const entityType = entityTypeFor(f.scope, target);
+      const entityId = entityIdFor(f.scope, target);
       return {
         ...f,
         id: `f${index + 1}`,
-        entityType: f.scope === 'summary' ? 'SUMMARY' : (target ? 'QUESTION' : 'DRAFT'),
-        entityId: f.scope === 'summary' ? 'summary' : (target ? target.id : null),
+        entityType,
+        entityId,
         status: 'OPEN',
       };
     }),
   };
+}
+
+function entityTypeFor(scope, target) {
+  if (scope === 'summary') return 'SUMMARY';
+  if (target) return 'QUESTION';
+  return 'DRAFT';
+}
+
+function entityIdFor(scope, target) {
+  if (scope === 'summary') return 'summary';
+  return target ? target.id : null;
 }
 
 /**
@@ -422,6 +440,163 @@ export function prepareGeneration(db, userId, proposalId, { maxInputChars = 50_0
 /** Provider failures that prove no request left the machine: nothing was spent, so the reservation is released. */
 const PRE_SEND_FAILURES = new Set(['MISSING_CREDENTIALS', 'CODEX_NOT_FOUND', 'CODEX_NOT_AUTHENTICATED', 'CALL_LIMIT_EXCEEDED', 'UNKNOWN_PROVIDER']);
 
+function reserveProviderBudget(db, userId, provider, proposalId, payloadChars, plannedCalls, budgetLimits, now, hooks) {
+  if (provider.live !== true) return null;
+  try {
+    const reservation = reserve(db, userId, {
+      proposalId,
+      estimatedUnits: estimateCostUnits({ payloadChars, calls: plannedCalls }),
+      limits: budgetLimits,
+      now,
+    });
+    hooks?.onReservation?.(reservation);
+    return reservation;
+  } catch (err) {
+    if (err instanceof BudgetError) throw new DraftError('BUDGET_EXCEEDED', carry(err));
+    throw err;
+  }
+}
+
+async function generateAndValidate(provider, segments, generation, deadlineMs, closeBudget) {
+  let raw;
+  try {
+    raw = await withTimeout(provider.generate(generation), deadlineMs, 'TIMEOUT');
+  } catch (err) {
+    // Only failures known to happen before an external request release the reservation; others may have been charged.
+    closeBudget({ refund: err instanceof ProviderRequestError && PRE_SEND_FAILURES.has(err.code) });
+    if (err instanceof DraftError) throw err;
+    if (err instanceof ProviderRequestError) throw new DraftError(err.code, err.message);
+    // Never return an unshaped provider exception, which could contain credentials or source text.
+    throw new DraftError('PROVIDER_ERROR', dm('PROVIDER_UNEXPECTED_FAILURE'));
+  }
+
+  try {
+    return { raw, validated: validateDraft(raw, { segments, allowNoQuestions: generation.deferQuestions === true }) };
+  } catch (err) {
+    if (err instanceof DraftValidationError) throw new DraftError(err.code, err.message, err.field);
+    throw err;
+  }
+}
+
+/**
+ * REUSE before GENERATE: when another student already had the SAME text (same digest, same language) turned into a reviewed summary, this student
+ * gets that content as a DRAFT of their own, with no model call and no credit. It is audited again here against THEIR source text and still has to
+ * be reviewed and accepted. A summary without questions only suits the summary-first flow (the questions are then asked for later). Returns null on a miss.
+ */
+function reuseSharedDraft(db, userId, { found, scope, proposalId, inputDigest, inputGeneration, sourceLanguage, generationLocale, questionsLater, now }) {
+  const shared = findShared(db, { digest: inputDigest, locale: generationLocale, bib: bibliographyOf(db, userId, found.proposal.source_id) });
+  if (!shared) return null;
+  const hasQuestions = shared.questions.length > 0;
+  if (!hasQuestions && !questionsLater) return null;
+  const nowIso = now().toISOString();
+  const content = normalizeContent({
+    summary: shared.summary,
+    summarySourceSpans: shared.summarySourceSpans,
+    summaryEvidence: shared.summaryEvidence ?? [],
+    questions: shared.questions.map((q) => ({ ...q, origin: 'GENERATED', generatedBy: shared.generatedBy, editedAt: null })),
+    ...(hasQuestions ? {} : { questionsDeferred: true }),
+    quarantinedCount: 0,
+    audit: { result: AUDIT_RESULT.PASS, findings: [], auditedBy: ['DETERMINISTIC'], modelAudit: 'NOT_RUN', rulesVersion: AUDIT_RULES_VERSION, auditedAt: nowIso },
+    sourceLanguage: sourceLanguage ?? shared.sourceLanguage,
+    generationLocale,
+    languageCheck: 'NOT_APPLICABLE',
+    reusedFrom: { sharedId: shared.id, at: nowIso },
+    sourceScope: {
+      documentId: found.proposal.source_id,
+      documentName: db.prepare('SELECT original_name FROM sources WHERE user_id = ? AND id = ?').get(userId, found.proposal.source_id)?.original_name ?? null,
+      topic: found.proposal.topic ?? found.proposal.title,
+      approvedPages: [found.proposal.page_start, found.proposal.page_end],
+      spanCount: found.proposal.spans_json ? JSON.parse(found.proposal.spans_json).length : null,
+      sourceChars: scope.sourceChars,
+      payloadChars: scope.payloadChars,
+      payloadPages: scope.pages,
+    },
+  });
+  const inserted = db.transaction(() => {
+    const r = db.prepare(`
+      INSERT INTO generated_drafts (user_id, proposal_id, provider, model_version, prompt_version, status, draft_json, created_at, input_sha256, source_extraction_generation)
+      VALUES (?, ?, ?, ?, ?, 'DRAFT', ?, ?, ?, ?)
+    `).run(userId, proposalId, shared.generatedBy.provider, shared.generatedBy.modelVersion, shared.generatedBy.promptVersion, JSON.stringify(content), nowIso, inputDigest, inputGeneration);
+    recordReuse(db, shared.id);
+    return r;
+  })();
+  const { draft } = reauditDraft(db, userId, Number(inserted.lastInsertRowid), now);
+  return { ...draft, live: false, sharedReuse: true };
+}
+
+/** The questions of a summary-first draft, taken from reviewed content for the same text instead of asking the model. Null on a miss. */
+/** The questions of `candidates` that cite a page of THIS student's text and are not in the draft yet (an invalid one is dropped, never repaired). */
+function validFresh(first, candidates) {
+  const { draftRow, found, current } = first;
+  const have = new Set(current.questions.map((q) => q.question));
+  const fresh = [];
+  for (const candidate of candidates) {
+    if (have.has(candidate.question)) continue;
+    try {
+      const [valid] = validateOrThrow({
+        summary: current.summary, summarySourceSpans: current.summarySourceSpans, questions: [candidate],
+        modelVersion: draftRow.model_version, promptVersion: draftRow.prompt_version,
+      }, found.segments).questions;
+      fresh.push(valid);
+    } catch (err) {
+      if (!(err instanceof DraftError)) throw err;
+    }
+  }
+  return fresh;
+}
+
+/**
+ * The student's OWN accepted questions (private bank) that were written from pages of this same source and that this text contains, from lessons
+ * other than the one the draft adds to. Their own reviewed work: it needs no consent, no model and is never shared by this path.
+ */
+function privateQuestions(db, userId, first) {
+  const { draftRow, found } = first;
+  const inText = new Set(found.segments.map((seg) => seg.pageIndex));
+  const candidates = [];
+  for (const item of privateBankItems(db, userId)) {
+    if (item.source_file !== `source#${found.proposal.source_id}` || item.unit_id === draftRow.target_unit_id || item.needs_verification) continue;
+    const pages = (/^pages ([\d,]+)$/.exec(item.source_evidence ?? '')?.[1] ?? '').split(',').filter(Boolean).map(Number);
+    if (pages.length === 0 || !pages.every((p) => inText.has(p)) || !item.stem || !item.key || !item.explanation) continue;
+    candidates.push({ question: item.stem, answer: item.key, explanation: item.explanation, hint: null, questionType: item.item_type ?? null, sourceSpans: pages.map((pageIndex) => ({ pageIndex })) });
+  }
+  const fresh = validFresh(first, candidates);
+  return fresh.length === 0 ? null : { shared: null, fresh, generatedBy: { provider: 'PRIVATE_BANK', modelVersion: 'accepted-exercise', promptVersion: '-' } };
+}
+
+/** Existing material before the model: the student's own accepted questions first, then reviewed questions of the same text from the pool. */
+function reusableQuestions(db, userId, first) {
+  const own = privateQuestions(db, userId, first);
+  if (own) return own;
+  const { draftRow, found, current } = first;
+  const shared = findShared(db, { digest: draftRow.input_sha256, locale: current.generationLocale, bib: bibliographyOf(db, userId, found.proposal.source_id) });
+  if (!shared || shared.questions.length === 0) return null;
+  const fresh = validFresh(first, shared.questions); // reviewed elsewhere is not enough: each question must also cite a page of THIS student's text
+  return fresh.length === 0 ? null : { shared, fresh, generatedBy: shared.generatedBy };
+}
+
+function reuseSharedQuestions(db, userId, draftId, first, now) {
+  const { draftRow, found, current } = first;
+  const hit = reusableQuestions(db, userId, first);
+  if (!hit) return null;
+  const { shared, fresh, generatedBy } = hit;
+  if (shared) recordReuse(db, shared.id);
+  return persistEdit(db, userId, draftId, draftRow, found, current, {
+    summary: current.summary, summarySourceSpans: current.summarySourceSpans, summaryVersion: current.summaryVersion,
+    questions: [...current.questions, ...fresh.map((q) => ({ ...q, origin: 'GENERATED', generatedBy, editedAt: null }))],
+    questionsDelivered: true,
+  }, now);
+}
+
+function checkLanguageContract(draft, provider, generationLocale, rawLanguage) {
+  if (provider.languageContract === 'NOT_APPLICABLE') return { status: 'NOT_APPLICABLE', detected: null, declared: null };
+  try {
+    return checkDraftLanguage(draft, generationLocale, rawLanguage);
+  } catch (err) {
+    if (err instanceof LanguageMismatch) throw new DraftError('LANGUAGE_MISMATCH', err.message);
+    throw err;
+  }
+}
+
 export async function createDraft(db, userId, proposalId, {
   // SMARTLEARN_PRODUCT_FIRST_V1 Slice 1: bumped from '1' -- the real
   // provider's prompt (anthropic-provider.js) changed materially (varied
@@ -452,6 +627,9 @@ export async function createDraft(db, userId, proposalId, {
   budgetLimits = undefined,
   // System/Accept-Language hint, used ONLY to initialize the student's generationLocale the first time (never afterwards).
   localeHint = null,
+  // Translation: write THIS draft in another supported language WITHOUT changing the student's persisted preference. The language
+  // contract is checked against it, so the result is refused if it comes back in another language.
+  generationLocaleOverride = null,
   // Generation is JIT and reuses what is valid: a repeat request returns the existing draft/lesson with NO provider call.
   // Making a new one is an explicit act.
   regenerate = false,
@@ -473,7 +651,7 @@ export async function createDraft(db, userId, proposalId, {
   // The three languages: the source's (detected here), the student's persisted content language (never inferred from the
   // source or the interface) and, for the model, what to write in. A first generation initializes the preference once.
   const sourceLanguage = detectSourceLanguage(found.segments);
-  const generationLocale = ensureGenerationLocale(db, userId, localeHint);
+  const generationLocale = (generationLocaleOverride && resolveSupportedLocale(generationLocaleOverride)) || ensureGenerationLocale(db, userId, localeHint);
 
   // REUSE first (a regenerate is an explicit wish for a new one): reviewed content for exactly this text costs nothing and needs no provider.
   if (!regenerate) {
@@ -482,36 +660,42 @@ export async function createDraft(db, userId, proposalId, {
   }
   const provider = providerImpl ?? selectProvider({ provider: declaredProvider, apiKey, model, consentGranted, budgetCapUsd, fetchImpl, apiUrl, codex });
   // A provider may need a longer deadline than the generic one (a Codex run is minutes, not seconds).
-  const deadlineMs = provider.timeoutMs ?? timeoutMs;
+  const deadlineMs = provider.deadlineFor?.(found.segments.reduce((sum, s) => sum + s.text.length, 0)) ?? provider.timeoutMs ?? timeoutMs;
+
+  // A regenerate keeps the previous draft until the student decides which to keep (migration 043). While that decision is pending
+  // nothing new is generated: refused here, AFTER every refusal that already existed (unknown unit, scope, size, provider selection:
+  // their error codes and order are unchanged) and BEFORE any credit is reserved or any provider is called. Decisions whose 30 days
+  // passed are settled first. An ACCEPTED lesson is never part of a replacement (old behaviour: a new draft beside it).
+  let previousDraftId = null;
+  if (regenerate) {
+    settleExpiredDecisions(db, { now });
+    assertNoPendingDecision(db, userId, proposalId);
+    const previous = reusableDraftRow(db, userId, proposalId);
+    previousDraftId = previous?.status === 'DRAFT' ? previous.id : null;
+  }
 
   // CREDIT (R-12): a provider that reaches an external model never runs without a reservation inside the limits. The
   // estimate counts every call this provider may make (generate, independent audit, one repair). Refused here = nothing was
   // sent and nothing is debited. The deterministic test double (live:false) spends nothing external and skips the ledger.
   const plannedCalls = 1 + (provider.audit ? 1 : 0) + (provider.repair ? 1 : 0);
   const payloadChars = found.segments.reduce((sum, s) => sum + s.text.length, 0);
-  let reservation = null;
-  if (provider.live === true) {
-    try {
-      reservation = reserve(db, userId, { proposalId, estimatedUnits: estimateCostUnits({ payloadChars, calls: plannedCalls }), limits: budgetLimits, now });
-      hooks?.onReservation?.(reservation);
-    } catch (err) {
-      if (err instanceof BudgetError) throw new DraftError('BUDGET_EXCEEDED', carry(err));
-      throw err;
-    }
-  }
+  const reservation = reserveProviderBudget(db, userId, provider, proposalId, payloadChars, plannedCalls, budgetLimits, now, hooks);
   let callsMade = 1;
   let budgetClosed = reservation === null;
   // Exactly one of settle/release, once. Release = nothing external happened; settle = it may have, charged at the estimate of
   // the calls actually made (no provider reports a measurable cost yet, so the basis is ESTIMATED).
   const closeBudget = ({ refund = false } = {}) => {
     if (budgetClosed) return;
-    budgetClosed = true;
+    // The flag is raised only AFTER the ledger write succeeded: if it throws (database busy), the `finally` below tries once more
+    // instead of leaving the reservation held until the next startup.
     if (refund) {
       release(db, reservation.id, { now });
+      budgetClosed = true;
       hooks?.onBudgetClosed?.({ reservationId: reservation.id, state: 'RELEASED', consumedUnits: 0 });
     } else {
       const consumedUnits = estimateCostUnits({ payloadChars, calls: callsMade });
       settle(db, reservation.id, { consumedUnits, basis: 'ESTIMATED', now });
+      budgetClosed = true;
       hooks?.onBudgetClosed?.({ reservationId: reservation.id, state: 'SETTLED', consumedUnits });
     }
   };
@@ -525,41 +709,18 @@ export async function createDraft(db, userId, proposalId, {
 
   // Summary first (Codex only, when configured): the generation writes just the Resumo Mestre and the draft carries no questions yet.
   const deferQuestions = codex?.deferQuestions === true && provider.name === CODEX_PROVIDER_NAME;
-  let raw;
-  try {
-    raw = await withTimeout(provider.generate({ segments: found.segments, promptVersion, sourceLanguage, generationLocale, deferQuestions }), deadlineMs, 'TIMEOUT');
-  } catch (err) {
-    // Failures that happen BEFORE a request can leave (no credentials, CLI absent or not logged in, the local call limit)
-    // spent nothing; any other failure may have happened after the model was reached and is charged.
-    closeBudget({ refund: err instanceof ProviderRequestError && PRE_SEND_FAILURES.has(err.code) });
-    if (err instanceof DraftError) throw err;
-    if (err instanceof ProviderRequestError) throw new DraftError(err.code, err.message);
-    // T-F8-03: an exception the provider adapters did not shape themselves is NOT reported verbatim -- its text can carry the
-    // request (credential, source text) and this message is returned to the client and stored on the job.
-    throw new DraftError('PROVIDER_ERROR', dm('PROVIDER_UNEXPECTED_FAILURE'));
-  }
-
-  let validated;
-  try {
-    validated = validateDraft(raw, { segments: found.segments, allowNoQuestions: deferQuestions });
-  } catch (err) {
-    if (err instanceof DraftValidationError) throw new DraftError(err.code, err.message, err.field);
-    throw err;
-  }
+  const { raw, validated: initialDraft } = await generateAndValidate(provider, found.segments, {
+    segments: found.segments, promptVersion, sourceLanguage, generationLocale, deferQuestions,
+  }, deadlineMs, closeBudget);
+  let validated = initialDraft;
+  // From here the audit and the repair may reach the model: an unexpected error before the exact count below settles at every
+  // planned call (it may have happened), never at the generation alone.
+  callsMade = plannedCalls;
 
   // Wrong language = contract failure: refused BEFORE spending an audit on it, and nothing is stored.
   // The built-in deterministic test double only slices the source text: it cannot write in another language, so the contract
   // is recorded as NOT_APPLICABLE for it (never for a real provider or an injected one).
-  const languageCheckOf = (draft) => {
-    if (provider.languageContract === 'NOT_APPLICABLE') return { status: 'NOT_APPLICABLE', detected: null, declared: null };
-    try {
-      return checkDraftLanguage(draft, generationLocale, raw.language);
-    } catch (err) {
-      if (err instanceof LanguageMismatch) throw new DraftError('LANGUAGE_MISMATCH', err.message);
-      throw err;
-    }
-  };
-  languageCheckOf(validated);
+  checkLanguageContract(validated, provider, generationLocale, raw.language);
 
   const proposedEvidence = validated.summaryEvidence;
   const audited = await auditAndRepair(provider, validated, found.segments, { promptVersion, timeoutMs: deadlineMs });
@@ -568,7 +729,7 @@ export async function createDraft(db, userId, proposalId, {
   if (!validated.summaryEvidence?.length) validated = { ...validated, summaryEvidence: proposedEvidence };
   callsMade = 1 + (audited.audit.modelAudit !== 'NOT_RUN' ? 1 : 0) + (audited.audit.repaired || audited.audit.repairRejected ? 1 : 0);
   // A repair may have rewritten text: the final content is what must be in the target language.
-  const languageCheck = languageCheckOf(validated);
+  const languageCheck = checkLanguageContract(validated, provider, generationLocale, raw.language);
   closeBudget();
 
   // A stopped job never leaves a draft behind, not even a complete one that finished too late (the call happened: it is charged).
@@ -600,18 +761,32 @@ export async function createDraft(db, userId, proposalId, {
       payloadPages: scope.pages,
     },
   });
-  const result = db.prepare(`
-    INSERT INTO generated_drafts (user_id, proposal_id, provider, model_version, prompt_version, status, draft_json, created_at, input_sha256, source_extraction_generation)
-    VALUES (?, ?, ?, ?, ?, 'DRAFT', ?, ?, ?, ?)
-  `).run(
-    userId, proposalId, provider.name, validated.modelVersion, validated.promptVersion, JSON.stringify(draftContent), nowIso,
-    inputDigest, inputGeneration,
-  );
+  // One transaction: the new draft and, when it replaces a plain draft, the pending decision about the previous one (all or nothing).
+  // The previous draft is recorded only if it is still a plain draft and no decision was recorded meanwhile (two direct requests at once).
+  const result = db.transaction(() => {
+    // Two direct regenerates passed the early check together: the second one finds the decision of the first and stores nothing
+    // (its generation was already paid), so no draft is left that no decision covers.
+    if (regenerate) assertNoPendingDecision(db, userId, proposalId);
+    const inserted = db.prepare(`
+      INSERT INTO generated_drafts (user_id, proposal_id, provider, model_version, prompt_version, status, draft_json, created_at, input_sha256, source_extraction_generation)
+      VALUES (?, ?, ?, ?, ?, 'DRAFT', ?, ?, ?, ?)
+    `).run(
+      userId, proposalId, provider.name, validated.modelVersion, validated.promptVersion, JSON.stringify(draftContent), nowIso,
+      inputDigest, inputGeneration,
+    );
+    if (previousDraftId !== null && !findPending(db, userId, proposalId)
+      && db.prepare("SELECT 1 FROM generated_drafts WHERE user_id = ? AND id = ? AND status = 'DRAFT'").get(userId, previousDraftId)) {
+      recordReplacement(db, userId, { proposalId, newDraftId: Number(inserted.lastInsertRowid), previousDraftId, now });
+    }
+    return inserted;
+  })();
 
   return { ...toDraftDto(db.prepare('SELECT * FROM generated_drafts WHERE id = ?').get(result.lastInsertRowid), { db, userId }), live: provider.live };
   } finally {
-    // Whatever happened above (validation, language, an unexpected error), no reservation is ever left open.
-    closeBudget();
+    // Whatever happened above (validation, language, an unexpected error), no reservation is ever left open. A ledger failure here
+    // never replaces the error that is already propagating (the server writes to the console only from main.js); a reservation that
+    // still could not be closed is reconciled at the next startup, as before.
+    try { closeBudget(); } catch { /* see above */ }
   }
 }
 
@@ -739,115 +914,6 @@ function loadEditable(db, userId, draftId) {
 
 /** Re-screens deterministically (a human edit changes the text, so earlier findings describe text that is gone), writes ONE row update and bumps the draft revision. */
 /** The fields of a question a reviewer can change the MEANING of (status, version and timestamps are not content). */
-/**
- * REUSE before GENERATE: when another student already had the SAME text (same digest, same language) turned into a reviewed summary, this student
- * gets that content as a DRAFT of their own, with no model call and no credit. It is audited again here against THEIR source text and still has to
- * be reviewed and accepted. A summary without questions only suits the summary-first flow (the questions are then asked for later). Returns null on a miss.
- */
-function reuseSharedDraft(db, userId, { found, scope, proposalId, inputDigest, inputGeneration, sourceLanguage, generationLocale, questionsLater, now }) {
-  const shared = findShared(db, { digest: inputDigest, locale: generationLocale, bib: bibliographyOf(db, userId, found.proposal.source_id) });
-  if (!shared) return null;
-  const hasQuestions = shared.questions.length > 0;
-  if (!hasQuestions && !questionsLater) return null;
-  const nowIso = now().toISOString();
-  const content = normalizeContent({
-    summary: shared.summary,
-    summarySourceSpans: shared.summarySourceSpans,
-    summaryEvidence: shared.summaryEvidence ?? [],
-    questions: shared.questions.map((q) => ({ ...q, origin: 'GENERATED', generatedBy: shared.generatedBy, editedAt: null })),
-    ...(hasQuestions ? {} : { questionsDeferred: true }),
-    quarantinedCount: 0,
-    audit: { result: AUDIT_RESULT.PASS, findings: [], auditedBy: ['DETERMINISTIC'], modelAudit: 'NOT_RUN', rulesVersion: AUDIT_RULES_VERSION, auditedAt: nowIso },
-    sourceLanguage: sourceLanguage ?? shared.sourceLanguage,
-    generationLocale,
-    languageCheck: 'NOT_APPLICABLE',
-    reusedFrom: { sharedId: shared.id, at: nowIso },
-    sourceScope: {
-      documentId: found.proposal.source_id,
-      documentName: db.prepare('SELECT original_name FROM sources WHERE user_id = ? AND id = ?').get(userId, found.proposal.source_id)?.original_name ?? null,
-      topic: found.proposal.topic ?? found.proposal.title,
-      approvedPages: [found.proposal.page_start, found.proposal.page_end],
-      spanCount: found.proposal.spans_json ? JSON.parse(found.proposal.spans_json).length : null,
-      sourceChars: scope.sourceChars,
-      payloadChars: scope.payloadChars,
-      payloadPages: scope.pages,
-    },
-  });
-  const inserted = db.transaction(() => {
-    const r = db.prepare(`
-      INSERT INTO generated_drafts (user_id, proposal_id, provider, model_version, prompt_version, status, draft_json, created_at, input_sha256, source_extraction_generation)
-      VALUES (?, ?, ?, ?, ?, 'DRAFT', ?, ?, ?, ?)
-    `).run(userId, proposalId, shared.generatedBy.provider, shared.generatedBy.modelVersion, shared.generatedBy.promptVersion, JSON.stringify(content), nowIso, inputDigest, inputGeneration);
-    recordReuse(db, shared.id);
-    return r;
-  })();
-  const { draft } = reauditDraft(db, userId, Number(inserted.lastInsertRowid), now);
-  return { ...draft, live: false, sharedReuse: true };
-}
-
-/** The questions of a summary-first draft, taken from reviewed content for the same text instead of asking the model. Null on a miss. */
-/** The questions of `candidates` that cite a page of THIS student's text and are not in the draft yet (an invalid one is dropped, never repaired). */
-function validFresh(first, candidates) {
-  const { draftRow, found, current } = first;
-  const have = new Set(current.questions.map((q) => q.question));
-  const fresh = [];
-  for (const candidate of candidates) {
-    if (have.has(candidate.question)) continue;
-    try {
-      const [valid] = validateOrThrow({
-        summary: current.summary, summarySourceSpans: current.summarySourceSpans, questions: [candidate],
-        modelVersion: draftRow.model_version, promptVersion: draftRow.prompt_version,
-      }, found.segments).questions;
-      fresh.push(valid);
-    } catch (err) {
-      if (!(err instanceof DraftError)) throw err;
-    }
-  }
-  return fresh;
-}
-
-/**
- * The student's OWN accepted questions (private bank) that were written from pages of this same source and that this text contains, from lessons
- * other than the one the draft adds to. Their own reviewed work: it needs no consent, no model and is never shared by this path.
- */
-function privateQuestions(db, userId, first) {
-  const { draftRow, found } = first;
-  const inText = new Set(found.segments.map((seg) => seg.pageIndex));
-  const candidates = [];
-  for (const item of privateBankItems(db, userId)) {
-    if (item.source_file !== `source#${found.proposal.source_id}` || item.unit_id === draftRow.target_unit_id || item.needs_verification) continue;
-    const pages = (/^pages ([\d,]+)$/.exec(item.source_evidence ?? '')?.[1] ?? '').split(',').filter(Boolean).map(Number);
-    if (pages.length === 0 || !pages.every((p) => inText.has(p)) || !item.stem || !item.key || !item.explanation) continue;
-    candidates.push({ question: item.stem, answer: item.key, explanation: item.explanation, hint: null, questionType: item.item_type ?? null, sourceSpans: pages.map((pageIndex) => ({ pageIndex })) });
-  }
-  const fresh = validFresh(first, candidates);
-  return fresh.length === 0 ? null : { shared: null, fresh, generatedBy: { provider: 'PRIVATE_BANK', modelVersion: 'accepted-exercise', promptVersion: '-' } };
-}
-
-/** Existing material before the model: the student's own accepted questions first, then reviewed questions of the same text from the pool. */
-function reusableQuestions(db, userId, first) {
-  const own = privateQuestions(db, userId, first);
-  if (own) return own;
-  const { draftRow, found, current } = first;
-  const shared = findShared(db, { digest: draftRow.input_sha256, locale: current.generationLocale, bib: bibliographyOf(db, userId, found.proposal.source_id) });
-  if (!shared || shared.questions.length === 0) return null;
-  const fresh = validFresh(first, shared.questions); // reviewed elsewhere is not enough: each question must also cite a page of THIS student's text
-  return fresh.length === 0 ? null : { shared, fresh, generatedBy: shared.generatedBy };
-}
-
-function reuseSharedQuestions(db, userId, draftId, first, now) {
-  const { draftRow, found, current } = first;
-  const hit = reusableQuestions(db, userId, first);
-  if (!hit) return null;
-  const { shared, fresh, generatedBy } = hit;
-  if (shared) recordReuse(db, shared.id);
-  return persistEdit(db, userId, draftId, draftRow, found, current, {
-    summary: current.summary, summarySourceSpans: current.summarySourceSpans, summaryVersion: current.summaryVersion,
-    questions: [...current.questions, ...fresh.map((q) => ({ ...q, origin: 'GENERATED', generatedBy, editedAt: null }))],
-    questionsDelivered: true,
-  }, now);
-}
-
 /**
  * Read-only: would asking for this (a summary job for `proposalId`, or the questions of `draftId`) be answered from reviewed content?
  * The job route asks BEFORE it demands AI consent or credentials: a hit needs neither (no model is called, nothing is reserved). Never writes.
@@ -1113,6 +1179,81 @@ export async function generateDeferredQuestions(db, userId, draftId, {
 }
 
 /**
+ * On-demand independent model check of the summary AS IT IS NOW (the student's own text or an edited generated one) against the source.
+ * Same fidelity criteria as the production-time audit (medical accuracy, omissions, lost qualifiers); it only REPORTS: nothing in the
+ * summary or the questions changes, the student's text is never rewritten, and the draft stays DRAFT. One call, held and settled in the
+ * credit ledger exactly like `generateDeferredQuestions`. The previous MODEL findings are replaced (they judged an older text); the
+ * deterministic screen is recomputed on the current text.
+ */
+export async function auditSummaryWithModel(db, userId, draftId, {
+  provider: declaredProvider = null, providerImpl = null, consentGranted = false, codex = {}, timeoutMs = 30_000, signal = null,
+  budgetLimits = undefined, now = () => new Date(),
+} = {}) {
+  const first = loadEditable(db, userId, draftId);
+  const provider = providerImpl ?? selectProvider({ provider: declaredProvider, consentGranted, codex });
+  if (provider.live !== true || typeof provider.audit !== 'function') throw new DraftError('INVALID_STATE', dm('MODEL_AUDIT_UNSUPPORTED'));
+  const chars = first.found.segments.reduce((sum, s) => sum + s.text.length, 0) + first.current.summary.length;
+  const deadlineMs = provider.deadlineFor?.(chars) ?? provider.timeoutMs ?? timeoutMs;
+
+  let reservation;
+  try {
+    reservation = reserve(db, userId, { proposalId: first.draftRow.proposal_id, estimatedUnits: estimateCostUnits({ payloadChars: chars, calls: 1 }), limits: budgetLimits, now });
+  } catch (err) {
+    if (err instanceof BudgetError) throw new DraftError('BUDGET_EXCEEDED', carry(err));
+    throw err;
+  }
+  let budgetClosed = false;
+  const closeBudget = ({ refund = false } = {}) => {
+    if (budgetClosed) return;
+    budgetClosed = true;
+    if (refund) release(db, reservation.id, { now });
+    else settle(db, reservation.id, { consumedUnits: estimateCostUnits({ payloadChars: chars, calls: 1 }), basis: 'ESTIMATED', now });
+  };
+  try {
+    if (signal?.aborted) { closeBudget({ refund: true }); throw new DraftError('CANCELLED', dm('GENERATION_CANCELLED_BEFORE_CALL')); }
+    let result;
+    try {
+      result = await withTimeout(Promise.resolve(provider.audit({
+        draft: { summary: first.current.summary, summarySourceSpans: first.current.summarySourceSpans, questions: first.current.questions },
+        segments: first.found.segments, signal,
+      })), deadlineMs, 'TIMEOUT');
+    } catch (err) {
+      closeBudget({ refund: err instanceof ProviderRequestError && PRE_SEND_FAILURES.has(err.code) });
+      if (err instanceof DraftError) throw err;
+      if (err instanceof ProviderRequestError) throw new DraftError(err.code, err.message);
+      throw new DraftError('PROVIDER_ERROR', dm('PROVIDER_UNEXPECTED_FAILURE')); // never an unshaped provider exception (credentials, source text)
+    }
+    closeBudget();
+    if (result?.malformed) throw new DraftError('INVALID_STATE', dm('MODEL_AUDIT_MALFORMED'));
+
+    return storeModelAudit(db, userId, draftId, first.current.summary, result?.findings ?? [], now);
+  } finally {
+    if (!budgetClosed) { try { closeBudget(); } catch { /* startup reconciliation settles what is still open */ } }
+  }
+}
+
+/** Saves a model audit of the summary. Reloads after the (long) call: the student may have kept typing, and a finding about a text that is gone is never shown. */
+function storeModelAudit(db, userId, draftId, judgedSummary, modelResult, now) {
+  const { draftRow, found, current } = loadEditable(db, userId, draftId);
+  if (current.summary !== judgedSummary) throw new DraftError('ENTITY_CONFLICT', dm('SUMMARY_CHANGED_SINCE_READ'));
+  const deterministic = withSource(auditDraft({ summary: current.summary, summarySourceSpans: current.summarySourceSpans, questions: current.questions }, { segments: found.segments }).findings, 'DETERMINISTIC');
+  const findings = [...deterministic, ...modelResult.map((f) => ({ ...f, source: 'MODEL' }))];
+  const audit = {
+    ...current.audit,
+    result: findings.some(isBlocking) ? AUDIT_RESULT.REPAIR : AUDIT_RESULT.PASS,
+    findings,
+    auditedBy: ['DETERMINISTIC', 'MODEL'],
+    modelAudit: 'OK',
+    rulesVersion: AUDIT_RULES_VERSION,
+    auditedAt: now().toISOString(),
+  };
+  const content = { ...JSON.parse(draftRow.draft_json), audit };
+  db.prepare('UPDATE generated_drafts SET draft_json = ?, revision = revision + 1, updated_at = ? WHERE user_id = ? AND id = ?')
+    .run(JSON.stringify(content), now().toISOString(), userId, draftId);
+  return toDraftDto(db.prepare('SELECT * FROM generated_drafts WHERE id = ?').get(draftId), { db, userId });
+}
+
+/**
  * Questions for a lesson that ALREADY exists (it was accepted as a summary only). They are written into a draft of their own,
  * hung on the lesson (target_unit_id), so they are reviewed like any AI output; accepting it only ADDS exercises (accept-draft.js).
  * The draft is summary-first shaped (no questions, questionsDeferred) and carries the lesson's summary read-only. Asking again while
@@ -1217,8 +1358,72 @@ export function getDraft(db, userId, draftId) {
   return toDraftDto(row, { db, userId });
 }
 
-export function listDrafts(db, userId, proposalId) {
+export function listDrafts(db, userId, proposalId, { now = () => new Date() } = {}) {
   const proposal = db.prepare('SELECT id FROM content_proposals WHERE user_id = ? AND id = ?').get(userId, proposalId);
   if (!proposal) throw new DraftError('NOT_FOUND', dm('PROPOSAL_NOT_FOUND'));
+  // looking at the unit is when a replacement whose 30 days passed with no decision is settled (the previous draft goes)
+  settleExpiredDecisions(db, { now });
   return db.prepare('SELECT * FROM generated_drafts WHERE user_id = ? AND proposal_id = ? AND target_unit_id IS NULL ORDER BY id DESC').all(userId, proposalId).map((row) => toDraftDto(row, { db, userId }));
+}
+
+// ---- Replacement decision (migration 043; spec RESUMO-ATUAL-E-LIXEIRA-2026-11-12) -------------------------------------------------
+
+/** The decision pending for this unit (a regenerate kept the previous draft until the student chooses), or null. Read-only. */
+export function pendingDecision(db, userId, proposalId) {
+  return findPending(db, userId, proposalId);
+}
+
+/** For the API: the unit must be this student's (NOT_FOUND otherwise); what expired is settled first, then the pending decision or null. */
+export function loadPendingDecision(db, userId, proposalId, { now = () => new Date() } = {}) {
+  if (!db.prepare('SELECT 1 FROM content_proposals WHERE user_id = ? AND id = ?').get(userId, proposalId)) {
+    throw new DraftError('NOT_FOUND', dm('PROPOSAL_NOT_FOUND'));
+  }
+  settleExpiredDecisions(db, { now });
+  return findPending(db, userId, proposalId);
+}
+
+/** Settles the replacements whose 30 days passed with no decision (the previous draft is deleted, the new one stays). Returns how many. */
+export function settleExpiredDecisions(db, { now = () => new Date() } = {}) {
+  return settleExpired(db, { now });
+}
+
+/** Discards one unfinished summary (status DRAFT). Never touches the book, the unit or an accepted lesson. No provider call, no credit. */
+export function discardDraftById(db, userId, draftId, { confirmDiscard = false } = {}) {
+  const result = discardDraft(db, userId, draftId, { confirmDiscard: confirmDiscard === true });
+  if (result.outcome === 'NOT_FOUND') throw new DraftError('NOT_FOUND', dm('DRAFT_NOT_FOUND'));
+  if (result.outcome === 'NOT_DISCARDABLE') throw new DraftError('INVALID_STATE', dm('DRAFT_ALREADY_LESSON'));
+  if (result.outcome === 'IN_DECISION') throw new DraftError('INVALID_STATE', dm('DRAFT_IN_DECISION'));
+  if (result.outcome === 'NEEDS_CONFIRMATION') {
+    throw new DraftError('DISCARD_NEEDS_CONFIRMATION', dm('DRAFT_DISCARD_CONFIRM'));
+  }
+  return { discardedDraftId: draftId, proposalId: result.proposalId };
+}
+
+/** A regenerate is refused while the student has not decided about the previous one: nothing is generated and no credit is reserved. */
+export function assertNoPendingDecision(db, userId, proposalId) {
+  if (findPending(db, userId, proposalId)) {
+    throw new DraftError('DECISION_PENDING', 'Já existe um resumo novo aguardando a sua decisão. Escolha manter o novo ou voltar ao anterior antes de gerar outro.');
+  }
+}
+
+/**
+ * The student's choice after a regenerate. `draftId` is the NEW draft (the one that carries the decision).
+ *   KEEP_NEW          the previous draft is deleted (unless it became a lesson meanwhile, then it stays); the new one stays current
+ *   RESTORE_PREVIOUS  the new draft is deleted; the previous one is current again (refused if the new one became a lesson meanwhile)
+ * Neither calls a provider or spends credit.
+ */
+export function decideReplacement(db, userId, draftId, decision, { confirmDiscard = false } = {}) {
+  if (!REPLACEMENT_DECISIONS.includes(decision)) {
+    throw new DraftError('VALIDATION_FAILED', 'Decisão inválida: use KEEP_NEW ou RESTORE_PREVIOUS.', 'decision');
+  }
+  if (!db.prepare('SELECT 1 FROM generated_drafts WHERE user_id = ? AND id = ?').get(userId, draftId)) {
+    throw new DraftError('NOT_FOUND', dm('DRAFT_NOT_FOUND'));
+  }
+  const result = applyDecision(db, userId, draftId, decision, { confirmDiscard: confirmDiscard === true });
+  if (result.outcome === 'NEEDS_CONFIRMATION') {
+    throw new DraftError('DISCARD_NEEDS_CONFIRMATION', 'O resumo que seria apagado tem alterações suas. Confirme para apagá-lo mesmo assim.');
+  }
+  if (result.outcome === 'NOT_PENDING') throw new DraftError('INVALID_STATE', 'Não há decisão pendente para este resumo.');
+  if (result.outcome === 'BLOCKED') throw new DraftError('INVALID_STATE', 'O resumo novo já foi aceito como aula; não é possível voltar ao anterior.');
+  return { decision: result.decision, currentDraftId: result.currentDraftId, deletedDraftId: result.deletedDraftId };
 }
